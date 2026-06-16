@@ -16,10 +16,13 @@
         html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background-color: #0d1117; color: white; user-select: none; touch-action: none; }
         
         .ui-scale-layer {
-            transform: none;
-            zoom: var(--ui-scale);
-            width: 100vw;
-            height: 100vh;
+            position: fixed;
+            inset: 0;
+            transform-origin: top left;
+            transform: scale(var(--ui-scale));
+            width: calc(100vw / var(--ui-scale));
+            height: calc(100vh / var(--ui-scale));
+            will-change: transform;
         }
 
         ::-webkit-scrollbar { width: 6px; }
@@ -34,8 +37,8 @@
         .btn-bottom:active { transform: translateY(2px) scale(0.95); background: rgba(255,255,255,0.1); }
         .active-tool { background: rgba(59, 130, 246, 0.2) !important; box-shadow: inset 0 0 15px rgba(0,0,0,0.5); border: 1px solid #3b82f6 !important; color: #60a5fa !important;}
         
-        #glcanvas { position: absolute; top: 0; left: 0; z-index: 0; width: 100vw; height: 100vh; display: block; }
-        #ui-layer { position: absolute; top: 0; left: 0; z-index: 10; width: 100%; height: 100%; pointer-events: none; display: none; flex-direction: column; justify-content: space-between;}
+        #glcanvas { position: absolute; inset: 0; z-index: 0; width: 100vw; height: 100vh; display: block; }
+        #ui-layer { position: fixed; inset: 0; z-index: 10; width: 100vw; height: 100vh; pointer-events: none; display: none; flex-direction: column; justify-content: space-between; }
         .pointer-events-auto { pointer-events: auto; }
         
         .menu-bg {
@@ -154,7 +157,7 @@
     </div>
 
     <!-- MAIN MENU (HUB) -->
-    <div id="main-menu" class="ui-scale-layer menu-bg w-full h-screen absolute top-0 left-0 z-50 flex modal-enter">
+    <div id="main-menu" class="ui-scale-layer menu-bg fixed inset-0 z-50 flex modal-enter">
         <div class="w-80 bg-[#0a0f16]/90 backdrop-blur-md h-full flex flex-col border-r border-[#1e3a5f] shadow-[5px_0_20px_rgba(0,0,0,0.5)]">
             <div class="p-6 flex items-center border-b border-[#1e3a5f] bg-black/20">
                 <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-900 border-2 border-blue-400 rounded-lg shadow-[0_0_20px_rgba(59,130,246,0.6)] flex items-center justify-center">
@@ -210,7 +213,7 @@
     </div>
 
     <!-- EDITOR SCENE -->
-    <div id="editor-ui" class="w-full h-full" style="display: none;">
+    <div id="editor-ui" class="w-full h-full" style="display: none; position: fixed; inset: 0;">
         <canvas id="glcanvas"></canvas>
 
         <div id="playtest-overlay">
@@ -530,6 +533,7 @@
                         </div>
                     </div>
 
+                    
                     <div class="bg-black/30 p-5 rounded-lg border border-gray-800">
                         <h3 data-i18n="interfaceLabel" class="text-2xl font-bold text-blue-400 mb-3 uppercase tracking-wider">Интерфейс</h3>
                         <label data-i18n="uiScaleLabel" class="text-gray-400 block mb-1">Масштаб интерфейса</label>
@@ -539,6 +543,12 @@
                             <option value="0.5">50%</option>
                             <option value="0.3">30%</option>
                         </select>
+
+                        <label class="text-gray-400 block mt-4 mb-1">Чувствительность камеры</label>
+                        <div class="flex items-center gap-3">
+                            <input type="range" id="setting-camera-sensitivity" min="0.15" max="3" step="0.05" value="1" class="w-full accent-blue-500 cursor-pointer" oninput="document.getElementById('camera-sensitivity-val').innerText = Number(this.value).toFixed(2)">
+                            <span id="camera-sensitivity-val" class="text-blue-300 font-bold w-14 text-right">1.00</span>
+                        </div>
                     </div>
 
                     <div class="bg-black/30 p-5 rounded-lg border border-gray-800">
@@ -547,24 +557,49 @@
                             <input type="checkbox" id="setting-shadows" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked class="w-6 h-6 accent-blue-500">
                             <span data-i18n="dynShadows" class="group-hover:text-white text-gray-300 transition">Динамические Тени</span>
                         </label>
-                        
-                        <!-- ПЕРЕКЛЮЧАТЕЛЬ СЕТКИ КУБОВ (GRID HELPER SHOW/HIDE) -->
+
                         <label class="flex items-center gap-3 mb-3 cursor-pointer group">
                             <input type="checkbox" id="setting-grid" onchange="engine.toggleGridVisibility(this.checked); window.historyManager.takeSnapshot();" checked class="w-6 h-6 accent-blue-500">
                             <span data-i18n="showGrid" class="group-hover:text-white text-gray-300 transition">Показывать сетку координат</span>
                         </label>
 
-                        <label class="flex items-center gap-3 mb-3 cursor-pointer group">
+                        <label class="flex items-center gap-3 mb-2 cursor-pointer group">
                             <input type="checkbox" id="setting-bloom" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" class="w-6 h-6 accent-blue-500">
                             <span data-i18n="bloom" class="group-hover:text-white text-gray-300 transition">Bloom (Свечение объектов/молний)</span>
                         </label>
-                        <label class="flex items-center gap-3 cursor-pointer group">
+                        <div class="bg-black/30 p-2 rounded border border-gray-800 mb-3">
+                            <label class="text-gray-400 text-sm uppercase font-bold block mb-1">Bloom strength</label>
+                            <div class="flex items-center gap-2">
+                                <input type="range" id="setting-bloom-strength" min="0" max="3" step="0.05" value="1" class="w-full accent-blue-500 cursor-pointer" oninput="document.getElementById('bloom-strength-val').innerText = Number(this.value).toFixed(2)">
+                                <span id="bloom-strength-val" class="text-blue-300 text-sm w-14 text-right">1.00</span>
+                            </div>
+                        </div>
+
+                        <label class="flex items-center gap-3 mb-2 cursor-pointer group">
+                            <input type="checkbox" id="setting-reflections" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" class="w-6 h-6 accent-blue-500">
+                            <span class="group-hover:text-white text-gray-300 transition">Reflections</span>
+                        </label>
+                        <div class="bg-black/30 p-2 rounded border border-gray-800 mb-3">
+                            <label class="text-gray-400 text-sm uppercase font-bold block mb-1">Reflection distance</label>
+                            <div class="flex items-center gap-2">
+                                <input type="range" id="setting-reflection-distance" min="5" max="30" step="1" value="10" class="w-full accent-blue-500 cursor-pointer" oninput="document.getElementById('reflection-distance-val').innerText = this.value + 'm'">
+                                <span id="reflection-distance-val" class="text-blue-300 text-sm w-10 text-right">10m</span>
+                            </div>
+                        </div>
+
+                        <label class="flex items-center gap-3 mb-3 cursor-pointer group">
+                            <input type="checkbox" id="setting-pbr-textures" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked class="w-6 h-6 accent-blue-500">
+                            <span class="group-hover:text-white text-gray-300 transition">PBR Textures</span>
+                        </label>
+
+                        <label class="flex items-center gap-3 mb-3 cursor-pointer group">
                             <input type="checkbox" id="setting-ssao" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" class="w-6 h-6 accent-blue-500">
                             <span data-i18n="ssao" class="group-hover:text-white text-gray-300 transition">SSAO (Мягкие угловые тени)</span>
                         </label>
                     </div>
 
                     <div class="bg-black/30 p-5 rounded-lg border border-gray-800">
+                        <h3 data-i18n="fogHeader<div class="bg-black/30 p-5 rounded-lg border border-gray-800">
                         <h3 data-i18n="fogHeader" class="text-2xl font-bold text-blue-400 mb-3 uppercase tracking-wider">Туман</h3>
                         <label data-i18n="fogColorLabel" class="text-gray-400 text-lg">Цвет тумана (если ясно)</label>
                         <input type="color" id="setting-fog-color" value="#8bc5eb" onchange="engine.updateEnvironment(); window.historyManager.takeSnapshot();" class="w-full h-12 bg-transparent border-0 mt-1 cursor-pointer rounded overflow-hidden">
@@ -977,17 +1012,20 @@
         function createMaterial(textureId, matType, colorHex, extra = {}) {
             const texture = getActiveTexture(textureId);
             const preset = MATERIAL_PRESETS[matType] || MATERIAL_PRESETS.Concrete;
-            const reflectivity = extra.reflectivity !== undefined ? extra.reflectivity : preset.envMapIntensity;
+            const pbrEnabled = document.getElementById('setting-pbr-textures')?.checked ?? true;
+            const isWater = matType === 'Water' || textureId === 'water';
+            const isMetal = matType === 'Metal' || textureId === 'metal';
+            const reflectivity = extra.reflectivity !== undefined ? extra.reflectivity : (isMetal || isWater ? preset.envMapIntensity : Math.min(preset.envMapIntensity, 0.12));
             const reflectBlur = extra.reflectBlur !== undefined ? extra.reflectBlur : preset.roughness;
             const hasAlpha = !!(texture && texture.userData && texture.userData.hasAlpha);
-            const isWater = matType === 'Water' || textureId === 'water';
 
             const props = {
                 map: texture,
                 color: new THREE.Color(colorHex || 0xffffff),
                 roughness: Math.min(1, Math.max(0.02, reflectBlur)),
-                metalness: preset.metalness || 0.0,
-                envMapIntensity: reflectivity
+                metalness: isMetal ? 0.85 : (isWater ? 0.0 : preset.metalness || 0.0),
+                envMapIntensity: reflectivity,
+                envMap: window.engine?.getActiveEnvironmentMap?.() || null
             };
 
             if (hasAlpha || isWater || preset.transparent) {
@@ -998,21 +1036,26 @@
             }
 
             let mat;
-            if (isWater) {
-                props.roughness = Math.min(0.18, Math.max(0.02, reflectBlur * 0.35));
-                props.metalness = 0.0;
-                props.transmission = 0.9;
-                props.thickness = 0.55;
-                props.ior = 1.33;
-                props.clearcoat = 1.0;
-                props.clearcoatRoughness = 0.03;
-                props.opacity = 0.82;
+            if (isWater || pbrEnabled) {
+                if (isWater) {
+                    props.roughness = Math.min(0.18, Math.max(0.02, reflectBlur * 0.35));
+                    props.metalness = 0.0;
+                    props.transmission = 0.9;
+                    props.thickness = 0.55;
+                    props.ior = 1.33;
+                    props.clearcoat = 1.0;
+                    props.clearcoatRoughness = 0.03;
+                    props.opacity = 0.82;
+                } else {
+                    props.clearcoat = isMetal ? 0.2 : 0.05;
+                    props.clearcoatRoughness = isMetal ? 0.16 : 0.35;
+                }
                 mat = new THREE.MeshPhysicalMaterial(props);
             } else {
                 mat = new THREE.MeshStandardMaterial(props);
             }
 
-            mat.userData = { isWater, hasAlpha, reflectivity, reflectBlur };
+            mat.userData = { isWater, hasAlpha, reflectivity, reflectBlur, pbrMode: pbrEnabled, textureId, materialType: matType, colorHex };
 
             mat.onBeforeCompile = (shader) => {
                 shader.uniforms.uTime = weatherUniforms.uTime;
@@ -1095,7 +1138,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.scene.add(this.dirLight);
 
                 this.gridHelper = new THREE.GridHelper(300, 150, 0x1e293b, 0x0f172a); this.gridHelper.material.opacity = 0.5; this.gridHelper.material.transparent = true; this.gridHelper.position.y = -0.01; this.scene.add(this.gridHelper);
-                this.shadowCatcher = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.ShadowMaterial({ color: 0x000000, opacity: 0.35 })); this.shadowCatcher.rotation.x = -Math.PI / 2; this.shadowCatcher.position.y = -0.02; this.shadowCatcher.receiveShadow = true; this.scene.add(this.shadowCatcher);
+                this.shadowCatcher = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.ShadowMaterial({ color: 0x000000, opacity: 0.0 })); this.shadowCatcher.rotation.x = -Math.PI / 2; this.shadowCatcher.position.y = -0.02; this.shadowCatcher.receiveShadow = false; this.shadowCatcher.visible = false; this.scene.add(this.shadowCatcher);
+                this.reflectionCubeCamera = new THREE.CubeCamera(0.1, 1000, 256); this.reflectionCubeCamera.visible = false; this.scene.add(this.reflectionCubeCamera); this.localReflectionTexture = null; this.lastReflectionCapturePos = new THREE.Vector3(999999, 999999, 999999); this.reflectionDistance = 10;
 
                 this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
                 this.orbit.enableDamping = true;
@@ -1134,7 +1178,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 window.addEventListener('keydown', this.onKeyDown.bind(this));
                 window.addEventListener('keyup', this.onKeyUp.bind(this));
 
-                this.updateEnvironment(); this.updateSelectionPanels(); this.animate();
+                this.updateEnvironment(); this.applyCameraSensitivity(parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1')); this.updateSelectionPanels(); this.animate();
             },
 
             initClouds: function() {
@@ -1146,6 +1190,116 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             },
 
             onWindowResize: function() { this.camera.aspect = window.innerWidth / window.innerHeight; this.camera.updateProjectionMatrix(); this.renderer.setSize(window.innerWidth, window.innerHeight); this.composer.setSize(window.innerWidth, window.innerHeight); if (window.uiManager && uiManager.applyResponsiveScale) uiManager.applyResponsiveScale(false); },
+
+            applyCameraSensitivity: function(value = null) {
+                const raw = value !== null && value !== undefined ? parseFloat(value) : parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1');
+                const safe = Math.min(3, Math.max(0.15, Number.isFinite(raw) ? raw : 1));
+                this.cameraSensitivity = safe;
+                localStorage.setItem('mmcg_camera_sens_55', String(safe));
+                if (this.orbit) {
+                    this.orbit.rotateSpeed = safe;
+                    this.orbit.zoomSpeed = Math.max(0.45, safe * 0.85);
+                    this.orbit.panSpeed = Math.max(0.35, safe * 0.7);
+                }
+                return safe;
+            },
+
+            getActiveEnvironmentMap: function() {
+                if (document.getElementById('setting-reflections')?.checked && this.localReflectionTexture) return this.localReflectionTexture;
+                if (this.customSkyboxEnvMap) return this.customSkyboxEnvMap;
+                return this.scene ? this.scene.environment : null;
+            },
+
+            getMaterialEnvIntensity: function(obj) {
+                const type = obj?.userData?.materialType || 'Concrete';
+                const preset = MATERIAL_PRESETS[type] || MATERIAL_PRESETS.Concrete;
+                const base = obj?.userData?.skyboxReflectivity ?? preset.envMapIntensity;
+                if (type === 'Metal' || type === 'Water' || obj?.userData?.texture === 'metal' || obj?.userData?.texture === 'water') return Math.min(1.8, Math.max(0.08, base));
+                return Math.min(0.14, Math.max(0.02, base));
+            },
+
+            refreshObjectMaterial: function(obj, forceRebuild = false) {
+                if (!obj || !obj.material || obj.userData?.type === 'spawn') return;
+                const tex = obj.userData.texture || 'grid';
+                const matT = obj.userData.materialType || 'Concrete';
+                const col = obj.userData.colorHex || '#ffffff';
+                const pbrEnabled = document.getElementById('setting-pbr-textures')?.checked ?? true;
+                const currentEnv = this.getActiveEnvironmentMap();
+                const needRebuild = forceRebuild || obj.material.userData?.pbrMode !== pbrEnabled || obj.material.userData?.textureId !== tex || obj.material.userData?.materialType !== matT || obj.material.userData?.colorHex !== col;
+                if (needRebuild) {
+                    try { obj.material.dispose(); } catch(e) {}
+                    obj.material = createMaterial(tex, matT, col, { reflectivity: obj.userData.skyboxReflectivity, reflectBlur: obj.userData.skyboxBlur });
+                }
+                const preset = MATERIAL_PRESETS[matT] || MATERIAL_PRESETS.Concrete;
+                const isWater = matT === 'Water' || tex === 'water';
+                const isMetal = matT === 'Metal' || tex === 'metal';
+                const envIntensity = this.getMaterialEnvIntensity(obj);
+                if (Array.isArray(obj.material)) {
+                    obj.material.forEach(m => {
+                        m.envMap = currentEnv;
+                        m.envMapIntensity = envIntensity;
+                        if ('roughness' in m) m.roughness = isWater ? 0.06 : Math.min(1, Math.max(0.18, obj.userData.skyboxBlur ?? preset.roughness));
+                        if ('metalness' in m) m.metalness = isMetal ? 0.9 : 0.02;
+                        m.needsUpdate = true;
+                    });
+                } else {
+                    obj.material.envMap = currentEnv;
+                    obj.material.envMapIntensity = envIntensity;
+                    if ('roughness' in obj.material) obj.material.roughness = isWater ? 0.06 : Math.min(1, Math.max(0.18, obj.userData.skyboxBlur ?? preset.roughness));
+                    if ('metalness' in obj.material) obj.material.metalness = isMetal ? 0.9 : 0.02;
+                    obj.material.needsUpdate = true;
+                }
+                if (obj.userData.visible === false) {
+                    obj.material.transparent = true;
+                    obj.material.opacity = 0.3;
+                }
+            },
+
+            syncAllObjectMaterials: function(forceRebuild = false) {
+                this.blocks.forEach(obj => this.refreshObjectMaterial(obj, forceRebuild));
+                if (this.spawnPointObj?.material) {
+                    this.spawnPointObj.material.needsUpdate = true;
+                }
+            },
+
+            updateLocalReflections: function(force = false) {
+                const reflectionsOn = document.getElementById('setting-reflections')?.checked;
+                if (!this.reflectionCubeCamera || !this.scene || !this.camera) return;
+                const radius = parseFloat(document.getElementById('setting-reflection-distance')?.value || '10');
+                this.reflectionDistance = radius;
+                if (!reflectionsOn) {
+                    this.localReflectionTexture = null;
+                    this.syncAllObjectMaterials(false);
+                    return;
+                }
+                const camPos = this.camera.position.clone();
+                const movedFarEnough = !this.lastReflectionCapturePos || this.lastReflectionCapturePos.distanceToSquared(camPos) > 0.6 * 0.6;
+                if (force || movedFarEnough) {
+                    this.lastReflectionCapturePos = camPos.clone();
+                    const prevVisible = this.reflectionCubeCamera.visible;
+                    this.reflectionCubeCamera.visible = false;
+                    this.reflectionCubeCamera.position.copy(camPos);
+                    this.reflectionCubeCamera.update(this.renderer, this.scene);
+                    this.localReflectionTexture = this.reflectionCubeCamera.renderTarget.texture;
+                    this.reflectionCubeCamera.visible = prevVisible;
+                }
+                const baseEnv = this.customSkyboxEnvMap || this.scene.environment || null;
+                const nearSq = radius * radius;
+                for (const obj of this.blocks) {
+                    if (!obj.material) continue;
+                    const distSq = obj.position.distanceToSquared(camPos);
+                    const useLocal = distSq <= nearSq;
+                    const envMap = useLocal ? this.localReflectionTexture : baseEnv;
+                    const intensity = this.getMaterialEnvIntensity(obj) * (useLocal ? 1.0 : 0.6);
+                    if (Array.isArray(obj.material)) {
+                        obj.material.forEach(m => { m.envMap = envMap; m.envMapIntensity = intensity; m.needsUpdate = true; });
+                    } else {
+                        obj.material.envMap = envMap;
+                        obj.material.envMapIntensity = intensity;
+                        obj.material.needsUpdate = true;
+                    }
+                }
+            },
 
             setupMobileJoystick: function() {
                 this.mobileJoystickEl = document.getElementById('mobile-joystick');
@@ -1445,33 +1599,62 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             },
 
             updateObjectFromUI: function() {
-                if (this.selectedBlocks.length === 0) return; const wasGrouped = this.selectedBlocks.length > 1; if(wasGrouped) this.releaseTransformGroup();
+                if (this.selectedBlocks.length === 0) return;
                 const tex = document.getElementById('sel-texture').value; const matT = document.getElementById('sel-material').value; const col = document.getElementById('inp-color').value; const tMode = document.getElementById('sel-tiling').value;
                 const reflect = (parseFloat(document.getElementById('inp-reflect').value) || 0) / 50; const blur = (parseFloat(document.getElementById('inp-reflect-blur').value) || 0) / 100;
                 const resolvedMaterialName = BUILTIN_TEXTURE_KEYS.has(tex) ? getFallbackGoreBoxMaterialName(matT) : tex;
 
                 this.selectedBlocks.forEach(obj => {
-                    ['x','y','z'].forEach(a => { obj.position[a] = parseFloat(document.getElementById(`inp-pos-${a}`).value) || 0; obj.rotation[a] = THREE.MathUtils.degToRad(parseFloat(document.getElementById(`inp-rot-${a}`).value) || 0); obj.scale[a] = parseFloat(document.getElementById(`inp-sca-${a}`).value) || 0.01; });
+                    ['x','y','z'].forEach(a => {
+                        obj.position[a] = parseFloat(document.getElementById(`inp-pos-${a}`).value) || 0;
+                        obj.rotation[a] = THREE.MathUtils.degToRad(parseFloat(document.getElementById(`inp-rot-${a}`).value) || 0);
+                        obj.scale[a] = Math.max(0.01, parseFloat(document.getElementById(`inp-sca-${a}`).value) || 0.01);
+                    });
                     if (obj !== this.spawnPointObj) {
                         obj.userData.tilingMode = tMode;
                         obj.userData.skyboxReflectivity = reflect;
                         obj.userData.skyboxBlur = blur;
+                        obj.userData.texture = tex;
+                        obj.userData.materialType = matT;
+                        obj.userData.colorHex = col;
+                        obj.userData.materialName = resolvedMaterialName;
+                        obj.userData.sourceTag = matT;
                         this.updateCubeUVs(obj);
-                        if(obj.userData.texture !== tex || obj.userData.materialType !== matT || obj.userData.colorHex !== col || obj.userData.skyboxReflectivity !== reflect || obj.userData.skyboxBlur !== blur) { obj.material.dispose(); obj.material = createMaterial(tex, matT, col, { reflectivity: reflect, reflectBlur: blur }); obj.material.transparent = obj.userData.visible === false || !!obj.material.userData?.hasAlpha; obj.material.opacity = obj.userData.visible === false ? 0.3 : (obj.material.userData?.isWater ? 0.82 : 1.0); }
-                        obj.userData.texture = tex; obj.userData.materialType = matT; obj.userData.colorHex = col; obj.userData.materialName = resolvedMaterialName; obj.userData.sourceTag = matT; this.updateCubeUVs(obj);
+                        this.refreshObjectMaterial(obj, true);
                     }
                 });
-                if(wasGrouped) this.buildTransformGroup(); this.updateSelectionPanels(); if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
+                this.syncAllObjectMaterials(false);
+                this.updateSelectionPanels();
+                if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
             },
 
             updateGraphics: function() {
-                const shadowsEnabled = document.getElementById('setting-shadows').checked; this.renderer.shadowMap.enabled = shadowsEnabled; this.renderer.shadowMap.needsUpdate = true; this.dirLight.castShadow = shadowsEnabled; if (this.shadowCatcher) this.shadowCatcher.visible = shadowsEnabled;
-                this.bloomPass.enabled = document.getElementById('setting-bloom').checked; this.ssaoPass.enabled = document.getElementById('setting-ssao').checked;
-                this.scene.traverse(child => { if (child.isMesh && child.material) { child.castShadow = shadowsEnabled && child.userData?.type !== 'spawn'; child.receiveShadow = shadowsEnabled && child !== this.shadowCatcher; child.material.needsUpdate = true; } });
+                const shadowsEnabled = document.getElementById('setting-shadows').checked;
+                this.renderer.shadowMap.enabled = shadowsEnabled;
+                this.renderer.shadowMap.needsUpdate = true;
+                this.dirLight.castShadow = shadowsEnabled;
+                if (this.shadowCatcher) this.shadowCatcher.visible = false;
+
+                const bloomEnabled = document.getElementById('setting-bloom').checked;
+                const bloomStrength = parseFloat(document.getElementById('setting-bloom-strength')?.value || '1');
+                this.bloomPass.enabled = bloomEnabled;
+                this.bloomPass.strength = bloomStrength;
+                this.ssaoPass.enabled = document.getElementById('setting-ssao').checked;
+
+                this.applyCameraSensitivity(parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'));
+                this.syncAllObjectMaterials(false);
+                this.updateLocalReflections(true);
+                this.scene.traverse(child => {
+                    if (child.isMesh && child.material) {
+                        child.castShadow = shadowsEnabled && child.userData?.type !== 'spawn';
+                        child.receiveShadow = shadowsEnabled && child.userData?.type !== 'spawn';
+                        child.material.needsUpdate = true;
+                    }
+                });
                 this.updateSelectionPanels();
             },
 
-            getEnvState: function() { return { skybox: document.getElementById('setting-skybox').value, weather: document.getElementById('setting-weather').value, fogColor: document.getElementById('setting-fog-color').value, fogStart: parseFloat(document.getElementById('setting-fog-start').value) || 15, fogEnd: parseFloat(document.getElementById('setting-fog-end').value) || 250, sunAngle: parseFloat(document.getElementById('setting-sun-angle').value) || 180, shadows: document.getElementById('setting-shadows').checked, bloom: document.getElementById('setting-bloom').checked, ssao: document.getElementById('setting-ssao').checked, customSkyboxDataUrl: this.customSkyboxDataUrl || null, customSkyboxName: this.customSkyboxName || null, gridVisible: document.getElementById('setting-grid') ? document.getElementById('setting-grid').checked : true }; },
+            getEnvState: function() { return { skybox: document.getElementById('setting-skybox').value, weather: document.getElementById('setting-weather').value, fogColor: document.getElementById('setting-fog-color').value, fogStart: parseFloat(document.getElementById('setting-fog-start').value) || 15, fogEnd: parseFloat(document.getElementById('setting-fog-end').value) || 250, sunAngle: parseFloat(document.getElementById('setting-sun-angle').value) || 180, shadows: document.getElementById('setting-shadows').checked, bloom: document.getElementById('setting-bloom').checked, bloomStrength: parseFloat(document.getElementById('setting-bloom-strength')?.value || '1'), reflections: !!document.getElementById('setting-reflections')?.checked, reflectionDistance: parseFloat(document.getElementById('setting-reflection-distance')?.value || '10'), pbrTextures: document.getElementById('setting-pbr-textures')?.checked !== false, cameraSensitivity: parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'), ssao: document.getElementById('setting-ssao').checked, customSkyboxDataUrl: this.customSkyboxDataUrl || null, customSkyboxName: this.customSkyboxName || null, gridVisible: document.getElementById('setting-grid') ? document.getElementById('setting-grid').checked : true }; },
 
             setCustomSkybox: function(dataUrl, fileName = 'Custom Skybox') {
                 this.customSkyboxDataUrl = dataUrl;
@@ -1497,41 +1680,150 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     this.scene.environment = this.customSkyboxEnvMap;
                     this.sky.visible = false;
                     if (this.cloudsObj) this.cloudsObj.visible = false;
-                    this.scene.traverse(child => { if (child.isMesh && child.material) child.material.needsUpdate = true; });
+                    this.syncAllObjectMaterials(false);
+                    this.updateLocalReflections(true);
                 });
             },
 
             updateEnvironment: function() {
-                const skybox = document.getElementById('setting-skybox').value; const weather = document.getElementById('setting-weather').value; let fColor = document.getElementById('setting-fog-color').value || '#8bc5eb'; const fStart = parseFloat(document.getElementById('setting-fog-start').value) || 15; let fEnd = parseFloat(document.getElementById('setting-fog-end').value) || 250; let sunAngle = parseFloat(document.getElementById('setting-sun-angle').value) || 180;
-                this.weatherType = weather; let uniforms = this.sky.material.uniforms; uniforms['turbidity'].value = 8; uniforms['rayleigh'].value = 1.2; uniforms['mieCoefficient'].value = 0.003; uniforms['mieDirectionalG'].value = 0.75;
-                let phi = 0, theta = THREE.MathUtils.degToRad(sunAngle), bgColor = fColor;
-                audioEngine.setTimeAmbience(skybox);
-                this.sky.visible = skybox !== 'custom' || !this.customSkyboxTexture;
-                if (this.skyboxEnvTimer) { clearTimeout(this.skyboxEnvTimer); this.skyboxEnvTimer = null; }
+                const skybox = document.getElementById('setting-skybox').value;
+                const weather = document.getElementById('setting-weather').value;
+                let fColor = document.getElementById('setting-fog-color').value || '#8bc5eb';
+                const fStart = parseFloat(document.getElementById('setting-fog-start').value) || 15;
+                let fEnd = parseFloat(document.getElementById('setting-fog-end').value) || 250;
+                let sunAngle = parseFloat(document.getElementById('setting-sun-angle').value) || 180;
 
-                if (skybox === 'day') { phi = THREE.MathUtils.degToRad(40); this.dirLight.intensity = 1.2; this.dirLight.color.setHex(0xfff8ee); this.ambientLight.intensity = 0.6; bgColor = '#8bc5eb'; this.sky.visible = true; if (this.cloudsObj) this.cloudsObj.visible = true; } 
-                else if (skybox === 'sunrise') { phi = THREE.MathUtils.degToRad(55); this.dirLight.intensity = 0.95; this.dirLight.color.setHex(0xffc28a); this.ambientLight.intensity = 0.45; bgColor = '#ffb17a'; this.sky.visible = true; if (this.cloudsObj) this.cloudsObj.visible = true; } 
-                else if (skybox === 'dusk') { phi = THREE.MathUtils.degToRad(87); this.dirLight.intensity = 0.8; this.dirLight.color.setHex(0xff6633); this.ambientLight.intensity = 0.35; bgColor = '#df5234'; fEnd = Math.min(fEnd, 200); this.sky.visible = true; if (this.cloudsObj) this.cloudsObj.visible = true; } 
-                else if (skybox === 'night') { phi = THREE.MathUtils.degToRad(110); this.dirLight.intensity = 0.1; this.dirLight.color.setHex(0x88aaff); this.ambientLight.intensity = 0.15; bgColor = '#050710'; fEnd = Math.min(fEnd, 150); this.sky.visible = true; if (this.cloudsObj) this.cloudsObj.visible = true; } 
-                else if (skybox === 'midnight') { phi = THREE.MathUtils.degToRad(125); this.dirLight.intensity = 0.05; this.dirLight.color.setHex(0x6677ff); this.ambientLight.intensity = 0.08; bgColor = '#02030a'; fEnd = Math.min(fEnd, 120); this.sky.visible = true; if (this.cloudsObj) this.cloudsObj.visible = false; } 
-                else if (skybox === 'custom' && this.customSkyboxTexture) { bgColor = '#000000'; this.dirLight.intensity = 0.9; this.dirLight.color.setHex(0xffffff); this.ambientLight.intensity = 0.4; if (this.cloudsObj) this.cloudsObj.visible = false; this.scene.background = this.customSkyboxTexture; this.scene.environment = this.customSkyboxEnvMap || null; }
-                else { this.sky.visible = true; if (this.cloudsObj) this.cloudsObj.visible = true; }
+                this.weatherType = weather;
+                let uniforms = this.sky.material.uniforms;
+                uniforms['turbidity'].value = 8;
+                uniforms['rayleigh'].value = 1.2;
+                uniforms['mieCoefficient'].value = 0.003;
+                uniforms['mieDirectionalG'].value = 0.75;
 
-                this.targetWeatherIntensity = 0; weatherUniforms.uWeatherType.value = 0; if (this.cloudsObj && skybox !== 'custom') this.cloudsObj.visible = true;
-                if (weather === 'cloudy') { uniforms['turbidity'].value = 15; if (this.cloudsObj) this.cloudsObj.material.opacity = 0.95; this.dirLight.intensity *= 0.6; audioEngine.setWeatherAudio('cloudy'); }
-                else if (weather === 'fog') { uniforms['turbidity'].value = 20; bgColor = '#94a3b8'; fEnd = Math.min(fEnd, 50); if (this.cloudsObj) this.cloudsObj.visible = false; audioEngine.setWeatherAudio('fog'); }
-                else if (weather === 'rain' || weather === 'drizzle') { uniforms['turbidity'].value = 25; bgColor = '#47a9e6'; this.targetWeatherIntensity = weather === 'drizzle' ? 0.55 : 1.0; weatherUniforms.uWeatherType.value = 1; audioEngine.setWeatherAudio(weather); }
-                else if (weather === 'thunder' || weather === 'storm') { uniforms['turbidity'].value = 27; bgColor = '#34506a'; this.targetWeatherIntensity = 1.0; weatherUniforms.uWeatherType.value = 1; audioEngine.setWeatherAudio('thunder'); }
-                else if (weather === 'snow' || weather === 'blizzard') { uniforms['turbidity'].value = 18; bgColor = '#cbd5e1'; this.targetWeatherIntensity = weather === 'blizzard' ? 1.0 : 0.8; weatherUniforms.uWeatherType.value = 2; audioEngine.setWeatherAudio('snow'); }
-                else if (weather === 'windy') { uniforms['turbidity'].value = 14; bgColor = '#9ca3af'; this.targetWeatherIntensity = 0.35; weatherUniforms.uWeatherType.value = 3; audioEngine.setWeatherAudio('windy'); }
-                else { audioEngine.setWeatherAudio('clear'); }
+                let phi = 0;
+                let theta = THREE.MathUtils.degToRad(sunAngle);
+                let bgColor = fColor;
+
+                if (skybox === 'day') {
+                    phi = THREE.MathUtils.degToRad(60);
+                    this.dirLight.intensity = 1.2;
+                    this.dirLight.color.setHex(0xfff8ee);
+                    this.ambientLight.intensity = 0.6;
+                    bgColor = '#8bc5eb';
+                    this.sky.visible = true;
+                    if (this.cloudsObj) this.cloudsObj.visible = true;
+                } else if (skybox === 'sunrise') {
+                    phi = THREE.MathUtils.degToRad(55);
+                    this.dirLight.intensity = 0.95;
+                    this.dirLight.color.setHex(0xffc28a);
+                    this.ambientLight.intensity = 0.45;
+                    bgColor = '#ffb17a';
+                    this.sky.visible = true;
+                    if (this.cloudsObj) this.cloudsObj.visible = true;
+                } else if (skybox === 'dusk') {
+                    phi = THREE.MathUtils.degToRad(87);
+                    this.dirLight.intensity = 0.8;
+                    this.dirLight.color.setHex(0xff6633);
+                    this.ambientLight.intensity = 0.35;
+                    bgColor = '#df5234';
+                    fEnd = Math.min(fEnd, 200);
+                    this.sky.visible = true;
+                    if (this.cloudsObj) this.cloudsObj.visible = true;
+                } else if (skybox === 'night') {
+                    phi = THREE.MathUtils.degToRad(110);
+                    this.dirLight.intensity = 0.1;
+                    this.dirLight.color.setHex(0x88aaff);
+                    this.ambientLight.intensity = 0.15;
+                    bgColor = '#050710';
+                    fEnd = Math.min(fEnd, 150);
+                    this.sky.visible = true;
+                    if (this.cloudsObj) this.cloudsObj.visible = true;
+                } else if (skybox === 'midnight') {
+                    phi = THREE.MathUtils.degToRad(125);
+                    this.dirLight.intensity = 0.05;
+                    this.dirLight.color.setHex(0x6677ff);
+                    this.ambientLight.intensity = 0.08;
+                    bgColor = '#02030a';
+                    fEnd = Math.min(fEnd, 120);
+                    this.sky.visible = true;
+                    if (this.cloudsObj) this.cloudsObj.visible = false;
+                } else if (skybox === 'custom' && this.customSkyboxTexture) {
+                    bgColor = '#000000';
+                    this.dirLight.intensity = 0.9;
+                    this.dirLight.color.setHex(0xffffff);
+                    this.ambientLight.intensity = 0.4;
+                    if (this.cloudsObj) this.cloudsObj.visible = false;
+                    this.scene.background = this.customSkyboxTexture;
+                    this.scene.environment = this.customSkyboxEnvMap || null;
+                } else {
+                    this.sky.visible = true;
+                    if (this.cloudsObj) this.cloudsObj.visible = true;
+                }
+
+                this.targetWeatherIntensity = 0;
+                weatherUniforms.uWeatherType.value = 0;
+                if (this.cloudsObj && skybox !== 'custom') this.cloudsObj.visible = true;
+
+                if (weather === 'cloudy') {
+                    uniforms['turbidity'].value = 15;
+                    if (this.cloudsObj) this.cloudsObj.material.opacity = 0.95;
+                    this.dirLight.intensity *= 0.6;
+                    audioEngine.setWeatherAudio('cloudy');
+                } else if (weather === 'fog') {
+                    uniforms['turbidity'].value = 20;
+                    bgColor = '#94a3b8';
+                    fEnd = Math.min(fEnd, 50);
+                    if (this.cloudsObj) this.cloudsObj.visible = false;
+                    audioEngine.setWeatherAudio('fog');
+                } else if (weather === 'rain' || weather === 'drizzle') {
+                    uniforms['turbidity'].value = 25;
+                    bgColor = '#47a9e6';
+                    this.targetWeatherIntensity = weather === 'drizzle' ? 0.55 : 1.0;
+                    weatherUniforms.uWeatherType.value = 1;
+                    audioEngine.setWeatherAudio(weather);
+                } else if (weather === 'thunder' || weather === 'storm') {
+                    uniforms['turbidity'].value = 27;
+                    bgColor = '#34506a';
+                    this.targetWeatherIntensity = 1.0;
+                    weatherUniforms.uWeatherType.value = 1;
+                    audioEngine.setWeatherAudio('thunder');
+                } else if (weather === 'snow' || weather === 'blizzard') {
+                    uniforms['turbidity'].value = 18;
+                    bgColor = '#cbd5e1';
+                    this.targetWeatherIntensity = weather === 'blizzard' ? 1.0 : 0.8;
+                    weatherUniforms.uWeatherType.value = 2;
+                    audioEngine.setWeatherAudio('snow');
+                } else if (weather === 'windy') {
+                    uniforms['turbidity'].value = 14;
+                    bgColor = '#9ca3af';
+                    this.targetWeatherIntensity = 0.35;
+                    weatherUniforms.uWeatherType.value = 3;
+                    audioEngine.setWeatherAudio('windy');
+                } else {
+                    audioEngine.setWeatherAudio('clear');
+                }
 
                 const skyVisualColor = skybox === 'custom' && this.customSkyboxTexture ? '#000000' : bgColor;
-                const sun = this.sun; sun.setFromSphericalCoords(1, phi, theta); uniforms['sunPosition'].value.copy(sun); this.dirLight.position.copy(sun).multiplyScalar(200); this.scene.fog = new THREE.Fog(skyVisualColor, fStart, fEnd); this.initWeatherParticles();
+                const sun = this.sun;
+                sun.setFromSphericalCoords(1, phi, theta);
+                uniforms['sunPosition'].value.copy(sun);
+                this.dirLight.position.copy(sun).multiplyScalar(200);
+                this.scene.fog = new THREE.Fog(skyVisualColor, fStart, fEnd);
+                this.initWeatherParticles();
+
                 if (skybox !== 'custom' || !this.customSkyboxTexture) {
                     this.scene.background = new THREE.Color(skyVisualColor);
-                    this.skyboxEnvTimer = setTimeout(() => { if(this.scene.environment) { try { this.scene.environment.dispose(); } catch(e){} } this.scene.environment = this.pmremGenerator.fromScene(this.sky).texture; }, 100);
+                    this.skyboxEnvTimer = setTimeout(() => {
+                        if (this.scene.environment) {
+                            try { this.scene.environment.dispose(); } catch(e) {}
+                        }
+                        this.scene.environment = this.pmremGenerator.fromScene(this.sky).texture;
+                        this.syncAllObjectMaterials(false);
+                    }, 100);
                 }
+
+                this.syncAllObjectMaterials(false);
+                this.updateLocalReflections(true);
             },
 
             initWeatherParticles: function() {
@@ -1653,7 +1945,17 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     document.getElementById('setting-skybox').value = data.env.skybox || 'day'; document.getElementById('setting-weather').value = data.env.weather || 'clear';
                     document.getElementById('setting-fog-color').value = data.env.fogColor || '#8bc5eb'; document.getElementById('setting-fog-start').value = data.env.fogStart || 15; document.getElementById('setting-fog-end').value = data.env.fogEnd || 250;
                     document.getElementById('setting-sun-angle').value = data.env.sunAngle !== undefined ? data.env.sunAngle : 180; document.getElementById('sun-angle-val').innerText = document.getElementById('setting-sun-angle').value + '°';
-                    document.getElementById('setting-shadows').checked = data.env.shadows !== false; document.getElementById('setting-bloom').checked = data.env.bloom === true; document.getElementById('setting-ssao').checked = data.env.ssao === true;
+                    document.getElementById('setting-shadows').checked = data.env.shadows !== false;
+                    document.getElementById('setting-bloom').checked = data.env.bloom === true;
+                    document.getElementById('setting-bloom-strength').value = String(data.env.bloomStrength ?? 1);
+                    document.getElementById('bloom-strength-val').innerText = Number(document.getElementById('setting-bloom-strength').value).toFixed(2);
+                    document.getElementById('setting-reflections').checked = !!data.env.reflections;
+                    document.getElementById('setting-reflection-distance').value = String(data.env.reflectionDistance ?? 10);
+                    document.getElementById('reflection-distance-val').innerText = document.getElementById('setting-reflection-distance').value + 'm';
+                    document.getElementById('setting-pbr-textures').checked = data.env.pbrTextures !== false;
+                    document.getElementById('setting-camera-sensitivity').value = String(data.env.cameraSensitivity ?? parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1'));
+                    document.getElementById('camera-sensitivity-val').innerText = Number(document.getElementById('setting-camera-sensitivity').value).toFixed(2);
+                    document.getElementById('setting-ssao').checked = data.env.ssao === true;
                     if(document.getElementById('setting-grid')) {
                         document.getElementById('setting-grid').checked = data.env.gridVisible !== false;
                         this.toggleGridVisibility(data.env.gridVisible !== false);
@@ -1663,7 +1965,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     const skyLabel = document.getElementById('skybox-file-name'); if (skyLabel) skyLabel.innerText = this.customSkyboxName || 'No file';
                     if (this.customSkyboxDataUrl && document.getElementById('setting-skybox').value === 'custom') this.setCustomSkybox(this.customSkyboxDataUrl, this.customSkyboxName || 'Custom Skybox');
                 } else { this.customSkyboxDataUrl = null; this.customSkyboxName = null; }
-                this.updateEnvironment(); this.updateGraphics(); this.deselect(); this.updateSelectionPanels();
+                this.applyCameraSensitivity(parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'));
+                this.updateEnvironment(); this.updateGraphics(); this.syncAllObjectMaterials(true); this.deselect(); this.updateSelectionPanels();
             },
 
             animate: function() {
@@ -1719,9 +2022,10 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                         }
                     }
 
-                    this.orbit.update(); 
-                    if (isNaN(this.camera.position.x)) { this.camera.position.set(15, 20, 15); this.orbit.target.set(0,0,0); } 
-                    document.getElementById('cam-x').innerText = this.camera.position.x.toFixed(1); 
+                    this.orbit.update();
+                    if (isNaN(this.camera.position.x)) { this.camera.position.set(15, 20, 15); this.orbit.target.set(0,0,0); }
+                    this.updateLocalReflections(false);
+                    document.getElementById('cam-x').innerText = this.camera.position.x.toFixed(1);
                     document.getElementById('cam-y').innerText = this.camera.position.y.toFixed(1); 
                     document.getElementById('cam-z').innerText = this.camera.position.z.toFixed(1); 
                 }
@@ -1761,8 +2065,9 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 ['sel-texture', 'sel-material', 'inp-color', 'sel-tiling', 'inp-reflect', 'inp-reflect-blur'].forEach(id => { const el = document.getElementById(id); if (el) { el.addEventListener('input', () => { engine.updateObjectFromUI(); if(!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); }); el.addEventListener('change', () => { engine.updateObjectFromUI(); if(!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); }); } });
                 const reflect = document.getElementById('inp-reflect'); if (reflect) reflect.addEventListener('input', () => { const el = document.getElementById('reflect-val'); if (el) el.innerText = reflect.value; });
                 const blur = document.getElementById('inp-reflect-blur'); if (blur) blur.addEventListener('input', () => { const el = document.getElementById('blur-val'); if (el) el.innerText = blur.value; });
-                
-                // Дополнительный обработчик Ctrl+S
+                const bloomStrength = document.getElementById('setting-bloom-strength'); if (bloomStrength) bloomStrength.addEventListener('input', () => { const el = document.getElementById('bloom-strength-val'); if (el) el.innerText = Number(bloomStrength.value).toFixed(2); engine.updateGraphics(); });
+                const reflectionDistance = document.getElementById('setting-reflection-distance'); if (reflectionDistance) reflectionDistance.addEventListener('input', () => { const el = document.getElementById('reflection-distance-val'); if (el) el.innerText = reflectionDistance.value + 'm'; engine.updateGraphics(); });
+                const camSens = document.getElementById('setting-camera-sensitivity'); if (camSens) camSens.addEventListener('input', () => { const el = document.getElementById('camera-sensitivity-val'); if (el) el.innerText = Number(camSens.value).toFixed(2); engine.applyCameraSensitivity?.(parseFloat(camSens.value)); });                // Дополнительный обработчик Ctrl+S
                 document.addEventListener('keydown', (e) => { 
                     if (e.target.tagName === 'INPUT') return; 
                     if (e.ctrlKey && e.key.toLowerCase() === 's') { 
@@ -1813,12 +2118,11 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
             applyResponsiveScale: function(persist = true) {
                 const base = Math.min(1, Math.max(0.2, this.baseUiScale || 1));
-                const viewportScale = Math.min(window.innerWidth / 1600, window.innerHeight / 900, 1);
-                const finalScale = Math.min(base, Math.max(0.45, viewportScale));
-                document.documentElement.style.setProperty('--ui-scale', finalScale.toString());
+                document.documentElement.style.setProperty('--ui-scale', base.toString());
                 const sel = document.getElementById('setting-ui-scale');
-                if (sel && sel.value !== String(base)) sel.value = String(base);
+                if (sel && sel.value != String(base)) sel.value = String(base);
                 if (persist) localStorage.setItem('mmcg_ui_scale_55', String(base));
+                this.baseUiScale = base;
             },
 
             applyInterfaceScale: function(value, persist = true) {
@@ -1985,10 +2289,18 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             showSettingsModal: () => { 
                 const modal = document.getElementById('settings-modal'); 
                 const sel = document.getElementById('setting-ui-scale'); 
-                if (sel) sel.value = (localStorage.getItem('mmcg_ui_scale_55') || '0.7'); 
+                if (sel) sel.value = (localStorage.getItem('mmcg_ui_scale_55') || '0.7');
+                const camSens = document.getElementById('setting-camera-sensitivity');
+                if (camSens) { camSens.value = localStorage.getItem('mmcg_camera_sens_55') || '1'; const lbl = document.getElementById('camera-sensitivity-val'); if (lbl) lbl.innerText = Number(camSens.value).toFixed(2); }
+                const bloom = document.getElementById('setting-bloom-strength');
+                if (bloom) { const lbl = document.getElementById('bloom-strength-val'); if (lbl) lbl.innerText = Number(bloom.value).toFixed(2); }
+                const refl = document.getElementById('setting-reflection-distance');
+                if (refl) { const lbl = document.getElementById('reflection-distance-val'); if (lbl) lbl.innerText = refl.value + 'm'; }
                 if (document.getElementById('setting-grid')) {
                     document.getElementById('setting-grid').checked = engine.gridHelper ? engine.gridHelper.visible : true;
                 }
+                if (document.getElementById('setting-bloom') && engine.bloomPass) document.getElementById('setting-bloom').checked = engine.bloomPass.enabled;
+                if (document.getElementById('setting-bloom-strength') && engine.bloomPass) document.getElementById('setting-bloom-strength').value = String(engine.bloomPass.strength ?? 1);
                 modal.classList.remove('hidden'); 
             },
             
@@ -2020,4 +2332,4 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
         i18n.init(); engine.init(); gameplay.init(); uiManager.init();
     </script>
 </body>
-</html>
+                                                                                                                                                                                                                                                               </html>
