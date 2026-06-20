@@ -356,8 +356,13 @@
                 </div>
             </div>
 
-            <!-- Нижние кнопки Sidebar (Help и Close Editor) -->
+            <!-- Нижние кнопки Sidebar (Fullscreen, Help и Close Editor) -->
             <div class="p-4 border-t-2 border-[#16273b] bg-black/15 flex flex-col gap-3 flex-shrink-0">
+                <button onclick="uiManager.toggleFullScreen()" class="gbox-sidebar-btn w-full text-left py-2.5 px-4 text-2xl font-bold rounded shadow flex items-center gap-2 border-cyan-500/50">
+                    <svg class="w-7 h-7 text-blue-400 drop-shadow-[0_0_4px_rgba(59,130,246,0.5)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                    <span data-i18n="fullscreenBtn">На весь экран</span>
+                </button>
+
                 <button onclick="alert('MapCG Web Editor v5.5\nРазработчик: MMCG Engine Team\nГорячие клавиши:\nCtrl+S - Сохранение\nCtrl+Z / Ctrl+Y - История изменений\nQ, R, S - Перемещение, Вращение, Масштаб')" class="gbox-sidebar-btn w-full text-left py-2.5 px-4 text-2xl font-bold rounded shadow flex items-center gap-2">
                     <img src="data:image/png;base64,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" class="ui-icon ui-icon-anim" alt="Question">
                     <span data-i18n="helpBtn">Help / Info</span>
@@ -874,10 +879,10 @@
                     loadStep3: "Генерация вокселей и текстур...", loadStep4: "Оптимизация освещения...",
                     loadStep5: "Готово!", projectSaved: "ПРОЕКТ СОХРАНЕН",
                     archiveSuccess: "АРХИВ УСПЕШНО СГЕНЕРИРОВАН!", exportError: "Ошибка экспорта проекта.",
-                    saveProjectBtn: "Сохранить", onTheMenuBtn: "В меню", exitHeading: "Нужно сохранить проект?",
-                    signOut: "Выйти без сохранения", showGrid: "Показывать сетку координат"
-                },
-                en: {
+                    saveProjectBtn: "Save Project", onTheMenuBtn: "On Menu", exitHeading: "Need to save a project?",
+                    signOut: "Sign Out", showGrid: "Show Coordinate Grid"
+                }
+            },
                     newProject: "New Project", exit: "Exit", createMapTitle: "Create Map",
                     mapNamePlaceholder: "Your map name...", cancel: "Cancel", create: "Create", importMap: "Import ZIP Map",
                     projectBtn: "Project (GoreBox)", settingsBtn: "Settings", spawnBtn: "SPAWN",
@@ -3174,6 +3179,19 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 if (document.getElementById('setting-bloom') && engine.bloomPass) document.getElementById('setting-bloom').checked = engine.bloomPass.enabled;
                 if (document.getElementById('setting-bloom-strength') && engine.bloomPass) document.getElementById('setting-bloom-strength').value = String(engine.bloomPass.strength ?? 1);
                 modal.classList.remove('hidden'); 
+            },
+
+            toggleFullScreen: function() {
+                const doc = window.document;
+                const docEl = doc.documentElement;
+                const requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
+                const cancelFullScreen = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
+                
+                if (!doc.fullscreenElement && !doc.mozFullScreenElement && !doc.webkitFullscreenElement && !doc.msFullscreenElement) {
+                    if (requestFullScreen) requestFullScreen.call(docEl);
+                } else {
+                    if (cancelFullScreen) cancelFullScreen.call(doc);
+                }
             },
             
             exportToGoreBoxZIP: async function() {
