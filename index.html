@@ -363,6 +363,11 @@
                     <span data-i18n="helpBtn">Help / Info</span>
                 </button>
 
+                <button id="btn-fullscreen-toggle" onclick="uiManager.toggleFullscreen()" class="gbox-sidebar-btn w-full text-left py-2.5 px-4 text-2xl font-bold rounded shadow flex items-center gap-2">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ui-icon ui-icon-anim"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+                    <span data-i18n="fullscreenBtn">Полноэкранный режим</span>
+                </button>
+
                 <button onclick="window.close()" class="gbox-sidebar-btn w-full text-left py-2.5 px-4 text-2xl font-bold rounded shadow flex items-center gap-2 border-red-500/50">
                     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAABWZkRUNSJJPjAOWrYpkAAAdtSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3UBMElVcZkLAGoZgISqAuAyF6gqAJMMgKoC4DKXqCoACaOqALjMRaoKgAFwmctUFQPgMpclDIDLXJYwAC5zWcIA/CcA+mQAZWDk8QBjk4CtwJYnAmwEVgEPPhnAjU8EuGYS8I9/Bfgr8JvHA/y0FvBdgP8UA/DfBEgDjY8HqJ8ETAdmPBFgNrAIWPFkAMc9EeDkScDZ/wrwAuDVjwd4Uy3gXQD/KQbAZS5LGACXuSxhAFz23wYYBfhPMQAuc1nCALjMZQkD4DKXJQyAy/7bAIMA/ykGwGUuSxgAl7ksYQBc9t8G2ALwn2IA/hsBE8A1wBUJYH0C2FoLGK0F8L8M8AD+UwzAfyOgDigAZyaA+QlgZi2gqRYgTxYw718BzvhXgHfVAtYD/C8wAP+tgHOAdcDpAM82YMO/Alz5rwDfrwVsAPhfYAD+mwHzgCuAdwL8fwfsAPhPMQD/C4DvAVcAcwH+vwLqAP5TDMD/CuB04HLgdID/j4BdAP8pBuB/CTAPuAL4LoDLng0G4H8R8C7gcqAHwGXPhAH4XwWcAdwInA7w/wFQBfhPMQD/y4B5wBXAdwFc9nQYgP8PgHcBlwOzAVz2VBiA/y+AM4D7gJMB9hdgPcDTAfQD/KcYgP9PgCbgGuCHQAbgfwkQAPynGID/j4C3AY8AcwFc9kQMwP9XwFxgPfBOgP8FwCDAf4oB+P8O+B7wXQCX7YsBcAHwLmAVMBfgvxVQAvhPMQCuABYB64F3ArhskgFwDfA94HIAlyUMgIuAM4B1wMEA/y2AUYD/FAPgKmAecA/wToD/BkAI8J9iAFyWAL4HXA7gGgPgsknAGcA64HSA/QWYAPhPMQD/CcB6gP9mwDzgUmAugAsMgMv2BngA+wtQAPhPMQAu+28DlAD+UwyAy1yWMAAu+3cANgA8HUAZ4D/FALjsvw1QBvhPMQAuc1nCALjsvw0wBvCfYgBc5rKEAXDZfxsgBvhPMQAu+28DjAL8pxgAl7ksYQBc9t8EiAD+kwyAy/6bAEWA/yQD4DKXJQyAy/YF2ADwnwaUAP6TDIDL/h2A9QBPFVAG+E8yAC77bwLEAP9JBsBl/02ACsB/kgFw2X8ToArwn2QAXOayhAFw2X8ToAjwn2QAXPbfBCgA/CcZAJe5LGEAXPbfBCgA/CcZAJf9NwFigP8kA+AylyUMgMv+HYANAE8VMA7wn2QAXOayhAFw2X8TYBzgP8kAuMxlCQPgMpclDIDL/psAwwD/SQbAZf9NAAPwn2QAXOayhAFw2X8TYADgP8kA/CcAGwD+FwBzJwGzgZWTgKMnAacBL5gEvAZ4J3AGwP8CA+CyfQHWTwI2Ag9MAm6ZBFwJ/HUS8GvgewmApwpQgP8kA+Cy/ybAHoD/JAPgMpclDIDLXJYwAC77bwJ4AP9JBsBlLksYAJf9NwF2AvwnGQCXuSxhAFz23wTIA/wnGQCX/TcBtgH8JxkAl7ksYQBc5rKEAfhPANYD/LcDqsC3JwHf/U8BdgP8JxmA/wTg3cAZwHqA/2bA+yYB7/lPAQYA/pMMwH8KcCUwH/gegMv+WxiA/zTg3cAZwHoAl+1vBmB/AK4EFgPvAvhvAZQAXCAiGID9BYiA7wPzgCsAXPafJCIAGBEBYH8CNgBnAmcAGwFc9u8mIgAkDICIALC/AVcCBwI/AXDZv4uIADDJACREBID9DRgD3gocBTwA8J8EjAD8fyQiANQyAJNEBID/BsDtwIHAuwBc9mwQEQD2ZgBqiQgA/y2A7wPzgCsAXPZ0iQgA+2IA9iYiAPy3ADYAZwJnANsBXPZUiAgAj8cA7IuIAPDfBLgSmA58D8BlT4aIAPBEDMDjEREA/tsA7wbmAesBXPZ4RASAf8UAPBERAeC/DbABmA+8C8BlexMRAJ4MA/CviAgA/42A7wPzgCsAXJYQEQCeLAPwZIgIAP+NgA3AmcBzgPUALhIRAJ4KA/BkiQgA/62Ay4H5wPcAXCIiADxVBuCpEBEA/psB7wbmAVcA/H8nIgA8HQbgqRIRAP6bARuAM4G3An0A/x+JCABPlwF4OkQEgP92wE+Ao4ArAP4VoATwv0BEAHgmDMDTJSIA/LcDNgBnAmcA6wH+14kIAM+UAXgmRASA/wXAlcB84HsA/6tEBIBngwF4pkQEgP8VwLuBecAVAP9LRASAZ4sBeDaICAD/K4ANwHOAdwFMAioA/41EBIBnkwF4togIAP8rAAW+D8wDvgfw30pEAHi2GYBnk4gA8L8E2AC8GzgD2Abw30REAPh3MADPNhEB4H8NcCVwFsB/CxEB4N/FAPw7iAgALnumRASAfycD8O8iIgC47OkSEQD+3QzAv5OIAOCyp0pEAPhPMAD/biICgMueLBEB4D/FAPwniAgALqslIuwLwH+SAfhPEREAXJYQEQD+GxiA/yQRIQHgIhEB4L+FAdgfRAQAl4gIAP9N/g8kHZ5pa07x7AAAAABJRU5ErkJggg==" class="ui-icon ui-icon-anim" alt="Exit">
                     <span data-i18n="exit">Close Editor</span>
@@ -875,7 +880,7 @@
                     loadStep5: "Готово!", projectSaved: "ПРОЕКТ СОХРАНЕН",
                     archiveSuccess: "АРХИВ УСПЕШНО СГЕНЕРИРОВАН!", exportError: "Ошибка экспорта проекта.",
                     saveProjectBtn: "Сохранить", onTheMenuBtn: "В меню", exitHeading: "Нужно сохранить проект?",
-                    signOut: "Выйти без сохранения", showGrid: "Показывать сетку координат"
+                    signOut: "Выйти без сохранения", showGrid: "Показывать сетку координат", fullscreenBtn: "Полноэкранный режим"
                 },
                 en: {
                     newProject: "New Project", exit: "Exit", createMapTitle: "Create Map",
@@ -909,7 +914,7 @@
                     loadStep5: "Done!", projectSaved: "PROJECT SAVED",
                     archiveSuccess: "ARCHIVE SUCCESSFULLY GENERATED!", exportError: "Project export error.",
                     saveProjectBtn: "Save Project", onTheMenuBtn: "On Menu", exitHeading: "Need to save a project?",
-                    signOut: "Sign Out", showGrid: "Show Coordinate Grid"
+                    signOut: "Sign Out", showGrid: "Show Coordinate Grid", fullscreenBtn: "Fullscreen Mode"
                 }
             },
             init() { this.setLang(this.lang); },
@@ -2888,6 +2893,37 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                         engine.saveCurrentMap(); 
                     } 
                 });
+                ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach(evt => {
+                    document.addEventListener(evt, () => this.updateFullscreenBtn());
+                });
+                this.updateFullscreenBtn();
+            },
+
+            isFullscreenActive: function() {
+                return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+            },
+
+            toggleFullscreen: function() {
+                const el = document.documentElement;
+                if (!this.isFullscreenActive()) {
+                    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+                    if (req) {
+                        const result = req.call(el);
+                        if (result && result.catch) result.catch(() => {});
+                    }
+                    if (screen.orientation && screen.orientation.lock) {
+                        screen.orientation.lock('any').catch(() => {});
+                    }
+                } else {
+                    const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+                    if (exit) exit.call(document);
+                }
+            },
+
+            updateFullscreenBtn: function() {
+                const btn = document.getElementById('btn-fullscreen-toggle');
+                if (!btn) return;
+                btn.classList.toggle('text-blue-400', this.isFullscreenActive());
             },
             
 
