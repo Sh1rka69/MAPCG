@@ -804,6 +804,11 @@
                             <span data-i18n="waterWaves" class="group-hover:text-white text-gray-300 transition">Волны воды (+ отражения объектов в реальном времени)</span>
                         </label>
 
+                        <label class="flex items-center gap-3 mb-3 cursor-pointer group">
+                            <input type="checkbox" id="setting-texture-smoothing" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" class="w-6 h-6 accent-blue-500">
+                            <span data-i18n="textureSmoothing" class="group-hover:text-white text-gray-300 transition">Сглаживание текстур</span>
+                        </label>
+
                         <div class="bg-black/30 p-2 rounded border border-gray-800 mt-1">
                             <label class="text-gray-400 text-sm uppercase font-bold block mb-1">Разрешение рендера (Pixel Scale)</label>
                             <div class="flex items-center gap-2">
@@ -857,7 +862,7 @@
                     skyWeather: "Небо и Погода", skyboxLabel: "Скайбокс (Время суток)", sunAngleLabel: "Угол солнца (Вращение)",
                     weatherLabel: "Погода (Аудио & Частицы)", interfaceLabel: "Интерфейс", uiScaleLabel: "Масштаб интерфейса",
                     graphicsLabel: "Графика (Оптимизация)", dynShadows: "Динамические Тени", bloom: "Bloom (Свечение объектов/молний)",
-                    ssao: "SSAO (Мягкие угловые тени)", waterWaves: "Волны воды (+ отражения объектов в реальном времени)", fogHeader: "Туман", fogColorLabel: "Цвет тумана (если ясно)",
+                    ssao: "SSAO (Мягкие угловые тени)", waterWaves: "Волны воды (+ отражения объектов в реальном времени)", textureSmoothing: "Сглаживание текстур", fogHeader: "Туман", fogColorLabel: "Цвет тумана (если ясно)",
                     fogStart: "Начало", fogEnd: "Конец", exportTitle: "ЭКСПОРТ В GOREBOX",
                     exportDesc: "Будет сгенерирован ZIP-архив с форматом MapData.json (v4) и папкой CustomTextures.",
                     saveZip: "Сохранить ZIP", optGrid: "Grid (Сетка)", optPlain: "Plain (Белый)",
@@ -891,7 +896,7 @@
                     skyWeather: "Sky & Weather", skyboxLabel: "Skybox (Time of Day)", sunAngleLabel: "Sun Angle (Rotation)",
                     weatherLabel: "Weather (Audio & Particles)", interfaceLabel: "Interface", uiScaleLabel: "UI Scale",
                     graphicsLabel: "Graphics (Optimization)", dynShadows: "Dynamic Shadows", bloom: "Bloom (Object/Lightning Glow)",
-                    ssao: "SSAO (Soft Ambient Shadows)", waterWaves: "Water Waves (+ Real-Time Object Reflections)", fogHeader: "Fog", fogColorLabel: "Fog Color (if clear)",
+                    ssao: "SSAO (Soft Ambient Shadows)", waterWaves: "Water Waves (+ Real-Time Object Reflections)", textureSmoothing: "Texture Smoothing", fogHeader: "Fog", fogColorLabel: "Fog Color (if clear)",
                     fogStart: "Start", fogEnd: "End", exportTitle: "EXPORT TO GOREBOX",
                     exportDesc: "A ZIP archive with MapData.json (v4) and CustomTextures folder will be generated.",
                     saveZip: "Save ZIP", optGrid: "Grid", optPlain: "Plain (White)",
@@ -1126,13 +1131,13 @@
             const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
             const ctx = canvas.getContext('2d'); ctx.fillStyle = c1; ctx.fillRect(0, 0, 256, 256);
             ctx.fillStyle = c2; ctx.fillRect(0, 0, 128, 128); ctx.fillRect(128, 128, 128, 128);
-            const tex = new THREE.CanvasTexture(canvas); tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace; return tex;
+            const tex = new THREE.CanvasTexture(canvas); tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace; tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; return tex;
         }
         function createNoiseTexture(c1, c2, detail = 1) {
             const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
             const ctx = canvas.getContext('2d');
             for(let i=0; i<256; i+=detail) for(let j=0; j<256; j+=detail) { ctx.fillStyle = Math.random() > 0.5 ? c1 : c2; ctx.fillRect(i, j, detail, detail); }
-            const tex = new THREE.CanvasTexture(canvas); tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace; return tex;
+            const tex = new THREE.CanvasTexture(canvas); tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace; tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; return tex;
         }
         function createConcreteTexture() {
             return createNoiseTexture('#7f8c8d', '#95a5a6', 2);
@@ -1215,6 +1220,9 @@
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
             texture.colorSpace = THREE.SRGBColorSpace;
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            texture.generateMipmaps = false;
             texture.needsUpdate = true;
             return texture;
         }
@@ -2328,6 +2336,16 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.ssaoPass.enabled = document.getElementById('setting-ssao').checked;
                 waterUniforms.uWavesEnabled.value = (document.getElementById('setting-water-waves')?.checked ?? true) ? 1.0 : 0.0;
 
+                const textureSmoothingEnabled = document.getElementById('setting-texture-smoothing')?.checked ?? false;
+                const newMagFilter = textureSmoothingEnabled ? THREE.LinearFilter : THREE.NearestFilter;
+                const newMinFilter = textureSmoothingEnabled ? THREE.LinearFilter : THREE.NearestFilter;
+                Object.values(baseTextures).forEach(tex => {
+                    if (!tex) return;
+                    tex.magFilter = newMagFilter;
+                    tex.minFilter = newMinFilter;
+                    tex.needsUpdate = true;
+                });
+
                 this.applyCameraSensitivity(parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'));
                 this.syncAllObjectMaterials(false);
                 this.updateLocalReflections(true);
@@ -2341,7 +2359,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.updateSelectionPanels();
             },
 
-            getEnvState: function() { return { skybox: document.getElementById('setting-skybox').value, weather: document.getElementById('setting-weather').value, fogColor: document.getElementById('setting-fog-color').value, fogStart: parseFloat(document.getElementById('setting-fog-start').value) || 15, fogEnd: parseFloat(document.getElementById('setting-fog-end').value) || 250, sunAngle: parseFloat(document.getElementById('setting-sun-angle').value) || 180, shadows: document.getElementById('setting-shadows').checked, shadowQuality: parseInt(document.getElementById('setting-shadow-quality')?.value ?? '2', 10), bloom: document.getElementById('setting-bloom').checked, bloomStrength: parseFloat(document.getElementById('setting-bloom-strength')?.value || '1'), cameraSensitivity: parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'), ssao: document.getElementById('setting-ssao').checked, waterWaves: document.getElementById('setting-water-waves') ? document.getElementById('setting-water-waves').checked : true, customSkyboxDataUrl: this.customSkyboxDataUrl || null, customSkyboxName: this.customSkyboxName || null, gridVisible: document.getElementById('setting-grid') ? document.getElementById('setting-grid').checked : true }; },
+            getEnvState: function() { return { skybox: document.getElementById('setting-skybox').value, weather: document.getElementById('setting-weather').value, fogColor: document.getElementById('setting-fog-color').value, fogStart: parseFloat(document.getElementById('setting-fog-start').value) || 15, fogEnd: parseFloat(document.getElementById('setting-fog-end').value) || 250, sunAngle: parseFloat(document.getElementById('setting-sun-angle').value) || 180, shadows: document.getElementById('setting-shadows').checked, shadowQuality: parseInt(document.getElementById('setting-shadow-quality')?.value ?? '2', 10), bloom: document.getElementById('setting-bloom').checked, bloomStrength: parseFloat(document.getElementById('setting-bloom-strength')?.value || '1'), cameraSensitivity: parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'), ssao: document.getElementById('setting-ssao').checked, waterWaves: document.getElementById('setting-water-waves') ? document.getElementById('setting-water-waves').checked : true, textureSmoothing: document.getElementById('setting-texture-smoothing') ? document.getElementById('setting-texture-smoothing').checked : false, customSkyboxDataUrl: this.customSkyboxDataUrl || null, customSkyboxName: this.customSkyboxName || null, gridVisible: document.getElementById('setting-grid') ? document.getElementById('setting-grid').checked : true }; },
 
             setCustomSkybox: function(dataUrl, fileName = 'Custom Skybox') {
                 this.customSkyboxDataUrl = dataUrl;
@@ -2743,6 +2761,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     document.getElementById('camera-sensitivity-val').innerText = Number(document.getElementById('setting-camera-sensitivity').value).toFixed(2);
                     document.getElementById('setting-ssao').checked = data.env.ssao === true;
                     if (document.getElementById('setting-water-waves')) document.getElementById('setting-water-waves').checked = data.env.waterWaves !== false;
+                    if (document.getElementById('setting-texture-smoothing')) document.getElementById('setting-texture-smoothing').checked = data.env.textureSmoothing === true;
                     if(document.getElementById('setting-grid')) {
                         document.getElementById('setting-grid').checked = data.env.gridVisible !== false;
                         this.toggleGridVisibility(data.env.gridVisible !== false);
