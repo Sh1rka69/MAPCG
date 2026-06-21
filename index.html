@@ -428,6 +428,12 @@
         </div>
 
         <div id="ui-layer" class="ui-scale-layer">
+            <!-- FPS COUNTER (левый верхний угол) -->
+            <div id="fps-counter" class="hidden absolute top-2 left-2 z-50 bg-black/60 border border-gray-800 rounded px-2 py-1 text-sm font-bold text-green-400 pointer-events-none select-none">FPS: 0</div>
+
+            <!-- MIN PIXEL SCALE BUTTON (левый нижний угол) -->
+            <button onclick="engine.applyPixelRatio(0.2); const pr = document.getElementById('setting-pixel-ratio'); if (pr) pr.value = 0.2; const lbl = document.getElementById('pixel-ratio-val'); if (lbl) lbl.innerText = '0.20x';" class="absolute bottom-2 left-2 z-50 bg-black/60 hover:bg-red-900/70 border border-gray-800 hover:border-red-500 rounded px-2 py-1 text-sm font-bold text-gray-300 hover:text-white pointer-events-auto select-none transition" title="Мгновенно снизить Pixel Scale до 0.20x">MIN</button>
+
             <!-- TOP BAR -->
             <div class="ui-panel h-14 w-full flex items-center justify-between px-4 text-xl pointer-events-auto border-b border-blue-900/30 z-40 relative shadow-md">
                 <div class="flex gap-2 md:gap-4 h-full items-center">
@@ -504,8 +510,6 @@
                                 <div class="grid grid-cols-2 gap-2">
                                     <button onclick="engine.addCylinder()" data-i18n="shapeCylinder" class="shape-btn px-3 py-3 rounded-lg bg-[#101826] border border-gray-700 text-white text-lg hover:border-blue-400 hover:text-blue-300 transition">ЦИЛИНДР</button>
                                     <button onclick="engine.addTriangle()" data-i18n="shapeTriangle" class="shape-btn px-3 py-3 rounded-lg bg-[#101826] border border-gray-700 text-white text-lg hover:border-blue-400 hover:text-blue-300 transition">ТРЕУГОЛЬНИК</button>
-                                    <button onclick="engine.addRhombus()" data-i18n="shapeRhombus" class="shape-btn px-3 py-3 rounded-lg bg-[#101826] border border-gray-700 text-white text-lg hover:border-blue-400 hover:text-blue-300 transition">РОМБ</button>
-                                    <button onclick="engine.addSphere()" data-i18n="shapeSphere" class="shape-btn px-3 py-3 rounded-lg bg-[#101826] border border-gray-700 text-white text-lg hover:border-blue-400 hover:text-blue-300 transition">ШАР</button>
                                 </div>
                             </div>
                         </div>
@@ -809,6 +813,11 @@
                             <span data-i18n="textureSmoothing" class="group-hover:text-white text-gray-300 transition">Сглаживание текстур</span>
                         </label>
 
+                        <label class="flex items-center gap-3 mb-3 cursor-pointer group">
+                            <input type="checkbox" id="setting-show-fps" onchange="engine.applyFpsCounterVisibility(this.checked);" class="w-6 h-6 accent-blue-500">
+                            <span data-i18n="showFps" class="group-hover:text-white text-gray-300 transition">Показать FPS</span>
+                        </label>
+
                         <div class="bg-black/30 p-2 rounded border border-gray-800 mt-1">
                             <label class="text-gray-400 text-sm uppercase font-bold block mb-1">Разрешение рендера (Pixel Scale)</label>
                             <div class="flex items-center gap-2">
@@ -862,7 +871,7 @@
                     skyWeather: "Небо и Погода", skyboxLabel: "Скайбокс (Время суток)", sunAngleLabel: "Угол солнца (Вращение)",
                     weatherLabel: "Погода (Аудио & Частицы)", interfaceLabel: "Интерфейс", uiScaleLabel: "Масштаб интерфейса",
                     graphicsLabel: "Графика (Оптимизация)", dynShadows: "Динамические Тени", bloom: "Bloom (Свечение объектов/молний)",
-                    ssao: "SSAO (Мягкие угловые тени)", waterWaves: "Волны воды (+ отражения объектов в реальном времени)", textureSmoothing: "Сглаживание текстур", fogHeader: "Туман", fogColorLabel: "Цвет тумана (если ясно)",
+                    ssao: "SSAO (Мягкие угловые тени)", waterWaves: "Волны воды (+ отражения объектов в реальном времени)", textureSmoothing: "Сглаживание текстур", showFps: "Показать FPS", fogHeader: "Туман", fogColorLabel: "Цвет тумана (если ясно)",
                     fogStart: "Начало", fogEnd: "Конец", exportTitle: "ЭКСПОРТ В GOREBOX",
                     exportDesc: "Будет сгенерирован ZIP-архив с форматом MapData.json (v4) и папкой CustomTextures.",
                     saveZip: "Сохранить ZIP", optGrid: "Grid (Сетка)", optPlain: "Plain (Белый)",
@@ -896,7 +905,7 @@
                     skyWeather: "Sky & Weather", skyboxLabel: "Skybox (Time of Day)", sunAngleLabel: "Sun Angle (Rotation)",
                     weatherLabel: "Weather (Audio & Particles)", interfaceLabel: "Interface", uiScaleLabel: "UI Scale",
                     graphicsLabel: "Graphics (Optimization)", dynShadows: "Dynamic Shadows", bloom: "Bloom (Object/Lightning Glow)",
-                    ssao: "SSAO (Soft Ambient Shadows)", waterWaves: "Water Waves (+ Real-Time Object Reflections)", textureSmoothing: "Texture Smoothing", fogHeader: "Fog", fogColorLabel: "Fog Color (if clear)",
+                    ssao: "SSAO (Soft Ambient Shadows)", waterWaves: "Water Waves (+ Real-Time Object Reflections)", textureSmoothing: "Texture Smoothing", showFps: "Show FPS", fogHeader: "Fog", fogColorLabel: "Fog Color (if clear)",
                     fogStart: "Start", fogEnd: "End", exportTitle: "EXPORT TO GOREBOX",
                     exportDesc: "A ZIP archive with MapData.json (v4) and CustomTextures folder will be generated.",
                     saveZip: "Save ZIP", optGrid: "Grid", optPlain: "Plain (White)",
@@ -1417,6 +1426,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             blocks: [], selectedBlocks: [], spawnPointObj: null,
             gridHelper: null, dirLight: null, ambientLight: null, sky: null, sun: null,
             outlines: [], clock: new THREE.Clock(),
+            fpsCounterEnabled: false, fpsFrameCount: 0, fpsElapsed: 0,
             weatherParticles: null, weatherType: 'clear', targetWeatherIntensity: 0,
             cloudsObj: null, snapToGrid: false, sparksList: [],
             skyRotationAngle: Math.PI, skyPhiCache: Math.PI / 3,
@@ -1502,7 +1512,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 window.addEventListener('keydown', this.onKeyDown.bind(this));
                 window.addEventListener('keyup', this.onKeyUp.bind(this));
 
-                this.updateEnvironment(); this.applyCameraSensitivity(parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1')); this.applyCameraMoveSpeed(parseFloat(localStorage.getItem('mmcg_camera_move_55') || '1')); this.applyPixelRatio(parseFloat(localStorage.getItem('mmcg_pixel_ratio_55') || '0.8')); this.updateSelectionPanels(); this.animate();
+                this.updateEnvironment(); this.applyCameraSensitivity(parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1')); this.applyCameraMoveSpeed(parseFloat(localStorage.getItem('mmcg_camera_move_55') || '1')); this.applyPixelRatio(parseFloat(localStorage.getItem('mmcg_pixel_ratio_55') || '0.8')); this.applyFpsCounterVisibility(localStorage.getItem('mmcg_show_fps_55') === '1'); this.updateSelectionPanels(); this.animate();
             },
 
             initClouds: function() {
@@ -1633,6 +1643,20 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     if (this.composer) this.composer.setSize(w, h);
                 }
                 return safe;
+            },
+
+            applyFpsCounterVisibility: function(value = null) {
+                const enabled = value !== null && value !== undefined ? !!value : (localStorage.getItem('mmcg_show_fps_55') === '1');
+                this.fpsCounterEnabled = enabled;
+                localStorage.setItem('mmcg_show_fps_55', enabled ? '1' : '0');
+                this.fpsFrameCount = 0;
+                this.fpsElapsed = 0;
+                const el = document.getElementById('fps-counter');
+                if (el) {
+                    el.classList.toggle('hidden', !enabled);
+                    if (enabled) el.innerText = 'FPS: 0';
+                }
+                return enabled;
             },
 
             getActiveEnvironmentMap: function() {
@@ -2011,6 +2035,69 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 return mesh;
             },
 
+            createShapeCubeTransformed: function(origin, basis, localPos, localRotDeg, localScale, groupId, shapeType) {
+                const { tex, matT, col, tMode, reflectivity, reflectBlur } = this.getCurrentBrushSettings();
+                const preset = MATERIAL_PRESETS[matT] || MATERIAL_PRESETS.Concrete;
+                const initialReflect = reflectivity !== null && reflectivity !== undefined ? reflectivity : preset.envMapIntensity;
+                const initialBlur = reflectBlur !== null && reflectBlur !== undefined ? reflectBlur : preset.roughness;
+                const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1).clone(), createMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur }));
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                mesh.position.copy(origin)
+                    .addScaledVector(basis.right, localPos.x)
+                    .addScaledVector(basis.up, localPos.y)
+                    .addScaledVector(basis.forward, localPos.z);
+                const basisMatrix = new THREE.Matrix4().makeBasis(basis.right, basis.up, basis.forward.clone().multiplyScalar(-1));
+                const basisQuat = new THREE.Quaternion().setFromRotationMatrix(basisMatrix);
+                const localQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+                    THREE.MathUtils.degToRad(localRotDeg.x),
+                    THREE.MathUtils.degToRad(localRotDeg.y),
+                    THREE.MathUtils.degToRad(localRotDeg.z)
+                ));
+                mesh.quaternion.copy(basisQuat).multiply(localQuat);
+                mesh.scale.set(localScale.x, localScale.y, localScale.z);
+                mesh.userData = {
+                    type: 'cube',
+                    visible: true,
+                    collisions: true,
+                    texture: tex,
+                    materialType: matT,
+                    colorHex: col,
+                    tilingMode: tMode,
+                    materialName: BUILTIN_TEXTURE_KEYS.has(tex) ? getFallbackGoreBoxMaterialName(matT) : tex,
+                    sourceTag: matT,
+                    skyboxReflectivity: initialReflect,
+                    skyboxBlur: initialBlur,
+                    groupId,
+                    shapeType,
+                    shapePart: true
+                };
+                this.updateCubeUVs(mesh);
+                this.scene.add(mesh);
+                this.blocks.push(mesh);
+                return mesh;
+            },
+
+            addVoxelShape: function(shapeType, voxelData, worldScale = 1) {
+                const origin = this.getShapeOrigin();
+                const basis = this.getShapeBasis();
+                const groupId = this.makeShapeGroupId(shapeType);
+                const created = [];
+                voxelData.forEach(v => {
+                    const localPos = { x: v.p[0] * worldScale, y: v.p[1] * worldScale, z: v.p[2] * worldScale };
+                    const localRotDeg = { x: v.r[0], y: v.r[1], z: v.r[2] };
+                    const localScale = { x: v.s[0] * worldScale, y: v.s[1] * worldScale, z: v.s[2] * worldScale };
+                    created.push(this.createShapeCubeTransformed(origin, basis, localPos, localRotDeg, localScale, groupId, shapeType));
+                });
+                this.selectedBlocks = created;
+                this.buildTransformGroup();
+                this.updateUIFromObject();
+                this.updateSelectionPanels();
+                if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
+                audioEngine.playSpawn();
+                return created;
+            },
+
             addShapeFromPoints: function(shapeType, points, scale = 0.45) {
                 const origin = this.getShapeOrigin();
                 const basis = this.getShapeBasis();
@@ -2028,60 +2115,13 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             },
 
             addCylinder: function() {
-                const points = [];
-                const unit = 0.42, radius = 2.15, height = 4.2, shell = unit * 1.05;
-                for (let y = -height / 2; y <= height / 2 + 0.001; y += unit) {
-                    const cap = Math.abs(y) > height / 2 - unit * 0.95;
-                    for (let x = -radius; x <= radius + 0.001; x += unit) {
-                        for (let z = -radius; z <= radius + 0.001; z += unit) {
-                            const d = Math.sqrt(x * x + z * z);
-                            if (d <= radius && (d >= radius - shell || cap)) points.push({ x, y, z });
-                        }
-                    }
-                }
-                return this.addShapeFromPoints('cylinder', points, unit * 0.95);
+                const voxelData = [{"p":[0.0,0.0,0.0],"r":[0.0,0.0,0.0],"s":[0.16,1.0,1.0]},{"p":[0.0,0.0,0.0],"r":[0.0,90.0,0.0],"s":[0.16,1.0,1.0]},{"p":[0.0,0.0,0.0],"r":[0.0,18.0,0.0],"s":[0.16,1.0,1.0]},{"p":[0.0,0.0,0.0],"r":[0.0,36.0,0.0],"s":[0.16,1.0,1.0]},{"p":[0.0,0.0,0.0],"r":[0.0,54.0,0.0],"s":[0.16,1.0,1.0]},{"p":[0.0,0.0,0.0],"r":[0.0,72.0,0.0],"s":[0.16,1.0,1.0]},{"p":[0.0,0.0,0.0],"r":[0.0,342.0,0.0],"s":[0.16,1.0,1.0]},{"p":[0.0,0.0,0.0],"r":[0.0,324.0,0.0],"s":[0.16,1.0,1.0]},{"p":[0.0,0.0,0.0],"r":[0.0,306.0,0.0],"s":[0.16,1.0,1.0]},{"p":[0.0,0.0,0.0],"r":[0.0,288.0,0.0],"s":[0.16,1.0,1.0]}];
+                return this.addVoxelShape('cylinder', voxelData, 4.2);
             },
 
             addTriangle: function() {
-                const points = [];
-                const unit = 0.42, height = 5.0, base = 5.8, depth = 2.0;
-                for (let y = 0; y <= height + 0.001; y += unit) {
-                    const width = Math.max(unit, base * (1 - (y / height)));
-                    for (let x = -width / 2; x <= width / 2 + 0.001; x += unit) {
-                        for (let z = -depth / 2; z <= depth / 2 + 0.001; z += unit) {
-                            points.push({ x, y: y - height / 2, z });
-                        }
-                    }
-                }
-                return this.addShapeFromPoints('triangle', points, unit * 0.95);
-            },
-
-            addRhombus: function() {
-                const points = [];
-                const unit = 0.42, size = 5.2, depth = 2.0;
-                for (let y = -size / 2; y <= size / 2 + 0.001; y += unit) {
-                    const width = Math.max(unit, size * (1 - Math.abs(y) / (size / 2)));
-                    for (let x = -width / 2; x <= width / 2 + 0.001; x += unit) {
-                        for (let z = -depth / 2; z <= depth / 2 + 0.001; z += unit) {
-                            points.push({ x, y, z });
-                        }
-                    }
-                }
-                return this.addShapeFromPoints('rhombus', points, unit * 0.95);
-            },
-
-            addSphere: function() {
-                const points = [];
-                const unit = 0.42, radius = 2.7, shell = unit * 1.15;
-                for (let x = -radius; x <= radius + 0.001; x += unit) {
-                    for (let y = -radius; y <= radius + 0.001; y += unit) {
-                        for (let z = -radius; z <= radius + 0.001; z += unit) {
-                            const d = Math.sqrt(x * x + y * y + z * z);
-                            if (d <= radius && d >= radius - shell) points.push({ x, y, z });
-                        }
-                    }
-                }
-                return this.addShapeFromPoints('sphere', points, unit * 0.92);
+                const voxelData = [{"p":[0.0,-0.498,0.0],"r":[0.0,0.0,0.0],"s":[1.0,0.005,1.0]},{"p":[-0.249,-0.001,0.0],"r":[0.0,0.0,243.5],"s":[1.118,0.005,1.0]},{"p":[0.249,-0.001,0.0],"r":[0.0,0.0,116.5],"s":[1.118,0.005,1.0]}];
+                return this.addVoxelShape('triangle', voxelData, 5.0);
             },
 
             toggleEditorMode: function() {
@@ -2788,6 +2828,17 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
             animate: function() {
                 requestAnimationFrame(this.animate.bind(this)); const dt = this.clock.getDelta(); weatherUniforms.uTime.value += dt;
+                if (this.fpsCounterEnabled) {
+                    this.fpsFrameCount++;
+                    this.fpsElapsed += dt;
+                    if (this.fpsElapsed >= 1) {
+                        const fps = Math.round(this.fpsFrameCount / this.fpsElapsed);
+                        const el = document.getElementById('fps-counter');
+                        if (el) el.innerText = 'FPS: ' + fps;
+                        this.fpsFrameCount = 0;
+                        this.fpsElapsed = 0;
+                    }
+                }
                 this.updateLocalReflections(false);
 
                 if (gameplay.isPlaytest) {
@@ -3230,6 +3281,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 if (camMove) { camMove.value = localStorage.getItem('mmcg_camera_move_55') || '1'; const lbl = document.getElementById('camera-move-speed-val'); if (lbl) lbl.innerText = Number(camMove.value).toFixed(1); }
                 const pixRatio = document.getElementById('setting-pixel-ratio');
                 if (pixRatio) { pixRatio.value = localStorage.getItem('mmcg_pixel_ratio_55') || '1'; const lbl = document.getElementById('pixel-ratio-val'); if (lbl) lbl.innerText = Number(pixRatio.value).toFixed(2) + 'x'; }
+                const showFps = document.getElementById('setting-show-fps');
+                if (showFps) { showFps.checked = localStorage.getItem('mmcg_show_fps_55') === '1'; }
                 const bloom = document.getElementById('setting-bloom-strength');
                 if (bloom) { const lbl = document.getElementById('bloom-strength-val'); if (lbl) lbl.innerText = Number(bloom.value).toFixed(2); }
                 const refl = document.getElementById('setting-reflection-distance');
