@@ -510,6 +510,8 @@
                                 <div class="grid grid-cols-2 gap-2">
                                     <button onclick="engine.addCylinder()" data-i18n="shapeCylinder" class="shape-btn px-3 py-3 rounded-lg bg-[#101826] border border-gray-700 text-white text-lg hover:border-blue-400 hover:text-blue-300 transition">ЦИЛИНДР</button>
                                     <button onclick="engine.addTriangle()" data-i18n="shapeTriangle" class="shape-btn px-3 py-3 rounded-lg bg-[#101826] border border-gray-700 text-white text-lg hover:border-blue-400 hover:text-blue-300 transition">ТРЕУГОЛЬНИК</button>
+                                    <button onclick="uiManager.triggerGLBImport()" data-i18n="shapeImportGLB" class="shape-btn col-span-2 px-3 py-3 rounded-lg bg-[#101826] border border-gray-700 text-white text-lg hover:border-blue-400 hover:text-blue-300 transition">ИМПОРТ 3D (OBJ/GLB/GLTF)</button>
+                                    <input type="file" id="import-glb-model" accept=".glb,.gltf,.obj" class="hidden" onchange="uiManager.importGLBModel(event)">
                                 </div>
                             </div>
                         </div>
@@ -853,6 +855,8 @@
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
         import { Sky } from 'three/addons/objects/Sky.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
         import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -866,7 +870,7 @@
                     newProject: "Новый Проект", exit: "Выход", createMapTitle: "Создать Карту",
                     mapNamePlaceholder: "Название вашей карты...", cancel: "Отмена", create: "Создать", importMap: "Импорт ZIP Карты",
                     projectBtn: "Проект (GoreBox)", settingsBtn: "Настройки", spawnBtn: "СПАВН",
-                    cubeBtn: "КУБ", shapeMenu: "ФИГУРЫ", shapeCylinder: "ЦИЛИНДР", shapeTriangle: "ТРЕУГОЛЬНИК", shapeRhombus: "РОМБ", shapeSphere: "ШАР", shapeGroupSelect: "ВСЯ ФИГУРА", cubeMaterial: "Материал куба (Tag)", tilingLabel: "Растягивание (Tiling)",
+                    cubeBtn: "КУБ", shapeMenu: "ФИГУРЫ", shapeCylinder: "ЦИЛИНДР", shapeTriangle: "ТРЕУГОЛЬНИК", shapeRhombus: "РОМБ", shapeSphere: "ШАР", shapeImportGLB: "ИМПОРТ GLB", shapeGroupSelect: "ВСЯ ФИГУРА", cubeMaterial: "Материал куба (Tag)", tilingLabel: "Растягивание (Tiling)",
                     physicsMaterial: "Физический материал", colorTint: "Цвет (Tint)", mapSettings: "НАСТРОЙКИ КАРТЫ",
                     skyWeather: "Небо и Погода", skyboxLabel: "Скайбокс (Время суток)", sunAngleLabel: "Угол солнца (Вращение)",
                     weatherLabel: "Погода (Аудио & Частицы)", interfaceLabel: "Интерфейс", uiScaleLabel: "Масштаб интерфейса",
@@ -893,6 +897,7 @@
                     loadStep3: "Генерация вокселей и текстур...", loadStep4: "Оптимизация освещения...",
                     loadStep5: "Готово!", projectSaved: "ПРОЕКТ СОХРАНЕН",
                     archiveSuccess: "АРХИВ УСПЕШНО СГЕНЕРИРОВАН!", exportError: "Ошибка экспорта проекта.",
+                    glbImportError: "Ошибка импорта GLB-модели.", glbImportEmpty: "Не удалось распознать геометрию модели.",
                     saveProjectBtn: "Сохранить", onTheMenuBtn: "В меню", exitHeading: "Нужно сохранить проект?",
                     signOut: "Выйти без сохранения", showGrid: "Показывать сетку координат", fullscreenBtn: "Полноэкранный режим"
                 },
@@ -900,7 +905,7 @@
                     newProject: "New Project", exit: "Exit", createMapTitle: "Create Map",
                     mapNamePlaceholder: "Your map name...", cancel: "Cancel", create: "Create", importMap: "Import ZIP Map",
                     projectBtn: "Project (GoreBox)", settingsBtn: "Settings", spawnBtn: "SPAWN",
-                    cubeBtn: "CUBE", shapeMenu: "SHAPES", shapeCylinder: "CYLINDER", shapeTriangle: "TRIANGLE", shapeRhombus: "RHOMBUS", shapeSphere: "SPHERE", shapeGroupSelect: "WHOLE SHAPE", cubeMaterial: "Cube Material (Tag)", tilingLabel: "Texture Tiling",
+                    cubeBtn: "CUBE", shapeMenu: "SHAPES", shapeCylinder: "CYLINDER", shapeTriangle: "TRIANGLE", shapeRhombus: "RHOMBUS", shapeSphere: "SPHERE", shapeImportGLB: "IMPORT GLB", shapeGroupSelect: "WHOLE SHAPE", cubeMaterial: "Cube Material (Tag)", tilingLabel: "Texture Tiling",
                     physicsMaterial: "Physics Material", colorTint: "Color (Tint)", mapSettings: "MAP SETTINGS",
                     skyWeather: "Sky & Weather", skyboxLabel: "Skybox (Time of Day)", sunAngleLabel: "Sun Angle (Rotation)",
                     weatherLabel: "Weather (Audio & Particles)", interfaceLabel: "Interface", uiScaleLabel: "UI Scale",
@@ -927,6 +932,7 @@
                     loadStep3: "Generating voxels & textures...", loadStep4: "Optimizing lighting...",
                     loadStep5: "Done!", projectSaved: "PROJECT SAVED",
                     archiveSuccess: "ARCHIVE SUCCESSFULLY GENERATED!", exportError: "Project export error.",
+                    glbImportError: "GLB model import error.", glbImportEmpty: "Could not recognize model geometry.",
                     saveProjectBtn: "Save Project", onTheMenuBtn: "On Menu", exitHeading: "Need to save a project?",
                     signOut: "Sign Out", showGrid: "Show Coordinate Grid", fullscreenBtn: "Fullscreen Mode"
                 }
@@ -1487,6 +1493,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     if (!event.value) {
                         if(this.selectedBlocks.length > 1) { this.releaseTransformGroup(); if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); this.buildTransformGroup(); } 
                         else { if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); }
+                        this.selectedBlocks.forEach(obj => { this.registerCullable(obj); this.updateCullingAround(obj); });
                     }
                 });
                 this.transformControl.addEventListener('change', () => { 
@@ -2124,6 +2131,129 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 return this.addVoxelShape('triangle', voxelData, 5.0);
             },
 
+            // Импорт .obj / .glb / .gltf модели: КАЖДЫЙ полигон (треугольник) меши превращается
+            // в один растянутый и повёрнутый куб (схлопнутый по нормали до tilesthickness),
+            // который максимально точно облегает именно этот треугольник — угол, масштаб
+            // и положение куба считаются из самого полигона (алгоритм Vabish'а).
+            // Результат — обычные блоки this.blocks, экспортируются как любой другой куб
+            // в формат GoreBox (MapData.json понимает только кубы-примитивы).
+            importModelAsCubes: function(triangles, thickness = 0.05) {
+                if (!triangles.length) { alert(i18n.t('glbImportEmpty')); return; }
+
+                const groupId = this.makeShapeGroupId('glbImport');
+                const { tex, matT, col, tMode, reflectivity, reflectBlur } = this.getCurrentBrushSettings();
+                const preset = MATERIAL_PRESETS[matT] || MATERIAL_PRESETS.Concrete;
+                const initialReflect = reflectivity !== null && reflectivity !== undefined ? reflectivity : preset.envMapIntensity;
+                const initialBlur = reflectBlur !== null && reflectBlur !== undefined ? reflectBlur : preset.roughness;
+                const created = [];
+
+                const ab = new THREE.Vector3(), ac = new THREE.Vector3(), normal = new THREE.Vector3();
+                const center = new THREE.Vector3(), localX = new THREE.Vector3(), localY = new THREE.Vector3();
+                const mat4 = new THREE.Matrix4(), quat = new THREE.Quaternion();
+                const pA = new THREE.Vector3(), pB = new THREE.Vector3(), pC = new THREE.Vector3();
+
+                triangles.forEach(([a, b, c]) => {
+                    // Базис треугольника: X вдоль ребра AB, Z по нормали, Y достраивается крестом.
+                    ab.subVectors(b, a);
+                    ac.subVectors(c, a);
+                    normal.crossVectors(ab, ac);
+                    const area2 = normal.length();
+                    if (area2 < 1e-8) return; // вырожденный треугольник — пропускаем
+
+                    normal.normalize();
+                    localX.copy(ab).normalize();
+                    localY.crossVectors(normal, localX).normalize();
+
+                    // Переводим вершины треугольника в локальные 2D-координаты (вдоль localX/localY)
+                    center.copy(a).add(b).add(c).multiplyScalar(1 / 3);
+                    pA.subVectors(a, center); pB.subVectors(b, center); pC.subVectors(c, center);
+                    const ux = [pA.dot(localX), pB.dot(localX), pC.dot(localX)];
+                    const uy = [pA.dot(localY), pB.dot(localY), pC.dot(localY)];
+                    const minX = Math.min(...ux), maxX = Math.max(...ux);
+                    const minY = Math.min(...uy), maxY = Math.max(...uy);
+                    const sizeX = Math.max(maxX - minX, 0.01);
+                    const sizeY = Math.max(maxY - minY, 0.01);
+                    // Смещаем центр куба к фактическому центру bounding-box треугольника в 2D
+                    const offX = (minX + maxX) / 2;
+                    const offY = (minY + maxY) / 2;
+                    center.addScaledVector(localX, offX).addScaledVector(localY, offY);
+
+                    // Матрица поворота из базиса (localX, localY, normal) -> ориентация куба
+                    mat4.makeBasis(localX, localY, normal);
+                    quat.setFromRotationMatrix(mat4);
+
+                    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1).clone(), createMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur }));
+                    mesh.castShadow = true; mesh.receiveShadow = true;
+                    mesh.position.copy(center);
+                    mesh.quaternion.copy(quat);
+                    mesh.scale.set(sizeX, sizeY, thickness);
+                    mesh.userData = {
+                        type: 'cube', visible: true, collisions: true, texture: tex, materialType: matT, colorHex: col, tilingMode: tMode,
+                        materialName: BUILTIN_TEXTURE_KEYS.has(tex) ? getFallbackGoreBoxMaterialName(matT) : tex,
+                        sourceTag: matT, skyboxReflectivity: initialReflect, skyboxBlur: initialBlur,
+                        groupId, shapeType: 'glbImport', shapePart: true
+                    };
+                    this.updateCubeUVs(mesh);
+                    this.scene.add(mesh);
+                    this.blocks.push(mesh);
+                    this.registerCullable(mesh); this.updateCullingAround(mesh);
+                    created.push(mesh);
+                });
+
+                if (!created.length) { alert(i18n.t('glbImportEmpty')); return; }
+
+                this.selectedBlocks = created;
+                this.buildTransformGroup();
+                this.updateUIFromObject();
+                this.updateSelectionPanels();
+                if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
+                audioEngine.playSpawn();
+            },
+
+            // Собирает плоский список мировых треугольников [Vector3, Vector3, Vector3] из Object3D (scene/group/mesh)
+            extractTrianglesFromObject3D: function(root) {
+                root.updateMatrixWorld(true);
+                const triangles = [];
+                const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3();
+                root.traverse(node => {
+                    if (!node.isMesh || !node.geometry) return;
+                    const geom = node.geometry;
+                    const posAttr = geom.attributes.position;
+                    if (!posAttr) return;
+                    const idxAttr = geom.index;
+                    const triCount = idxAttr ? idxAttr.count / 3 : posAttr.count / 3;
+                    for (let i = 0; i < triCount; i++) {
+                        let ia, ib, ic;
+                        if (idxAttr) { ia = idxAttr.getX(i * 3); ib = idxAttr.getX(i * 3 + 1); ic = idxAttr.getX(i * 3 + 2); }
+                        else { ia = i * 3; ib = i * 3 + 1; ic = i * 3 + 2; }
+                        vA.fromBufferAttribute(posAttr, ia).applyMatrix4(node.matrixWorld);
+                        vB.fromBufferAttribute(posAttr, ib).applyMatrix4(node.matrixWorld);
+                        vC.fromBufferAttribute(posAttr, ic).applyMatrix4(node.matrixWorld);
+                        triangles.push([vA.clone(), vB.clone(), vC.clone()]);
+                    }
+                });
+                return triangles;
+            },
+
+            // GLB / GLTF (с embedded base64 ресурсами) — бинарные данные передаются как ArrayBuffer
+            importGLBAsCubes: function(arrayBuffer, thickness = 0.05) {
+                const loader = new GLTFLoader();
+                loader.parse(arrayBuffer, '', (gltf) => {
+                    const triangles = this.extractTrianglesFromObject3D(gltf.scene);
+                    this.importModelAsCubes(triangles, thickness);
+                }, (err) => { console.error('GLB/GLTF import error:', err); alert(i18n.t('glbImportError')); });
+            },
+
+            // OBJ — текстовые данные модели передаются строкой
+            importOBJAsCubes: function(text, thickness = 0.05) {
+                try {
+                    const loader = new OBJLoader();
+                    const obj = loader.parse(text);
+                    const triangles = this.extractTrianglesFromObject3D(obj);
+                    this.importModelAsCubes(triangles, thickness);
+                } catch (err) { console.error('OBJ import error:', err); alert(i18n.t('glbImportError')); }
+            },
+
             toggleEditorMode: function() {
                 this.editorMode = !this.editorMode;
                 const sidebar = document.getElementById('right-sidebar');
@@ -2142,6 +2272,77 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 mesh.userData = { type: 'spawn', visible: true, collisions: false }; this.scene.add(mesh); this.spawnPointObj = mesh; 
                 this.deselect(); this.selectObject(mesh); if (!data && !window.historyManager.isRestoring) window.historyManager.takeSnapshot();
                 if (!data) audioEngine.playSpawn();
+            },
+
+            // --- Face Culling: скрываем грани кубов, полностью закрытые соседними кубами ---
+            faceCullMap: new Map(),
+            cullKey: function(x, y, z) { return Math.round(x) + '_' + Math.round(y) + '_' + Math.round(z); },
+            isCullable: function(mesh) {
+                if (!mesh || !mesh.userData || mesh.userData.type !== 'cube') return false;
+                if (mesh.userData.visible === false) return false;
+                if (mesh.material && mesh.material.transparent) return false;
+                const s = mesh.scale;
+                return Math.abs(s.x - 1) < 0.001 && Math.abs(s.y - 1) < 0.001 && Math.abs(s.z - 1) < 0.001 &&
+                       Math.abs(mesh.rotation.x) < 0.001 && Math.abs(mesh.rotation.y) < 0.001 && Math.abs(mesh.rotation.z) < 0.001;
+            },
+            registerCullable: function(mesh) {
+                if (!this.isCullable(mesh)) return;
+                const key = this.cullKey(mesh.position.x, mesh.position.y, mesh.position.z);
+                mesh.userData._cullKey = key;
+                this.faceCullMap.set(key, mesh);
+            },
+            unregisterCullable: function(mesh) {
+                if (!mesh || !mesh.userData) return;
+                const key = mesh.userData._cullKey;
+                if (key && this.faceCullMap.get(key) === mesh) this.faceCullMap.delete(key);
+                mesh.userData._cullKey = null;
+            },
+            ensureCullGeometry: function(mesh) {
+                const geo = mesh.geometry;
+                if (!geo.index) return null;
+                if (!geo.userData._origIndex) geo.userData._origIndex = geo.index.array.slice();
+                return geo;
+            },
+            // Порядок граней BoxGeometry: 0:+X 1:-X 2:+Y 3:-Y 4:+Z 5:-Z, по 6 индексов (2 треугольника) на грань
+            setFaceHidden: function(mesh, faceIndex, hidden) {
+                const geo = this.ensureCullGeometry(mesh);
+                if (!geo) return;
+                const idxAttr = geo.index;
+                const orig = geo.userData._origIndex;
+                const offset = faceIndex * 6;
+                for (let i = 0; i < 6; i++) idxAttr.array[offset + i] = hidden ? 0 : orig[offset + i];
+                idxAttr.needsUpdate = true;
+            },
+            recomputeFaceCulling: function(mesh) {
+                if (!this.isCullable(mesh)) {
+                    if (mesh && mesh.geometry && mesh.geometry.userData._origIndex) {
+                        mesh.geometry.index.array.set(mesh.geometry.userData._origIndex);
+                        mesh.geometry.index.needsUpdate = true;
+                    }
+                    return;
+                }
+                const dirs = [
+                    [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]
+                ];
+                for (let f = 0; f < 6; f++) {
+                    const d = dirs[f];
+                    const neighborKey = this.cullKey(mesh.position.x + d[0], mesh.position.y + d[1], mesh.position.z + d[2]);
+                    const neighbor = this.faceCullMap.get(neighborKey);
+                    const occluded = !!neighbor && this.isCullable(neighbor);
+                    this.setFaceHidden(mesh, f, occluded);
+                }
+            },
+            updateCullingAround: function(mesh) {
+                if (!mesh) return;
+                this.recomputeFaceCulling(mesh);
+                const dirs = [
+                    [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]
+                ];
+                dirs.forEach(d => {
+                    const key = this.cullKey(mesh.position.x + d[0], mesh.position.y + d[1], mesh.position.z + d[2]);
+                    const neighbor = this.faceCullMap.get(key);
+                    if (neighbor) this.recomputeFaceCulling(neighbor);
+                });
             },
 
             addCube: function(data = null) {
@@ -2180,6 +2381,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
                 if (mesh.userData.visible === false) { mesh.material.transparent = true; mesh.material.opacity = 0.3; mesh.castShadow = false; }
                 this.updateCubeUVs(mesh); this.scene.add(mesh); this.blocks.push(mesh); 
+                this.registerCullable(mesh); this.updateCullingAround(mesh);
                 if(!this.isMultiSelectMode) this.deselect(); this.selectObject(mesh); if (!data && !window.historyManager.isRestoring) window.historyManager.takeSnapshot();
                 if (!data) audioEngine.playSpawn();
             },
@@ -2245,7 +2447,12 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
             deleteObject: function() {
                 if (this.selectedBlocks.length === 0) return; this.releaseTransformGroup();
-                this.selectedBlocks.forEach(obj => { this.scene.remove(obj); if (obj === this.spawnPointObj) this.spawnPointObj = null; else this.blocks = this.blocks.filter(b => b !== obj); });
+                this.selectedBlocks.forEach(obj => {
+                    this.scene.remove(obj);
+                    this.unregisterCullable(obj);
+                    this.updateCullingAround(obj);
+                    if (obj === this.spawnPointObj) this.spawnPointObj = null; else this.blocks = this.blocks.filter(b => b !== obj);
+                });
                 this.deselect(); if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
                 audioEngine.playDelete();
             },
@@ -3062,6 +3269,26 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.applyResponsiveScale(false);
             },
             triggerMapImport: function() { const input = document.getElementById('import-map-zip'); if (input) input.click(); },
+            triggerGLBImport: function() { const input = document.getElementById('import-glb-model'); if (input) input.click(); },
+
+            importGLBModel: function(event) {
+                const file = event.target.files && event.target.files[0];
+                if (!file) return;
+                const ext = file.name.split('.').pop().toLowerCase();
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    if (ext === 'obj') {
+                        engine.importOBJAsCubes(e.target.result);
+                    } else {
+                        // glb и gltf (с embedded base64-ресурсами) грузятся через GLTFLoader.parse как ArrayBuffer
+                        engine.importGLBAsCubes(e.target.result);
+                    }
+                    event.target.value = '';
+                };
+                reader.onerror = () => { alert(i18n.t('glbImportError')); event.target.value = ''; };
+                if (ext === 'obj') reader.readAsText(file);
+                else reader.readAsArrayBuffer(file);
+            },
             
             importTexture: function(event) { 
                 const file = event.target.files[0]; 
