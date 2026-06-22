@@ -99,6 +99,8 @@
         .btn-bottom { transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1); font-size: 1.3rem; text-transform: uppercase;}
         .btn-bottom:active { transform: translateY(2px) scale(0.95); background: rgba(255,255,255,0.1); }
         .active-tool { background: rgba(59, 130, 246, 0.2) !important; box-shadow: inset 0 0 15px rgba(0,0,0,0.5); border: 1px solid #3b82f6 !important; color: #60a5fa !important;}
+        @keyframes groupPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.5); } 50% { box-shadow: 0 0 0 8px rgba(74,222,128,0); } }
+        #btn-group:not(.hidden) { animation: groupPulse 1.6s ease-in-out infinite; }
         .shape-panel {
             transform-origin: top right;
             transform: translateY(-6px) scaleY(0.92);
@@ -523,7 +525,12 @@
                 </div>
 
                 <!-- BOTTOM LEFT BUTTONS -->
-                <div class="absolute bottom-[20px] left-[20px] pointer-events-auto flex flex-row gap-2">
+                <div class="absolute bottom-[20px] left-[20px] pointer-events-auto flex flex-col gap-2 items-start">
+                    <button onclick="engine.groupSelectedBlocks()" id="btn-group" class="hidden bg-green-900/40 border border-green-400/60 px-5 py-3 text-2xl font-bold hover:bg-green-600/50 flex items-center justify-center gap-2 rounded-lg transition-all shadow-lg text-green-300 hover:text-white w-48">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                        GROUP
+                    </button>
+                    <div class="flex flex-row gap-2">
                     <button onclick="engine.toggleMultiSelect()" id="btn-shift" class="bg-[#1e293b]/90 border border-blue-400/50 px-5 py-3 text-2xl font-bold hover:bg-[#334155] flex items-center justify-center gap-2 rounded-lg transition-all shadow-lg text-gray-400 hover:text-white w-48">
                         <img src="data:image/png;base64,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" class="ui-icon ui-icon-sm" alt="InputJoystick">
                         SHIFT
@@ -532,6 +539,7 @@
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         DELETE
                     </button>
+                    </div>
                 </div>
 
                 <!-- RIGHT PANEL -->
@@ -1967,6 +1975,27 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 if (btn) btn.classList.toggle('active-tool', this.shapeGroupSelect);
             },
 
+            groupSelectedBlocks: function() {
+                if (this.selectedBlocks.length < 2) return;
+                // Generate new unique group id for this custom user group
+                const newGroupId = 'userGroup_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+                this.selectedBlocks.forEach(obj => {
+                    obj.userData.groupId = newGroupId;
+                    obj.userData.shapeType = obj.userData.shapeType || 'userGroup';
+                    obj.userData.shapePart = true;
+                });
+                // Visual feedback
+                const ind = document.createElement('div');
+                ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-green-600/90 backdrop-blur text-white px-8 py-3 rounded-full text-xl font-bold shadow-[0_5px_20px_rgba(34,197,94,0.6)] z-[100] modal-enter uppercase text-center';
+                ind.innerText = 'Группа создана (' + this.selectedBlocks.length + ' кубов)';
+                document.body.appendChild(ind);
+                setTimeout(() => { ind.style.opacity = '0'; ind.style.transition = 'opacity 0.3s'; setTimeout(() => ind.remove(), 300); }, 2000);
+                if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
+                // Hide group button since cubes are now grouped
+                const btnGroup = document.getElementById('btn-group');
+                if (btnGroup) btnGroup.classList.add('hidden');
+            },
+
             getCurrentBrushSettings: function() {
                 const textureSel = document.getElementById('sel-texture');
                 const matSel = document.getElementById('sel-material');
@@ -2406,6 +2435,13 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     const el = document.getElementById(id);
                     if (el) el.classList.toggle('hidden', !show);
                 });
+                // Show GROUP button only when 2+ cubes selected AND they don't all share the same groupId
+                const btnGroup = document.getElementById('btn-group');
+                if (btnGroup) {
+                    const canGroup = show && this.selectedBlocks.length >= 2 && this.selectedBlocks[0]?.userData?.type === 'cube';
+                    const allSameGroup = canGroup && this.selectedBlocks.every(b => b.userData?.groupId && b.userData.groupId === this.selectedBlocks[0].userData.groupId);
+                    btnGroup.classList.toggle('hidden', !canGroup || allSameGroup);
+                }
             },
 
             selectObject: function(object, viaClick = false) {
@@ -2430,7 +2466,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 if (this.selectedBlocks.length === 0) { this.deselect(); } else { this.buildTransformGroup(); this.updateUIFromObject(); this.updateSelectionPanels(); }
             },
 
-            deselect: function() { this.releaseTransformGroup(); this.selectedBlocks = []; this.transformControl.detach(); ['inp-pos-x','inp-pos-y','inp-pos-z','inp-rot-x','inp-rot-y','inp-rot-z','inp-sca-x','inp-sca-y','inp-sca-z'].forEach(id => { const el = document.getElementById(id); if (el) { el.disabled = false; el.style.opacity = ''; el.title = ''; } }); this.updateSelectionPanels(); },
+            deselect: function() { this.releaseTransformGroup(); this.selectedBlocks = []; this.transformControl.detach(); ['inp-pos-x','inp-pos-y','inp-pos-z','inp-rot-x','inp-rot-y','inp-rot-z','inp-sca-x','inp-sca-y','inp-sca-z'].forEach(id => { const el = document.getElementById(id); if (el) { el.disabled = false; el.style.opacity = ''; el.title = ''; } }); const btnGroup = document.getElementById('btn-group'); if (btnGroup) btnGroup.classList.add('hidden'); this.updateSelectionPanels(); },
 
             buildTransformGroup: function() {
                 this.releaseTransformGroup(); if (this.selectedBlocks.length === 0) return;
