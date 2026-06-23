@@ -2105,8 +2105,48 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             },
 
             getShapeOrigin: function(offset = 5.5) {
+                return this.getSpawnPositionByRaycast(offset);
+            },
+
+            // Пускает луч из центра экрана и возвращает точку спавна:
+            // — если луч попадает в объект/блок, позиция = точка касания (поверхность объекта)
+            // — если луч попадает в сетку (Y=0 плоскость), позиция = точка на сетке
+            // — иначе — fallback: camera.position + forward * offset
+            getSpawnPositionByRaycast: function(fallbackOffset = 5.5) {
+                const rc = new THREE.Raycaster();
+                // центр экрана в NDC
+                rc.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+
+                // Проверяем пересечение с блоками
+                const hits = rc.intersectObjects(this.blocks.filter(b => b), false);
+                if (hits.length > 0) {
+                    const pt = hits[0].point.clone();
+                    if (this.snapToGrid) {
+                        pt.x = Math.round(pt.x);
+                        pt.y = Math.max(0.5, Math.round(pt.y));
+                        pt.z = Math.round(pt.z);
+                    }
+                    return pt;
+                }
+
+                // Проверяем пересечение с плоскостью Y=0 (сетка)
+                const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const planeHit = new THREE.Vector3();
+                if (rc.ray.intersectPlane(plane, planeHit)) {
+                    // Только если точка не слишком далеко (< 500 единиц от камеры)
+                    if (planeHit.distanceTo(this.camera.position) < 500) {
+                        planeHit.y = 0.5; // приподнять над сеткой на полкуба
+                        if (this.snapToGrid) {
+                            planeHit.x = Math.round(planeHit.x);
+                            planeHit.z = Math.round(planeHit.z);
+                        }
+                        return planeHit;
+                    }
+                }
+
+                // Fallback: перед камерой
                 const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion).normalize();
-                const origin = this.camera.position.clone().add(forward.multiplyScalar(offset));
+                const origin = this.camera.position.clone().add(forward.multiplyScalar(fallbackOffset));
                 if (this.snapToGrid) {
                     origin.x = Math.round(origin.x);
                     origin.y = Math.max(0.5, Math.round(origin.y));
@@ -2301,7 +2341,12 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
             addVoxelShape: function(shapeType, voxelData, worldScale = 1) {
                 const origin = this.getShapeOrigin();
-                const basis = this.getShapeBasis();
+                // World-aligned basis: фигуры всегда спавнятся ровно, без наклона камеры
+                const basis = {
+                    right:   new THREE.Vector3(1, 0, 0),
+                    up:      new THREE.Vector3(0, 1, 0),
+                    forward: new THREE.Vector3(0, 0, -1)
+                };
                 const groupId = this.makeShapeGroupId(shapeType);
                 const created = [];
                 voxelData.forEach(v => {
@@ -2321,7 +2366,12 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
             addShapeFromPoints: function(shapeType, points, scale = 0.45) {
                 const origin = this.getShapeOrigin();
-                const basis = this.getShapeBasis();
+                // World-aligned basis: фигуры всегда спавнятся ровно
+                const basis = {
+                    right:   new THREE.Vector3(1, 0, 0),
+                    up:      new THREE.Vector3(0, 1, 0),
+                    forward: new THREE.Vector3(0, 0, -1)
+                };
                 const groupId = this.makeShapeGroupId(shapeType);
                 const created = [];
                 const cubeScale = typeof scale === 'number' ? new THREE.Vector3(scale, scale, scale) : scale;
@@ -2614,8 +2664,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     mesh.userData = { ...data.userData, texture: tex, materialType: matT, colorHex: col, tilingMode: tMode, materialName: resolvedMaterialName, sourceTag: resolvedSourceTag, skyboxReflectivity: initialReflect, skyboxBlur: initialBlur }; 
                 } 
                 else { 
-                    const inFront = new THREE.Vector3(0, 0, -5).applyQuaternion(this.camera.quaternion).add(this.camera.position); mesh.position.copy(inFront);
-                    if(this.snapToGrid) { mesh.position.x = Math.round(mesh.position.x); mesh.position.y = Math.max(0.5, Math.round(mesh.position.y)); mesh.position.z = Math.round(mesh.position.z); }
+                    const spawnPos = this.getSpawnPositionByRaycast(5);
+                    mesh.position.copy(spawnPos);
                     mesh.userData = { type: 'cube', visible: true, collisions: true, texture: tex, materialType: matT, colorHex: col, tilingMode: tMode, materialName: resolvedMaterialName, sourceTag: resolvedSourceTag, skyboxReflectivity: initialReflect, skyboxBlur: initialBlur }; 
                 }
 
