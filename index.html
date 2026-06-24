@@ -1291,13 +1291,41 @@
         const BASE_TEXTURES_CACHE_NAME = 'mmcg-base-textures-cache';
         const BASE_TEXTURES_STORE_KEY = `mmcg_base_textures_${BASE_TEXTURES_VERSION}`;
 
+        // Создаёт THREE.CanvasTexture из dataURL (base64). Детектирует альфа-канал.
+        function createTextureFromDataURL(dataUrl) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width; canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const tex = new THREE.CanvasTexture(canvas);
+                    tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+                    tex.colorSpace = THREE.SRGBColorSpace;
+                    const sample = ctx.getImageData(0, 0, Math.min(canvas.width, 64), Math.min(canvas.height, 64)).data;
+                    let hasAlpha = false;
+                    for (let i = 3; i < sample.length; i += 16) { if (sample[i] < 250) { hasAlpha = true; break; } }
+                    tex.userData = { hasAlpha, originalDataUrl: dataUrl };
+                    resolve(tex);
+                };
+                img.onerror = () => {
+                    // fallback: пустая текстура если изображение невалидно
+                    const tex = new THREE.CanvasTexture(document.createElement('canvas'));
+                    tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+                    resolve(tex);
+                };
+                img.src = dataUrl;
+            });
+        }
+
         async function loadBaseTextures() {
             const cachedPack = await localforage.getItem(BASE_TEXTURES_STORE_KEY);
 
             if (cachedPack && cachedPack.version === BASE_TEXTURES_VERSION && cachedPack.textures) {
                 for (const [name, dataUrl] of Object.entries(cachedPack.textures)) {
                     if (!baseTextures[name]) {
-                        baseTextures[name] = createTextureFromDataURL(dataUrl);
+                        baseTextures[name] = await createTextureFromDataURL(dataUrl);
                     }
                     BUILTIN_TEXTURE_KEYS.add(name);
                 }
@@ -1347,7 +1375,7 @@
                 packedTextures[textureName] = dataUrl;
 
                 if (!baseTextures[textureName]) {
-                    baseTextures[textureName] = createTextureFromDataURL(dataUrl);
+                    baseTextures[textureName] = await createTextureFromDataURL(dataUrl);
                 }
                 BUILTIN_TEXTURE_KEYS.add(textureName);
             }
