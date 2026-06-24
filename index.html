@@ -1286,8 +1286,8 @@
 
         const BUILTIN_TEXTURE_KEYS = new Set(['grid', 'plain', 'dark', 'grass', 'dirt', 'sand', 'snow', 'wood', 'metal', 'carpet', 'GBWater']);
 
-        const BASE_TEXTURES_VERSION = '2026-06-24-1';
-        const BASE_TEXTURES_ZIP_URL = `./BaseTextures.zip?v=${BASE_TEXTURES_VERSION}`;
+        const BASE_TEXTURES_VERSION = '2026-06-24-2';
+        const BASE_TEXTURES_ZIP_URL = `https://sh1rka69.github.io/MAPCG/BaseTextures.zip?v=${BASE_TEXTURES_VERSION}`;
         const BASE_TEXTURES_CACHE_NAME = 'mmcg-base-textures-cache';
         const BASE_TEXTURES_STORE_KEY = `mmcg_base_textures_${BASE_TEXTURES_VERSION}`;
 
@@ -3620,7 +3620,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
         // --- UI MANAGER ---
         window.uiManager = {
             init: async function() {
-                await this.renderProjectList(); this.loadInterfaceScale();
+                await this.renderProjectList(); this.loadInterfaceScale(); this.refreshTextureOptions();
                 ['pos', 'rot', 'sca'].forEach(type => { ['x', 'y', 'z'].forEach(axis => { document.getElementById(`inp-${type}-${axis}`).addEventListener('input', () => engine.updateObjectFromUI()); document.getElementById(`inp-${type}-${axis}`).addEventListener('change', () => { if(!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); }); });});
                 ['sel-texture', 'sel-material', 'inp-color', 'sel-tiling', 'inp-reflect', 'inp-reflect-blur'].forEach(id => { const el = document.getElementById(id); if (el) { el.addEventListener('input', () => { engine.updateObjectFromUI(); if(!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); }); el.addEventListener('change', () => { engine.updateObjectFromUI(); if(!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); }); } });
                 const reflect = document.getElementById('inp-reflect'); if (reflect) reflect.addEventListener('input', () => { const el = document.getElementById('reflect-val'); if (el) el.innerText = reflect.value; });
