@@ -983,6 +983,18 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                             </div>
                         </div>
 
+                        <label class="flex items-center gap-3 mb-2 cursor-pointer group">
+                            <input type="checkbox" id="setting-rays" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" class="w-6 h-6 accent-yellow-400">
+                            <span class="group-hover:text-white text-gray-300 transition">&#9728; Rays (Volumetric Light Shafts)</span>
+                        </label>
+                        <div class="bg-black/30 p-2 rounded border border-gray-800 mb-3">
+                            <label class="text-gray-400 text-sm uppercase font-bold block mb-1">Rays Intensity</label>
+                            <div class="flex items-center gap-2">
+                                <input type="range" id="setting-rays-intensity" min="0.1" max="2.0" step="0.05" value="0.8" class="w-full accent-yellow-400 cursor-pointer" oninput="document.getElementById('rays-intensity-val').innerText=Number(this.value).toFixed(2); engine.updateGraphics();">
+                                <span id="rays-intensity-val" class="text-yellow-300 text-sm w-14 text-right">0.80</span>
+                            </div>
+                        </div>
+
                         <label class="flex items-center gap-3 mb-3 cursor-pointer group">
                             <input type="checkbox" id="setting-water-waves" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked class="w-6 h-6 accent-blue-500">
                             <span data-i18n="waterWaves" class="group-hover:text-white text-gray-300 transition">Water Waves (+ Real-Time Object Reflections)</span>
@@ -1669,7 +1681,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
         // --- ДВИЖОК ---
         const engine = {
-            scene: null, camera: null, renderer: null, pmremGenerator: null, composer: null, bloomPass: null, ssaoPass: null,
+            scene: null, camera: null, renderer: null, pmremGenerator: null, composer: null, bloomPass: null, ssaoPass: null, raysPass: null,
             orbit: null, transformControl: null, raycaster: null, mouse: null,
             blocks: [], selectedBlocks: [], spawnPointObj: null,
             gridHelper: null, dirLight: null, ambientLight: null, sky: null, sun: null,
@@ -1715,14 +1727,12 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 // ── High-quality AO pass — IGN noise, golden-angle spiral, normal-aware, no halos
                 const _aoShader = {
                     uniforms: {
-                        tDiffuse:   { value: null },
-                        tDepth:     { value: null },
-                        resolution: { value: new THREE.Vector2(_cw, _ch) },
-                        cameraNear: { value: 0.01 },
-                        cameraFar:  { value: 8000.0 },
-                        intensity:  { value: 1.6 },
-                        radius:     { value: 18.0 },
-                        bias:       { value: 0.02 }
+                        tDiffuse:    { value: null },
+                        tDepth:      { value: null },
+                        resolution:  { value: new THREE.Vector2(_cw, _ch) },
+                        intensity:   { value: 1.6 },
+                        bias:        { value: 0.025 },
+                        projInverse: { value: new THREE.Matrix4() }
                     },
                     vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
                     fragmentShader: `
@@ -1730,87 +1740,167 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                         uniform sampler2D tDiffuse;
                         uniform sampler2D tDepth;
                         uniform vec2      resolution;
-                        uniform float     cameraNear;
-                        uniform float     cameraFar;
                         uniform float     intensity;
-                        uniform float     radius;
                         uniform float     bias;
+                        uniform mat4      projInverse;
                         varying vec2 vUv;
 
-                        float linD(float raw){
-                            float z=raw*2.0-1.0;
-                            return (2.0*cameraNear*cameraFar)/(cameraFar+cameraNear-z*(cameraFar-cameraNear));
+                        /* Reconstruct view-space position from UV + raw depth */
+                        vec3 getViewPos(vec2 uv, float rawD) {
+                            vec4 ndc = vec4(uv * 2.0 - 1.0, rawD * 2.0 - 1.0, 1.0);
+                            vec4 vp  = projInverse * ndc;
+                            return vp.xyz / vp.w;
                         }
 
                         /* Interleaved Gradient Noise — temporally stable, no banding */
-                        float IGN(vec2 pix){
-                            return fract(52.9829189*fract(0.06711056*pix.x+0.00583715*pix.y));
+                        float IGN(vec2 pix) {
+                            return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));
                         }
 
-                        void main(){
+                        void main() {
                             vec4  col  = texture2D(tDiffuse, vUv);
                             float rawD = texture2D(tDepth, vUv).r;
-                            if(rawD>0.9999){ gl_FragColor=col; return; }
+                            if (rawD > 0.9999) { gl_FragColor = col; return; }
 
-                            float d0    = linD(rawD);
-                            vec2  texel = 1.0/resolution;
-                            float aspect = resolution.x/resolution.y;
+                            vec2  texel  = 1.0 / resolution;
+                            float aspect = resolution.x / resolution.y;
 
-                            /* ─ Reconstruct screen-space normal via best-neighbour depth cross-product ─ */
-                            float dR=linD(texture2D(tDepth,vUv+vec2( texel.x,0.0)).r);
-                            float dL=linD(texture2D(tDepth,vUv-vec2( texel.x,0.0)).r);
-                            float dU=linD(texture2D(tDepth,vUv+vec2(0.0, texel.y)).r);
-                            float dD=linD(texture2D(tDepth,vUv-vec2(0.0, texel.y)).r);
-                            vec3 tX = abs(dR-d0)<abs(d0-dL) ? vec3( 1.0,0.0,dR-d0) : vec3(-1.0,0.0,d0-dL);
-                            vec3 tY = abs(dU-d0)<abs(d0-dD) ? vec3(0.0, 1.0,dU-d0) : vec3(0.0,-1.0,d0-dD);
-                            vec3 N  = normalize(cross(tX,tY));
-                            if(N.z<0.0) N=-N;
+                            /* ── View-space position + depth ───────────────────────────────── */
+                            vec3  pos   = getViewPos(vUv, rawD);
+                            float depth = max(0.001, -pos.z);
 
-                            /* ─ Per-pixel rotation from IGN ─ */
-                            float rotA = IGN(floor(vUv*resolution))*6.28318530;
+                            /* ── Best-neighbour normal reconstruction (view-space) ─────────── */
+                            float rawR  = texture2D(tDepth, vUv + vec2( texel.x, 0.0)).r;
+                            float rawL  = texture2D(tDepth, vUv - vec2( texel.x, 0.0)).r;
+                            float rawU  = texture2D(tDepth, vUv + vec2(0.0,  texel.y)).r;
+                            float rawDn = texture2D(tDepth, vUv - vec2(0.0,  texel.y)).r;
 
-                            /* ─ 32-sample golden-angle hemisphere AO ─ */
-                            const int   S  = 32;
+                            vec3 dX = abs(rawR - rawD) < abs(rawD - rawL)
+                                ? getViewPos(vUv + vec2( texel.x, 0.0), rawR) - pos
+                                : pos - getViewPos(vUv - vec2( texel.x, 0.0), rawL);
+                            vec3 dY = abs(rawU - rawD) < abs(rawD - rawDn)
+                                ? getViewPos(vUv + vec2(0.0,  texel.y), rawU) - pos
+                                : pos - getViewPos(vUv - vec2(0.0,  texel.y), rawDn);
+
+                            vec3 N = normalize(cross(dX, dY));
+                            /* Ensure N points toward camera (+z in OpenGL view space) */
+                            if (N.z < 0.0) N = -N;
+
+                            /* ── Per-pixel rotation — IGN gives stable, uncorrelated noise ── */
+                            float rotA = IGN(floor(vUv * resolution)) * 6.28318530;
+
+                            /* ── Depth-adaptive screen radius (geometrically correct) ──────── */
+                            /* projInverse[1][1] = tan(halfFovY); converts world→UV at this depth */
+                            float tanHalfFovY  = projInverse[1][1];
+                            const float WRAD   = 2.0;  /* world-space AO radius (units) */
+                            float screenRY = clamp(WRAD / (depth * tanHalfFovY * 2.0), 0.004, 0.10);
+                            float screenRX = screenRY / aspect;
+
+                            /* ── 24-sample golden-angle hemisphere AO ────────────────────── */
+                            const int   S  = 24;
                             const float GA = 2.39996322972865332;
-                            float ao = 0.0;
+                            float ao     = 0.0;
+                            float totalW = 0.0;
 
-                            for(int i=0;i<S;i++){
-                                float fi    = float(i)+0.5;
-                                float r     = sqrt(fi/float(S));
-                                float angle = rotA+fi*GA;
-                                vec2  off   = vec2(cos(angle),sin(angle))*r*radius*texel;
-                                off.x      /= aspect;
-                                vec2  uv2   = clamp(vUv+off,vec2(0.001),vec2(0.999));
+                            for (int i = 0; i < S; i++) {
+                                float fi    = float(i) + 0.5;
+                                float r     = sqrt(fi / float(S));
+                                float angle = rotA + fi * GA;
+                                vec2  off   = vec2(cos(angle) * r * screenRX, sin(angle) * r * screenRY);
+                                vec2  uv2   = clamp(vUv + off, vec2(0.001), vec2(0.999));
 
-                                float d1    = linD(texture2D(tDepth,uv2).r);
-                                float dDiff = d0-d1;
+                                float rawS = texture2D(tDepth, uv2).r;
 
-                                /* Direction toward sample in hybrid screen-depth space */
-                                vec3 sDir = normalize(vec3(off.x*d0*aspect, off.y*d0, dDiff));
-                                float nDotS = dot(N,sDir);
+                                /* Sky samples → no occlusion; still counted to avoid bias */
+                                if (rawS > 0.9999) { totalW += 1.0; continue; }
 
-                                /* Range check: smooth halo suppression */
-                                float rangeCheck = smoothstep(0.0,1.0,(radius*texel.y*d0*0.5)/(abs(dDiff)+0.005));
+                                vec3  sPos = getViewPos(uv2, rawS);
+                                vec3  sVec = sPos - pos;
+                                float sLen = length(sVec);
+                                if (sLen < 0.001) { totalW += 1.0; continue; }
 
-                                ao += max(0.0, nDotS-bias)*rangeCheck;
+                                /* Normal-weighted: only hemisphere above surface contributes */
+                                float nDotS = dot(N, sVec / sLen);
+
+                                /* Distance falloff — prevents halos from distant occluders */
+                                float rCheck = 1.0 - smoothstep(0.0, WRAD, sLen);
+
+                                ao     += max(0.0, nDotS - bias) * rCheck;
+                                totalW += 1.0;
                             }
 
-                            ao = clamp(ao/float(S)*intensity, 0.0, 1.0);
-                            ao = ao*ao*(3.0-2.0*ao);
+                            if (totalW > 0.0) ao /= totalW;
 
-                            gl_FragColor = vec4(col.rgb*(1.0-ao*0.85), col.a);
+                            /* ×4 because per-sample nDotS averages ~0.25 for hemisphere */
+                            ao = clamp(ao * intensity * 4.0, 0.0, 0.82);
+                            ao = ao * ao * (3.0 - 2.0 * ao);
+
+                            /* Cap final darkening to 55% — no global scene darkening */
+                            gl_FragColor = vec4(col.rgb * (1.0 - ao * 0.55), col.a);
                         }
                     `
                 };
                 this.ssaoPass = new ShaderPass(_aoShader);
-                this.ssaoPass.uniforms.tDepth.value     = this.composer.renderTarget1.depthTexture;
-                this.ssaoPass.uniforms.cameraNear.value = this.camera.near;
-                this.ssaoPass.uniforms.cameraFar.value  = this.camera.far;
+                this.ssaoPass.uniforms.tDepth.value      = this.composer.renderTarget1.depthTexture;
                 this.ssaoPass.uniforms.resolution.value.set(_cw, _ch);
+                this.ssaoPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
                 this.ssaoPass.enabled = true;
                 this.composer.addPass(this.ssaoPass);
 
                 this.bloomPass = new UnrealBloomPass(new THREE.Vector2(_cw, _ch), 1.0, 0.4, 0.85); this.bloomPass.enabled = false; this.composer.addPass(this.bloomPass);
+
+                // ── Volumetric Rays (God Rays / Light Shafts from sun direction)
+                const _raysShader = {
+                    uniforms: {
+                        tDiffuse:   { value: null },
+                        sunPos:     { value: new THREE.Vector2(0.5, 0.75) },
+                        intensity:  { value: 0.8 },
+                        exposure:   { value: 0.14 },
+                        decay:      { value: 0.94 },
+                        density:    { value: 0.97 },
+                        weight:     { value: 0.40 },
+                        sunVisible: { value: 1.0 }
+                    },
+                    vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+                    fragmentShader: `
+                        precision highp float;
+                        uniform sampler2D tDiffuse;
+                        uniform vec2  sunPos;
+                        uniform float intensity;
+                        uniform float exposure;
+                        uniform float decay;
+                        uniform float density;
+                        uniform float weight;
+                        uniform float sunVisible;
+                        varying vec2 vUv;
+
+                        void main() {
+                            vec4 col = texture2D(tDiffuse, vUv);
+                            if (intensity < 0.01 || sunVisible < 0.5) { gl_FragColor = col; return; }
+
+                            const int STEPS = 64;
+                            vec2 delta = (vUv - sunPos) * (density / float(STEPS));
+                            vec2 tc    = vUv;
+                            float illumDecay = 1.0;
+                            vec3  rays = vec3(0.0);
+
+                            for (int i = 0; i < STEPS; i++) {
+                                tc -= delta;
+                                vec3 s = texture2D(tDiffuse, clamp(tc, vec2(0.001), vec2(0.999))).rgb;
+                                /* Only sky/sun bright areas act as the light source */
+                                float lum  = dot(s, vec3(0.2126, 0.7152, 0.0722));
+                                float mask = smoothstep(0.40, 0.92, lum);
+                                rays += s * mask * weight * illumDecay;
+                                illumDecay *= decay;
+                            }
+
+                            gl_FragColor = vec4(col.rgb + rays * exposure * intensity, col.a);
+                        }
+                    `
+                };
+                this.raysPass = new ShaderPass(_raysShader);
+                this.raysPass.enabled = false;
+                this.composer.addPass(this.raysPass);
 
                 this.sky = new Sky(); this.sky.scale.setScalar(25000); this.sun = new THREE.Vector3();
                 this.skyEnvGroup = new THREE.Group(); this.skyEnvGroup.add(this.sky); this.scene.add(this.skyEnvGroup);
@@ -1964,8 +2054,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 if (this.ssaoPass && this.ssaoPass.uniforms) {
                     this.ssaoPass.uniforms.resolution.value.set(w, h);
                     this.ssaoPass.uniforms.tDepth.value = this.composer.renderTarget1.depthTexture;
-                    this.ssaoPass.uniforms.cameraNear.value = this.camera.near;
-                    this.ssaoPass.uniforms.cameraFar.value  = this.camera.far;
+                    this.camera.updateProjectionMatrix();
+                    this.ssaoPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
                 }
                 if (window.uiManager && uiManager.applyResponsiveScale) uiManager.applyResponsiveScale(false);
             },
@@ -3363,14 +3453,21 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.ssaoPass.enabled = _aoEnabled;
                 if (_aoEnabled && this.ssaoPass.uniforms) {
                     const _aoInt = parseFloat(document.getElementById('setting-ao-intensity')?.value ?? '1.6');
-                    this.ssaoPass.uniforms.intensity.value  = _aoInt;
-                    this.ssaoPass.uniforms.cameraNear.value = this.camera.near;
-                    this.ssaoPass.uniforms.cameraFar.value  = this.camera.far;
+                    this.ssaoPass.uniforms.intensity.value = _aoInt;
                     this.ssaoPass.uniforms.resolution.value.set(
                         this.renderer.domElement.width,
                         this.renderer.domElement.height
                     );
                     this.ssaoPass.uniforms.tDepth.value = this.composer.renderTarget1.depthTexture;
+                    this.ssaoPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
+                }
+                const _raysEnabled = document.getElementById('setting-rays')?.checked ?? false;
+                if (this.raysPass) {
+                    this.raysPass.enabled = _raysEnabled;
+                    if (_raysEnabled) {
+                        const _ri = parseFloat(document.getElementById('setting-rays-intensity')?.value ?? '0.8');
+                        this.raysPass.uniforms.intensity.value = _ri;
+                    }
                 }
                 waterUniforms.uWavesEnabled.value = (document.getElementById('setting-water-waves')?.checked ?? true) ? 1.0 : 0.0;
 
@@ -3908,6 +4005,11 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     this.sun.setFromSphericalCoords(1, this.skyPhiCache, this.skyRotationAngle);
                     uniforms['sunPosition'].value.copy(this.sun);
                     this.dirLight.position.copy(this.sun).multiplyScalar(200);
+                    if (this.raysPass && this.raysPass.enabled) {
+                        const _sv = this.sun.clone().multiplyScalar(10000).project(this.camera);
+                        this.raysPass.uniforms.sunPos.value.set(_sv.x * 0.5 + 0.5, _sv.y * 0.5 + 0.5);
+                        this.raysPass.uniforms.sunVisible.value = (_sv.z < 1.0 && this.sun.y > -0.1) ? 1.0 : 0.0;
+                    }
                     // Синхронизируем ползунок в UI чтобы отражал реальный угол
                     const sliderDeg = Math.round(THREE.MathUtils.radToDeg(this.skyRotationAngle) % 360);
                     const sunSlider = document.getElementById('setting-sun-angle');
@@ -3929,7 +4031,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 while(this.outlines.length < this.selectedBlocks.length) { const line = new THREE.LineSegments(sharedEdgeGeo, outlineMat); this.scene.add(line); this.outlines.push(line); }
                 this.outlines.forEach((o, i) => { if (i < this.selectedBlocks.length) { const obj = this.selectedBlocks[i]; o.visible = true; obj.getWorldPosition(o.position); obj.getWorldQuaternion(o.quaternion); obj.getWorldScale(o.scale); o.scale.addScalar(0.04); } else { o.visible = false; } });
                 try {
-                    if (this.bloomPass.enabled || this.ssaoPass.enabled) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+                    if (this.bloomPass.enabled || this.ssaoPass.enabled || (this.raysPass && this.raysPass.enabled)) this.composer.render(); else this.renderer.render(this.scene, this.camera);
                 } catch (err) {
                     console.error('Scene render error:', err);
                 }
