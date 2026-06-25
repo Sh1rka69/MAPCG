@@ -1801,7 +1801,9 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 
                 this.transformControl = new TransformControls(this.camera, this.renderer.domElement); this.transformControl.size = 1.0;
                 this.transformControl.addEventListener('dragging-changed', (event) => { 
-                    this.orbit.enabled = !event.value; 
+                    this.orbit.enabled = !event.value;
+                    // Палец тащит гизмо — немедленно отменяем FPS-вращение камеры
+                    if (event.value) { this.touchLook.active = false; this.touchLook.pointerId = null; }
                     if (!event.value) {
                         if(this.selectedBlocks.length > 1) { this.releaseTransformGroup(); if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); this.buildTransformGroup(); } 
                         else { if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); }
@@ -2236,6 +2238,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 window.addEventListener('pointermove', (e) => {
                     if (!tl.active || e.pointerId !== tl.pointerId) return;
                     if (gameplay.isPlaytest) return;
+                    // Страховка: если гизмо тащится тем же пальцем — не крутим камеру
+                    if (this.transformControl && this.transformControl.dragging) { tl.active = false; tl.pointerId = null; return; }
 
                     const dx = e.clientX - tl.lastX;
                     const dy = e.clientY - tl.lastY;
