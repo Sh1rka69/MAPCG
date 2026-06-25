@@ -265,45 +265,78 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
 
         .custom-scrollbar { scrollbar-width: thin; scrollbar-color: #3b82f6 rgba(15, 23, 34, 0.8); }
 
+        :root {
+            --joystick-size: 150px;
+            --joystick-opacity: 0.85;
+            --joystick-knob-size: 62px;
+        }
         .mobile-joystick {
             position: fixed;
             left: max(14px, env(safe-area-inset-left));
             bottom: max(18px, env(safe-area-inset-bottom));
-            width: 150px;
-            height: 150px;
+            width: var(--joystick-size);
+            height: var(--joystick-size);
             border-radius: 9999px;
-            background: radial-gradient(circle at 50% 50%, rgba(59,130,246,0.18) 0%, rgba(15,23,42,0.42) 56%, rgba(0,0,0,0.06) 100%);
-            border: 1px solid rgba(96,165,250,0.28);
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.04) inset, 0 12px 30px rgba(0,0,0,0.35);
-            backdrop-filter: blur(8px);
-            display: none;
+            background: radial-gradient(circle at 50% 50%, rgba(59,130,246,0.22) 0%, rgba(15,23,42,0.55) 56%, rgba(0,0,0,0.08) 100%);
+            border: 1.5px solid rgba(96,165,250,0.38);
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.06) inset, 0 12px 30px rgba(0,0,0,0.45);
+            backdrop-filter: blur(10px);
+            display: block;
+            opacity: var(--joystick-opacity);
             z-index: 45;
             touch-action: none;
             user-select: none;
             -webkit-user-select: none;
             pointer-events: auto;
+            transition: opacity 0.2s;
         }
-        .mobile-joystick.visible { display: block; }
+        .mobile-joystick.joystick-hidden { display: none; }
+        .mobile-joystick:hover { opacity: min(1, calc(var(--joystick-opacity) + 0.1)); }
         .mobile-joystick .mobile-joystick-ring {
             position: absolute;
             inset: 14px;
             border-radius: 9999px;
-            border: 1px solid rgba(96,165,250,0.18);
-            background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 70%, rgba(255,255,255,0) 100%);
+            border: 1px dashed rgba(96,165,250,0.25);
+            background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 70%, rgba(255,255,255,0) 100%);
+        }
+        .mobile-joystick .mobile-joystick-arrows {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .mobile-joystick .mobile-joystick-arrows::before,
+        .mobile-joystick .mobile-joystick-arrows::after {
+            content: '';
+            position: absolute;
+            border: 6px solid transparent;
         }
         .mobile-joystick .mobile-joystick-knob {
             position: absolute;
             left: 50%;
             top: 50%;
-            width: 62px;
-            height: 62px;
+            width: var(--joystick-knob-size);
+            height: var(--joystick-knob-size);
             border-radius: 9999px;
             transform: translate(-50%, -50%);
             background: linear-gradient(180deg, rgba(96,165,250,0.95) 0%, rgba(37,99,235,0.95) 100%);
-            border: 1px solid rgba(191,219,254,0.7);
-            box-shadow: 0 0 22px rgba(59,130,246,0.55), inset 0 1px 1px rgba(255,255,255,0.35);
+            border: 1.5px solid rgba(191,219,254,0.75);
+            box-shadow: 0 0 24px rgba(59,130,246,0.6), inset 0 1px 2px rgba(255,255,255,0.4);
             pointer-events: none;
-            transition: transform 0.08s linear;
+            transition: transform 0.06s cubic-bezier(0.25,0.46,0.45,0.94);
+        }
+        .mobile-joystick .joystick-label {
+            position: absolute;
+            bottom: -22px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            color: rgba(148,163,184,0.7);
+            white-space: nowrap;
+            pointer-events: none;
+            letter-spacing: 0.1em;
         }
 
         @media (max-width: 1280px) {
@@ -531,9 +564,10 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             </div>
         </div>
 
-        <div id="mobile-joystick" aria-label="Mobile movement joystick">
+        <div id="mobile-joystick" aria-label="Camera movement joystick" class="mobile-joystick">
             <div class="mobile-joystick-ring"></div>
             <div id="mobile-joystick-knob" class="mobile-joystick-knob"></div>
+            <span class="joystick-label">MOVE</span>
         </div>
 
         <div id="ui-layer" class="ui-scale-layer">
@@ -809,17 +843,26 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
         <!-- SETTINGS MODAL -->
         <div id="settings-modal" class="ui-scale-layer hidden fixed inset-0 z-[60] flex justify-center items-center pointer-events-auto bg-black/70 backdrop-blur-sm transition-opacity">
             <div class="w-[550px] bg-[#0b121c] border border-gray-700 p-6 rounded-xl shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar modal-enter">
-                <div class="flex justify-between items-center border-b border-gray-800 pb-4 mb-5">
+                <div class="flex justify-between items-center border-b border-gray-800 pb-4 mb-4">
                     <h2 class="text-3xl font-bold text-white flex items-center gap-2">
                         <img data-icon="ICON_07" src="" class="ui-icon ui-icon-lg ui-icon-anim" alt="Settings">
                         <span data-i18n="mapSettings">MAP SETTINGS</span>
                     </h2>
                     <button onclick="document.getElementById('settings-modal').classList.add('hidden')" class="hover:text-red-500 text-gray-500 transition font-bold text-3xl">&times;</button>
                 </div>
-                
+
+                <!-- QUICK NAV -->
+                <div class="flex flex-wrap gap-2 mb-5 pb-4 border-b border-gray-800/60">
+                    <span class="text-gray-500 text-base self-center mr-1">Jump to:</span>
+                    <button onclick="document.getElementById('settings-section-sky').scrollIntoView({behavior:'smooth',block:'start'})" class="px-3 py-1 rounded-full text-sm bg-blue-900/40 hover:bg-blue-700/60 border border-blue-700/50 hover:border-blue-400 text-blue-300 hover:text-white transition">🌤 Sky &amp; Weather</button>
+                    <button onclick="document.getElementById('settings-section-interface').scrollIntoView({behavior:'smooth',block:'start'})" class="px-3 py-1 rounded-full text-sm bg-blue-900/40 hover:bg-blue-700/60 border border-blue-700/50 hover:border-blue-400 text-blue-300 hover:text-white transition">🖥 Interface</button>
+                    <button onclick="document.getElementById('settings-section-graphics').scrollIntoView({behavior:'smooth',block:'start'})" class="px-3 py-1 rounded-full text-sm bg-blue-900/40 hover:bg-blue-700/60 border border-blue-700/50 hover:border-blue-400 text-blue-300 hover:text-white transition">⚡ Graphics</button>
+                    <button onclick="document.getElementById('settings-section-fog').scrollIntoView({behavior:'smooth',block:'start'})" class="px-3 py-1 rounded-full text-sm bg-blue-900/40 hover:bg-blue-700/60 border border-blue-700/50 hover:border-blue-400 text-blue-300 hover:text-white transition">🌫 Fog</button>
+                </div>
+
                 <div class="flex flex-col gap-6 text-xl">
                     <!-- Environment -->
-                    <div class="bg-black/30 p-5 rounded-lg border border-gray-800">
+                    <div id="settings-section-sky" class="bg-black/30 p-5 rounded-lg border border-gray-800">
                         <h3 data-i18n="skyWeather" class="text-2xl font-bold text-blue-400 mb-3 uppercase tracking-wider">Sky & Weather</h3>
                         <label data-i18n="skyboxLabel" class="text-gray-400 block mb-1">Skybox (Time of Day)</label>
                         <select id="setting-skybox" onchange="engine.updateEnvironment(); window.historyManager.takeSnapshot();" class="w-full bg-[#05080c] border border-gray-700 rounded p-2 text-white outline-none focus:border-blue-500 cursor-pointer">
@@ -861,7 +904,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                     </div>
 
                     
-                    <div class="bg-black/30 p-5 rounded-lg border border-gray-800">
+                    <div id="settings-section-interface" class="bg-black/30 p-5 rounded-lg border border-gray-800">
                         <h3 data-i18n="interfaceLabel" class="text-2xl font-bold text-blue-400 mb-3 uppercase tracking-wider">Interface</h3>
                         <label data-i18n="uiScaleLabel" class="text-gray-400 block mb-1">UI Scale</label>
                         <select id="setting-ui-scale" onchange="uiManager.applyInterfaceScale(this.value)" class="w-full bg-[#05080c] border border-gray-700 rounded p-2 text-white outline-none focus:border-blue-500 cursor-pointer">
@@ -882,9 +925,26 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                             <input type="range" id="setting-camera-move-speed" min="0.1" max="5" step="0.1" value="1" class="w-full accent-blue-500 cursor-pointer" oninput="document.getElementById('camera-move-speed-val').innerText = Number(this.value).toFixed(1); engine.applyCameraMoveSpeed?.(parseFloat(this.value));">
                             <span id="camera-move-speed-val" class="text-blue-300 font-bold w-14 text-right">1.0</span>
                         </div>
+
+                        <!-- JOYSTICK SETTINGS -->
+                        <div class="mt-5 border-t border-gray-700/50 pt-4">
+                            <p class="text-blue-300 text-lg font-bold mb-3 uppercase tracking-wider">🕹 Joystick</p>
+                            <label class="text-gray-400 block mb-1">Joystick Size</label>
+                            <div class="flex items-center gap-3">
+                                <input type="range" id="setting-joystick-size" min="80" max="260" step="5" value="150" class="w-full accent-blue-500 cursor-pointer"
+                                    oninput="document.getElementById('joystick-size-val').innerText=this.value+'px'; engine.applyJoystickSize(parseInt(this.value));">
+                                <span id="joystick-size-val" class="text-blue-300 font-bold w-16 text-right">150px</span>
+                            </div>
+                            <label class="text-gray-400 block mt-4 mb-1">Joystick Opacity</label>
+                            <div class="flex items-center gap-3">
+                                <input type="range" id="setting-joystick-opacity" min="0.1" max="1" step="0.05" value="0.85" class="w-full accent-blue-500 cursor-pointer"
+                                    oninput="document.getElementById('joystick-opacity-val').innerText=Math.round(this.value*100)+'%'; engine.applyJoystickOpacity(parseFloat(this.value));">
+                                <span id="joystick-opacity-val" class="text-blue-300 font-bold w-16 text-right">85%</span>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="bg-black/30 p-5 rounded-lg border border-gray-800">
+                    <div id="settings-section-graphics" class="bg-black/30 p-5 rounded-lg border border-gray-800">
                         <h3 data-i18n="graphicsLabel" class="text-2xl font-bold text-blue-400 mb-3 uppercase tracking-wider">Graphics (Optimization)</h3>
                         <label class="flex items-center gap-3 mb-3 cursor-pointer group">
                             <input type="checkbox" id="setting-shadows" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked class="w-6 h-6 accent-blue-500">
@@ -916,10 +976,17 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                             </div>
                         </div>
 
-                        <label class="flex items-center gap-3 mb-3 cursor-pointer group">
-                            <input type="checkbox" id="setting-ssao" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" class="w-6 h-6 accent-blue-500">
-                            <span data-i18n="ssao" class="group-hover:text-white text-gray-300 transition">SSAO (Soft Contact Shadows)</span>
+                        <label class="flex items-center gap-3 mb-2 cursor-pointer group">
+                            <input type="checkbox" id="setting-ssao" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked class="w-6 h-6 accent-blue-500">
+                            <span data-i18n="ssao" class="group-hover:text-white text-gray-300 transition">Corner Shadows (GoreBox V15)</span>
                         </label>
+                        <div class="bg-black/30 p-2 rounded border border-gray-800 mb-3">
+                            <label class="text-gray-400 text-sm uppercase font-bold block mb-1">AO Intensity</label>
+                            <div class="flex items-center gap-2">
+                                <input type="range" id="setting-ao-intensity" min="0.5" max="3.0" step="0.1" value="1.6" class="w-full accent-blue-500 cursor-pointer" oninput="document.getElementById('ao-intensity-val').innerText=Number(this.value).toFixed(1); engine.updateGraphics();">
+                                <span id="ao-intensity-val" class="text-blue-300 text-sm w-14 text-right">1.6</span>
+                            </div>
+                        </div>
 
                         <label class="flex items-center gap-3 mb-3 cursor-pointer group">
                             <input type="checkbox" id="setting-water-waves" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked class="w-6 h-6 accent-blue-500">
@@ -945,7 +1012,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                         </div>
                     </div>
 
-                    <div class="bg-black/30 p-5 rounded-lg border border-gray-800">
+                    <div id="settings-section-fog" class="bg-black/30 p-5 rounded-lg border border-gray-800">
                         <h3 data-i18n="fogHeader" class="text-2xl font-bold text-blue-400 mb-3 uppercase tracking-wider">Fog</h3>
                         <label data-i18n="fogColorLabel" class="text-gray-400 text-lg">Fog Color</label>
                         <input type="color" id="setting-fog-color" value="#8bc5eb" onchange="engine.updateEnvironment(); window.historyManager.takeSnapshot();" class="w-full h-12 bg-transparent border-0 mt-1 cursor-pointer rounded overflow-hidden">
@@ -976,7 +1043,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
         import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-        import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
+        import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
         
         // --- MULTILANGUAGE DICTIONARY ---
         window.i18n = {
@@ -991,7 +1058,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                     skyWeather: "Sky & Weather", skyboxLabel: "Skybox (Time of Day)", sunAngleLabel: "Sun Angle (Rotation)",
                     weatherLabel: "Weather (Audio & Particles)", interfaceLabel: "Interface", uiScaleLabel: "UI Scale",
                     graphicsLabel: "Graphics (Optimization)", dynShadows: "Dynamic Shadows", bloom: "Bloom (Object/Lightning Glow)",
-                    ssao: "SSAO (Soft Ambient Shadows)", waterWaves: "Water Waves (+ Real-Time Object Reflections)", textureSmoothing: "Texture Smoothing", showFps: "Show FPS", fogHeader: "Fog", fogColorLabel: "Fog Color (if clear)",
+                    ssao: "Corner Shadows", waterWaves: "Water Waves (+ Real-Time Object Reflections)", textureSmoothing: "Texture Smoothing", showFps: "Show FPS", fogHeader: "Fog", fogColorLabel: "Fog Color (if clear)",
                     fogStart: "Start", fogEnd: "End", exportTitle: "EXPORT TO GOREBOX",
                     exportDesc: "A ZIP archive with MapData.json (v4) and CustomTextures folder will be generated.",
                     saveZip: "Save ZIP", optGrid: "Grid", optPlain: "Plain (White)",
@@ -1617,6 +1684,9 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             // Переменные движения клавиатурой для камеры на ПК
             keysPressed: {},
 
+            // FPS-вращение камеры одним пальцем (не джойстик)
+            touchLook: { active: false, pointerId: null, lastX: 0, lastY: 0 },
+
             init: function() {
                 // Автоматическое детектирование мобильного устройства и режима ввода
                 this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -1628,11 +1698,81 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                 
                 this.pmremGenerator = new THREE.PMREMGenerator(this.renderer); this.pmremGenerator.compileEquirectangularShader();
-                this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 8000); this.camera.position.set(15, 20, 15);
+                this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 8000); this.camera.position.set(15, 20, 15);
 
-                this.composer = new EffectComposer(this.renderer); this.composer.addPass(new RenderPass(this.scene, this.camera));
-                this.ssaoPass = new SSAOPass(this.scene, this.camera, window.innerWidth, window.innerHeight); this.ssaoPass.kernelRadius = 12; this.ssaoPass.minDistance = 0.005; this.ssaoPass.maxDistance = 0.1; this.ssaoPass.enabled = false; this.composer.addPass(this.ssaoPass);
-                this.bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.0, 0.4, 0.85); this.bloomPass.enabled = false; this.composer.addPass(this.bloomPass);
+                // ── EffectComposer with depth texture (required for Corner Shadow pass)
+                const _cw = window.innerWidth, _ch = window.innerHeight;
+                const _compTarget = new THREE.WebGLRenderTarget(_cw, _ch, { type: THREE.HalfFloatType, depthBuffer: true, depthTexture: new THREE.DepthTexture(_cw, _ch, THREE.UnsignedIntType) });
+                this.composer = new EffectComposer(this.renderer, _compTarget);
+                this.composer.addPass(new RenderPass(this.scene, this.camera));
+
+                // ── Corner Shadow pass — GoreBox V15 style (concave edge darkening)
+                const _csShader = {
+                    uniforms: {
+                        tDiffuse:   { value: null },
+                        tDepth:     { value: null },
+                        resolution: { value: new THREE.Vector2(_cw, _ch) },
+                        cameraNear: { value: 0.1 },
+                        cameraFar:  { value: 8000.0 },
+                        intensity:  { value: 1.6 },
+                        radius:     { value: 14.0 },
+                        bias:       { value: 0.05 }
+                    },
+                    vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+                    fragmentShader: `
+                        precision highp float;
+                        uniform sampler2D tDiffuse;
+                        uniform sampler2D tDepth;
+                        uniform vec2      resolution;
+                        uniform float     cameraNear;
+                        uniform float     cameraFar;
+                        uniform float     intensity;
+                        uniform float     radius;
+                        uniform float     bias;
+                        varying vec2 vUv;
+
+                        float linD(float raw){
+                            float z = raw*2.0-1.0;
+                            return (2.0*cameraNear*cameraFar)/(cameraFar+cameraNear-z*(cameraFar-cameraNear));
+                        }
+
+                        void main(){
+                            vec4 color = texture2D(tDiffuse, vUv);
+                            float rawD = texture2D(tDepth, vUv).r;
+                            if(rawD >= 0.9999){ gl_FragColor = color; return; }
+
+                            float d0  = linD(rawD);
+                            vec2 texel = 1.0 / resolution;
+                            float ao  = 0.0;
+                            const float PI2 = 6.2831853;
+
+                            for(int i=0; i<16; i++){
+                                float angle = float(i)*PI2/16.0;
+                                float r = (mod(float(i),2.0)<1.0) ? 1.0 : 0.5;
+                                vec2 off = vec2(cos(angle),sin(angle))*r*texel*radius;
+                                vec2 uv2 = clamp(vUv+off, vec2(0.001), vec2(0.999));
+                                float d1 = linD(texture2D(tDepth,uv2).r);
+                                float diff = d0-d1;
+                                if(diff > bias){
+                                    float rng = 1.0 - smoothstep(0.0, d0*0.35, diff);
+                                    ao += rng;
+                                }
+                            }
+                            ao = clamp(ao/16.0*intensity, 0.0, 0.72);
+                            ao = ao*ao*(3.0-2.0*ao);
+                            gl_FragColor = vec4(color.rgb*(1.0-ao), color.a);
+                        }
+                    `
+                };
+                this.ssaoPass = new ShaderPass(_csShader);
+                this.ssaoPass.uniforms.tDepth.value     = this.composer.renderTarget1.depthTexture;
+                this.ssaoPass.uniforms.cameraNear.value = this.camera.near;
+                this.ssaoPass.uniforms.cameraFar.value  = this.camera.far;
+                this.ssaoPass.uniforms.resolution.value.set(_cw, _ch);
+                this.ssaoPass.enabled = true;
+                this.composer.addPass(this.ssaoPass);
+
+                this.bloomPass = new UnrealBloomPass(new THREE.Vector2(_cw, _ch), 1.0, 0.4, 0.85); this.bloomPass.enabled = false; this.composer.addPass(this.bloomPass);
 
                 this.sky = new Sky(); this.sky.scale.setScalar(25000); this.sun = new THREE.Vector3();
                 this.skyEnvGroup = new THREE.Group(); this.skyEnvGroup.add(this.sky); this.scene.add(this.skyEnvGroup);
@@ -1654,7 +1794,10 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 // Камера реагирует чуть резче, чтобы было проще попадать по объектам
                 this.orbit.dampingFactor = 0.25; 
                 this.orbit.maxPolarAngle = Math.PI; // Убран лимит по вертикали на 90 градусов
-                this.orbit.minDistance = 0.1; // Не дает камере застрять при приближении к центру
+                this.orbit.minDistance = 0.01; // Не дает камере застрять при приближении к центру
+                // -1 = невалидное значение → OrbitControls игнорирует одиночное касание;
+                // двухпальцевый зум/пан (touches.TWO) остаётся нетронутым
+                this.orbit.touches.ONE = -1;
                 
                 this.transformControl = new TransformControls(this.camera, this.renderer.domElement); this.transformControl.size = 1.0;
                 this.transformControl.addEventListener('dragging-changed', (event) => { 
@@ -1678,7 +1821,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 window.addEventListener('resize', this.onWindowResize.bind(this));
                 window.addEventListener('orientationchange', () => { setTimeout(() => this.onWindowResize(), 50); setTimeout(() => this.onWindowResize(), 300); });
                 this.setupMobileJoystick();
-                
+                this.setupTouchLook();
+
                 // Улучшенный обработчик нажатий для исключения ложных срабатываний при свайпе
                 this.renderer.domElement.addEventListener('pointerdown', this.onPointerDown.bind(this));
                 this.renderer.domElement.addEventListener('pointermove', this.onPointerMove.bind(this));
@@ -1777,6 +1921,10 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 const h = Math.floor(window.innerHeight * scale);
                 this.renderer.setSize(w, h, false);
                 if (this.composer) this.composer.setSize(w, h);
+                if (this.ssaoPass && this.ssaoPass.uniforms) {
+                    this.ssaoPass.uniforms.resolution.value.set(w, h);
+                    this.ssaoPass.uniforms.tDepth.value = this.composer.renderTarget1.depthTexture;
+                }
                 if (window.uiManager && uiManager.applyResponsiveScale) uiManager.applyResponsiveScale(false);
             },
 
@@ -1977,8 +2125,16 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.mobileJoystickEl = document.getElementById('mobile-joystick');
                 this.mobileJoystickKnob = document.getElementById('mobile-joystick-knob');
                 if (!this.mobileJoystickEl || !this.mobileJoystickKnob) return;
-                this.mobileJoystickEl.classList.toggle('visible', this.isMobile);
-                if (!this.isMobile) return;
+
+                // Load saved joystick prefs
+                const savedSize = parseInt(localStorage.getItem('mmcg_joystick_size_55') || '150');
+                const savedOpacity = parseFloat(localStorage.getItem('mmcg_joystick_opacity_55') || '0.85');
+                this.applyJoystickSize(savedSize);
+                this.applyJoystickOpacity(savedOpacity);
+                const sizeSlider = document.getElementById('setting-joystick-size');
+                const opacitySlider = document.getElementById('setting-joystick-opacity');
+                if (sizeSlider) { sizeSlider.value = savedSize; document.getElementById('joystick-size-val').innerText = savedSize + 'px'; }
+                if (opacitySlider) { opacitySlider.value = savedOpacity; document.getElementById('joystick-opacity-val').innerText = Math.round(savedOpacity * 100) + '%'; }
 
                 const reset = () => {
                     this.mobileJoystick.active = false;
@@ -1992,7 +2148,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     const rect = this.mobileJoystickEl.getBoundingClientRect();
                     const cx = rect.left + rect.width / 2;
                     const cy = rect.top + rect.height / 2;
-                    const maxR = (rect.width / 2) - 24;
+                    const maxR = Math.max(20, (rect.width / 2) - 20);
                     const dx = clientX - cx;
                     const dy = clientY - cy;
                     const len = Math.hypot(dx, dy) || 1;
@@ -2005,26 +2161,124 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     this.mobileJoystickKnob.style.transform = `translate(calc(-50% + ${px}px), calc(-50% + ${py}px))`;
                 };
 
+                // Works on both desktop (mouse) and mobile (touch/pointer)
                 this.mobileJoystickEl.addEventListener('pointerdown', (e) => {
-                    if (!this.isMobile) return;
+                    if (gameplay.isPlaytest) return;
                     e.preventDefault();
+                    e.stopPropagation();
                     this.mobileJoystickEl.setPointerCapture?.(e.pointerId);
                     this.mobileJoystick.pointerId = e.pointerId;
                     updateKnob(e.clientX, e.clientY);
                 });
                 window.addEventListener('pointermove', (e) => {
-                    if (!this.isMobile || this.mobileJoystick.pointerId !== e.pointerId) return;
+                    if (this.mobileJoystick.pointerId !== e.pointerId) return;
                     e.preventDefault();
                     updateKnob(e.clientX, e.clientY);
                 }, { passive: false });
                 const end = (e) => {
-                    if (!this.isMobile || (this.mobileJoystick.pointerId !== null && this.mobileJoystick.pointerId !== e.pointerId)) return;
+                    if (this.mobileJoystick.pointerId !== null && this.mobileJoystick.pointerId !== e.pointerId) return;
                     reset();
                 };
                 window.addEventListener('pointerup', end);
                 window.addEventListener('pointercancel', end);
                 window.addEventListener('blur', reset);
                 reset();
+            },
+
+            applyJoystickSize: function(size) {
+                const s = Math.min(260, Math.max(80, size || 150));
+                const knobSize = Math.round(s * 0.42);
+                document.documentElement.style.setProperty('--joystick-size', s + 'px');
+                document.documentElement.style.setProperty('--joystick-knob-size', knobSize + 'px');
+                localStorage.setItem('mmcg_joystick_size_55', String(s));
+            },
+
+            applyJoystickOpacity: function(opacity) {
+                const o = Math.min(1, Math.max(0.1, opacity || 0.85));
+                document.documentElement.style.setProperty('--joystick-opacity', String(o));
+                localStorage.setItem('mmcg_joystick_opacity_55', String(o));
+            },
+
+            setupTouchLook: function() {
+                const canvas = this.renderer.domElement;
+                const tl = this.touchLook;
+                // Множество всех активных не-мышиных указателей на canvas
+                const activePointers = new Set();
+
+                canvas.addEventListener('pointerdown', (e) => {
+                    if (e.pointerType === 'mouse') return;
+                    activePointers.add(e.pointerId);
+
+                    // Второй палец → отменяем FPS-вращение, OrbitControls возьмёт 2-пальцевый зум
+                    if (activePointers.size >= 2) {
+                        tl.active = false;
+                        tl.pointerId = null;
+                        return;
+                    }
+
+                    if (gameplay.isPlaytest) return;
+                    const joystickEl = document.getElementById('mobile-joystick');
+                    if (joystickEl && joystickEl.contains(e.target)) return;
+                    if (this.mobileJoystick.pointerId !== null) return;
+
+                    // Один палец — начинаем FPS-вращение
+                    tl.active = true;
+                    tl.pointerId = e.pointerId;
+                    tl.lastX = e.clientX;
+                    tl.lastY = e.clientY;
+                }, false);
+
+                // Убираем из множества когда палец поднят
+                const removePointer = (e) => { activePointers.delete(e.pointerId); };
+                canvas.addEventListener('pointerup', removePointer, false);
+                canvas.addEventListener('pointercancel', removePointer, false);
+
+                window.addEventListener('pointermove', (e) => {
+                    if (!tl.active || e.pointerId !== tl.pointerId) return;
+                    if (gameplay.isPlaytest) return;
+
+                    const dx = e.clientX - tl.lastX;
+                    const dy = e.clientY - tl.lastY;
+                    tl.lastX = e.clientX;
+                    tl.lastY = e.clientY;
+                    if (dx === 0 && dy === 0) return;
+
+                    const sens = (this.cameraSensitivity || 1) * 0.004;
+
+                    // Текущее направление взгляда и дистанция до цели орбиты
+                    const dir = new THREE.Vector3();
+                    this.camera.getWorldDirection(dir);
+                    const dist = Math.max(0.5, this.camera.position.distanceTo(this.orbit.target));
+
+                    // Yaw — вращение вокруг мировой оси Y (влево/вправо)
+                    const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -dx * sens);
+                    dir.applyQuaternion(yawQ);
+
+                    // Pitch — вращение вокруг правой оси камеры (вверх/вниз)
+                    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), dir).normalize();
+                    if (right.lengthSq() > 0.0001) {
+                        const pitchQ = new THREE.Quaternion().setFromAxisAngle(right, dy * sens);
+                        const testDir = dir.clone().applyQuaternion(pitchQ);
+                        if (Math.abs(testDir.y) < 0.97) dir.copy(testDir); // ограничитель по вертикали
+                    }
+
+                    dir.normalize();
+                    // Камера стоит на месте, цель орбиты сдвигается по новому направлению
+                    this.orbit.target.copy(this.camera.position).addScaledVector(dir, dist);
+                    this.orbit.update();
+
+                    // Сдвиг > 4px — не считать касание кликом
+                    this.isClickGesture = false;
+                }, { passive: true });
+
+                // Завершение FPS-вращения
+                const endLook = (e) => {
+                    if (tl.pointerId !== null && e.pointerId !== tl.pointerId) return;
+                    tl.active = false;
+                    tl.pointerId = null;
+                };
+                window.addEventListener('pointerup', endLook);
+                window.addEventListener('pointercancel', endLook);
             },
 
             onPointerDown: function(event) {
@@ -3061,7 +3315,19 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 const bloomStrength = parseFloat(document.getElementById('setting-bloom-strength')?.value || '1');
                 this.bloomPass.enabled = bloomEnabled;
                 this.bloomPass.strength = bloomStrength;
-                this.ssaoPass.enabled = document.getElementById('setting-ssao').checked;
+                const _aoEnabled = document.getElementById('setting-ssao').checked;
+                this.ssaoPass.enabled = _aoEnabled;
+                if (_aoEnabled && this.ssaoPass.uniforms) {
+                    const _aoInt = parseFloat(document.getElementById('setting-ao-intensity')?.value ?? '1.6');
+                    this.ssaoPass.uniforms.intensity.value  = _aoInt;
+                    this.ssaoPass.uniforms.cameraNear.value = this.camera.near;
+                    this.ssaoPass.uniforms.cameraFar.value  = this.camera.far;
+                    this.ssaoPass.uniforms.resolution.value.set(
+                        this.renderer.domElement.width,
+                        this.renderer.domElement.height
+                    );
+                    this.ssaoPass.uniforms.tDepth.value = this.composer.renderTarget1.depthTexture;
+                }
                 waterUniforms.uWavesEnabled.value = (document.getElementById('setting-water-waves')?.checked ?? true) ? 1.0 : 0.0;
 
                 const textureSmoothingEnabled = document.getElementById('setting-texture-smoothing')?.checked ?? false;
@@ -3566,13 +3832,17 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                             this.camera.position.y -= camSpeed;
                             this.orbit.target.y -= camSpeed;
                         }
-                    } else if (this.mobileJoystick && (Math.abs(this.mobileJoystick.x) > 0.03 || Math.abs(this.mobileJoystick.y) > 0.03)) {
+                    }
+
+                    // Джойстик работает на всех платформах, движение по полному 3D-направлению взгляда
+                    if (this.mobileJoystick && (Math.abs(this.mobileJoystick.x) > 0.03 || Math.abs(this.mobileJoystick.y) > 0.03)) {
                         const moveSpeed = 18 * (this.cameraMoveSpeed || 1) * dt;
                         const moveForward = -this.mobileJoystick.y * moveSpeed;
                         const moveRight = this.mobileJoystick.x * moveSpeed;
-                        if (flatForward.lengthSq() > 0.0001) {
-                            this.camera.position.addScaledVector(flatForward, moveForward);
-                            this.orbit.target.addScaledVector(flatForward, moveForward);
+                        // direction — полный 3D вектор куда смотрит камера (включая вертикаль)
+                        if (direction.lengthSq() > 0.0001) {
+                            this.camera.position.addScaledVector(direction, moveForward);
+                            this.orbit.target.addScaledVector(direction, moveForward);
                         }
                         if (sideways.lengthSq() > 0.0001) {
                             this.camera.position.addScaledVector(sideways, -moveRight);
@@ -3626,8 +3896,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
         const gameplay = {
             isPlaytest: false, controls: null, velocity: new THREE.Vector3(), direction: new THREE.Vector3(), moveState: { forward: false, backward: false, left: false, right: false, jump: false, sprint: false, crouch: false }, canJump: false, raycasterDown: new THREE.Raycaster(new THREE.Vector3(), new THREE.Vector3(0, -1, 0), 0, 1.5), lastStepTime: 0, baseHeight: 1.8, crouchHeight: 0.9,
             init: function() { this.controls = new PointerLockControls(engine.camera, document.body); this.controls.addEventListener('lock', () => { this.isPlaytest = true; }); this.controls.addEventListener('unlock', () => { this.stopPlaytest(); }); document.addEventListener('keydown', (e) => this.onKeyDown(e)); document.addEventListener('keyup', (e) => this.onKeyUp(e)); },
-            startPlaytest: function() { engine.deselect(); document.getElementById('ui-layer').style.display = 'none'; document.getElementById('playtest-overlay').style.display = 'block'; const js = document.getElementById('mobile-joystick'); if (js) js.classList.remove('visible'); if (engine.spawnPointObj) { engine.camera.position.copy(engine.spawnPointObj.position); engine.camera.position.y += 1; } else { engine.camera.position.set(0, 5, 0); } engine.spawnPointObj && (engine.spawnPointObj.visible = false); this.velocity.set(0,0,0); audioEngine.init(); this.controls.lock(); },
-            stopPlaytest: function() { this.isPlaytest = false; document.getElementById('ui-layer').style.display = 'flex'; document.getElementById('playtest-overlay').style.display = 'none'; engine.spawnPointObj && (engine.spawnPointObj.visible = true); const js = document.getElementById('mobile-joystick'); if (js) js.classList.toggle('visible', engine.isMobile); },
+            startPlaytest: function() { engine.deselect(); document.getElementById('ui-layer').style.display = 'none'; document.getElementById('playtest-overlay').style.display = 'block'; const js = document.getElementById('mobile-joystick'); if (js) js.classList.add('joystick-hidden'); if (engine.spawnPointObj) { engine.camera.position.copy(engine.spawnPointObj.position); engine.camera.position.y += 1; } else { engine.camera.position.set(0, 5, 0); } engine.spawnPointObj && (engine.spawnPointObj.visible = false); this.velocity.set(0,0,0); audioEngine.init(); this.controls.lock(); },
+            stopPlaytest: function() { this.isPlaytest = false; document.getElementById('ui-layer').style.display = 'flex'; document.getElementById('playtest-overlay').style.display = 'none'; engine.spawnPointObj && (engine.spawnPointObj.visible = true); const js = document.getElementById('mobile-joystick'); if (js) js.classList.remove('joystick-hidden'); },
             onKeyDown: function(e) { if(!this.isPlaytest) return; switch(e.code) { case 'KeyW': this.moveState.forward = true; break; case 'KeyS': this.moveState.backward = true; break; case 'KeyA': this.moveState.left = true; break; case 'KeyD': this.moveState.right = true; break; case 'Space': if(this.canJump) this.velocity.y += 12; this.canJump = false; break; case 'ShiftLeft': this.moveState.sprint = true; break; case 'ControlLeft': case 'KeyC': this.moveState.crouch = true; break; } },
             onKeyUp: function(e) { if(!this.isPlaytest) return; switch(e.code) { case 'KeyW': this.moveState.forward = false; break; case 'KeyS': this.moveState.backward = false; break; case 'KeyA': this.moveState.left = false; break; case 'KeyD': this.moveState.right = false; break; case 'ShiftLeft': this.moveState.sprint = false; break; case 'ControlLeft': case 'KeyC': this.moveState.crouch = false; break; } },
             update: function(dt) {
