@@ -1832,11 +1832,20 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.pmremGenerator = new THREE.PMREMGenerator(this.renderer); this.pmremGenerator.compileEquirectangularShader();
                 this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 8000); this.camera.position.set(15, 20, 15);
 
-                // ── EffectComposer with depth texture (required for AO pass)
+                // ── EffectComposer — colour-only targets (no depth texture = no feedback loop)
                 const _cw = window.innerWidth, _ch = window.innerHeight;
-                const _compTarget = new THREE.WebGLRenderTarget(_cw, _ch, { type: THREE.HalfFloatType, depthBuffer: true, depthTexture: new THREE.DepthTexture(_cw, _ch, THREE.UnsignedIntType) });
+                const _compTarget = new THREE.WebGLRenderTarget(_cw, _ch, { type: THREE.HalfFloatType, depthBuffer: true });
                 this.composer = new EffectComposer(this.renderer, _compTarget);
                 this.composer.addPass(new RenderPass(this.scene, this.camera));
+
+                // ── Separate depth target for AO (not attached to composer → no feedback loop)
+                this._depthTarget = new THREE.WebGLRenderTarget(_cw, _ch, {
+                    depthBuffer: true,
+                    depthTexture: new THREE.DepthTexture(_cw, _ch, THREE.UnsignedIntType)
+                });
+                this._depthTarget.depthTexture.name = 'AO_Depth';
+                // Depth-only override material — skips fragment shading for speed
+                this._depthOnlyMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true, side: THREE.DoubleSide });
 
                 // ── High-quality AO pass — IGN noise, golden-angle spiral, normal-aware, no halos
                 const _aoShader = {
@@ -1960,7 +1969,9 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     `
                 };
                 this.ssaoPass = new ShaderPass(_aoShader);
-                this.ssaoPass.uniforms.tDepth.value      = this.composer.renderTarget1.depthTexture;
+                this.ssaoPass.material.depthTest = false;
+                this.ssaoPass.material.depthWrite = false;
+                this.ssaoPass.uniforms.tDepth.value      = this._depthTarget.depthTexture;
                 this.ssaoPass.uniforms.resolution.value.set(_cw, _ch);
                 this.ssaoPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
                 this.ssaoPass.enabled = true;
@@ -2172,10 +2183,11 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 if (this.composer) this.composer.setSize(w, h);
                 if (this.ssaoPass && this.ssaoPass.uniforms) {
                     this.ssaoPass.uniforms.resolution.value.set(w, h);
-                    this.ssaoPass.uniforms.tDepth.value = this.composer.renderTarget1.depthTexture;
+                    this.ssaoPass.uniforms.tDepth.value = this._depthTarget.depthTexture;
                     this.camera.updateProjectionMatrix();
                     this.ssaoPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
                 }
+                if (this._depthTarget) this._depthTarget.setSize(w, h);
                 if (window.uiManager && uiManager.applyResponsiveScale) uiManager.applyResponsiveScale(false);
             },
 
@@ -3577,7 +3589,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         this.renderer.domElement.width,
                         this.renderer.domElement.height
                     );
-                    this.ssaoPass.uniforms.tDepth.value = this.composer.renderTarget1.depthTexture;
+                    this.ssaoPass.uniforms.tDepth.value = this._depthTarget.depthTexture;
                     this.ssaoPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
                 }
                 const _raysEnabled = document.getElementById('setting-rays')?.checked ?? false;
@@ -4150,6 +4162,16 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 while(this.outlines.length < this.selectedBlocks.length) { const line = new THREE.LineSegments(sharedEdgeGeo, outlineMat); this.scene.add(line); this.outlines.push(line); }
                 this.outlines.forEach((o, i) => { if (i < this.selectedBlocks.length) { const obj = this.selectedBlocks[i]; o.visible = true; obj.getWorldPosition(o.position); obj.getWorldQuaternion(o.quaternion); obj.getWorldScale(o.scale); o.scale.addScalar(0.04); } else { o.visible = false; } });
                 try {
+                    // ── Depth pre-pass for AO (separate target → no WebGL feedback loop) ──
+                    if (this.ssaoPass.enabled && this._depthTarget) {
+                        const _prevOverride = this.scene.overrideMaterial;
+                        this.scene.overrideMaterial = this._depthOnlyMat;
+                        this.renderer.setRenderTarget(this._depthTarget);
+                        this.renderer.clear();
+                        this.renderer.render(this.scene, this.camera);
+                        this.scene.overrideMaterial = _prevOverride;
+                        this.renderer.setRenderTarget(null);
+                    }
                     if (this.bloomPass.enabled || this.ssaoPass.enabled || (this.raysPass && this.raysPass.enabled)) this.composer.render(); else this.renderer.render(this.scene, this.camera);
                 } catch (err) {
                     console.error('Scene render error:', err);
