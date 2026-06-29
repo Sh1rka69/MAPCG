@@ -732,6 +732,21 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                                 <input type="file" id="file-texture" accept="image/*" class="hidden" onchange="uiManager.importTexture(event)">
                             </div>
 
+                            <!-- NEW: Professional Normal Map -->
+                            <div class="mt-1">
+                                <label class="text-purple-300 text-xs uppercase font-bold block mb-1 tracking-wider flex items-center gap-1">
+                                    <span>Normal Map (PBR)</span>
+                                </label>
+                                <div class="flex items-center gap-1.5">
+                                    <button onclick="uiManager.selectNormalMap()" class="flex-1 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white px-3 py-[5px] text-xs font-bold rounded-lg border border-purple-400/70 shadow transition flex items-center justify-center gap-1">
+                                        <span>🗺️</span><span>Choose Normal Map</span>
+                                    </button>
+                                    <button onclick="uiManager.clearNormalMap()" class="px-2 py-[5px] text-xs bg-red-900/70 hover:bg-red-700 text-red-200 rounded border border-red-700 transition" title="Remove normal map">✕</button>
+                                </div>
+                                <div id="normal-map-label" class="text-[10px] text-purple-400/80 mt-0.5 truncate font-mono">No normal map</div>
+                            </div>
+                            <input type="file" id="file-normal-map" accept="image/*" class="hidden" onchange="uiManager.importNormalMap(event)">
+
                             <label data-i18n="tilingLabel" class="text-gray-400 text-sm uppercase font-bold -mb-1 mt-1 tracking-wider">Texture Tiling</label>
                             <div class="bg-black/50 border border-gray-600 rounded-lg relative overflow-hidden">
                                 <select id="sel-tiling" class="bg-transparent text-white p-2 outline-none w-full appearance-none cursor-pointer relative z-10">
@@ -966,20 +981,20 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                         <div class="bg-black/30 p-2 rounded border border-gray-800 mb-3">
                             <label class="text-gray-400 text-sm uppercase font-bold block mb-1">Bloom strength</label>
                             <div class="flex items-center gap-2">
-                                <input type="range" id="setting-bloom-strength" min="0" max="3" step="0.05" value="1.5" class="w-full accent-blue-500 cursor-pointer" oninput="document.getElementById('bloom-strength-val').innerText = Number(this.value).toFixed(2)">
-                                <span id="bloom-strength-val" class="text-blue-300 text-sm w-14 text-right">1.50</span>
+                                <input type="range" id="setting-bloom-strength" min="0" max="3" step="0.05" value="0.8" class="w-full accent-blue-500 cursor-pointer" oninput="document.getElementById('bloom-strength-val').innerText = Number(this.value).toFixed(2)">
+                                <span id="bloom-strength-val" class="text-blue-300 text-sm w-14 text-right">0.80</span>
                             </div>
                         </div>
 
                         <label class="flex items-center gap-3 mb-2 cursor-pointer group">
-                            <input type="checkbox" id="setting-ssao" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked class="w-6 h-6 accent-blue-500">
+                            <input type="checkbox" id="setting-ssao" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" class="w-6 h-6 accent-blue-500">
                             <span data-i18n="ssao" class="group-hover:text-white text-gray-300 transition">N8AO Ambient Occlusion</span>
                         </label>
                         <div class="bg-black/30 p-2 rounded border border-gray-800 mb-3">
                             <label class="text-gray-400 text-sm uppercase font-bold block mb-1">AO Intensity</label>
                             <div class="flex items-center gap-2">
-                                <input type="range" id="setting-ao-intensity" min="0.5" max="3.0" step="0.1" value="1.6" class="w-full accent-blue-500 cursor-pointer" oninput="document.getElementById('ao-intensity-val').innerText=Number(this.value).toFixed(1); engine.updateGraphics();">
-                                <span id="ao-intensity-val" class="text-blue-300 text-sm w-14 text-right">1.6</span>
+                                <input type="range" id="setting-ao-intensity" min="0" max="1.5" step="0.05" value="0.55" class="w-full accent-blue-500 cursor-pointer" oninput="document.getElementById('ao-intensity-val').innerText=Number(this.value).toFixed(2); engine.updateGraphics();">
+                                <span id="ao-intensity-val" class="text-blue-300 text-sm w-14 text-right">0.55</span>
                             </div>
                         </div>
 
@@ -997,7 +1012,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
 
                         <label class="flex items-center gap-3 mb-3 cursor-pointer group">
                             <input type="checkbox" id="setting-water-waves" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked class="w-6 h-6 accent-blue-500">
-                            <span data-i18n="waterWaves" class="group-hover:text-white text-gray-300 transition">Water Waves (+ Real-Time Object Reflections)</span>
+                            <span data-i18n="waterWaves" class="group-hover:text-white text-gray-300 transition">Water Waves (+ Skybox Reflections Only)</span>
                         </label>
 
                         <label class="flex items-center gap-3 mb-3 cursor-pointer group">
@@ -1065,7 +1080,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                     skyWeather: "Sky & Weather", skyboxLabel: "Skybox (Time of Day)", sunAngleLabel: "Sun Angle (Rotation)",
                     weatherLabel: "Weather (Audio & Particles)", interfaceLabel: "Interface", uiScaleLabel: "UI Scale",
                     graphicsLabel: "Graphics (Optimization)", dynShadows: "Dynamic Shadows", bloom: "Bloom (Object/Lightning Glow)",
-                    ssao: "Corner Shadows", waterWaves: "Water Waves (+ Real-Time Object Reflections)", textureSmoothing: "Texture Smoothing", showFps: "Show FPS", fogHeader: "Fog", fogColorLabel: "Fog Color (if clear)",
+                    ssao: "Corner Shadows", waterWaves: "Water Waves (+ Skybox Reflections Only)", textureSmoothing: "Texture Smoothing", showFps: "Show FPS", fogHeader: "Fog", fogColorLabel: "Fog Color (if clear)",
                     fogStart: "Start", fogEnd: "End", exportTitle: "EXPORT TO GOREBOX",
                     exportDesc: "A ZIP archive with MapData.json (v4) and CustomTextures folder will be generated.",
                     saveZip: "Save ZIP", optGrid: "Grid", optPlain: "Plain (White)",
@@ -1668,6 +1683,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
 
         // Временное хранилище локальных текстур текущего проекта в оперативной памяти
         let activeProjectCustomTextures = {};
+let activeProjectNormalMaps = {}; // textureKey -> { texture: THREE.Texture, name: string, dataUrl: string }
         let activeProjectTextureKeys = new Set();
 
         function getActiveTexture(textureId) {
@@ -1679,6 +1695,13 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
         function createMaterial(textureId, matType, colorHex, extra = {}) {
             const texture = getActiveTexture(textureId);
             const preset = MATERIAL_PRESETS[matType] || MATERIAL_PRESETS.Concrete;
+
+            // Normal Map support (professional)
+            let normalMapTex = null;
+            const nmEntry = activeProjectNormalMaps[textureId];
+            if (nmEntry && nmEntry.texture) {
+                normalMapTex = nmEntry.texture;
+            }
             const pbrEnabled = true; // PBR теперь включен всегда для красоты
             const isWater = isWaterLike(textureId, matType);
             const isMetal = matType === 'Metal' || textureId === 'metal';
@@ -1696,7 +1719,9 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                 roughness: Math.min(1, Math.max(0.02, reflectBlur)),
                 metalness: isMetal ? 0.85 : (isWater || isGlass ? 0.0 : preset.metalness || 0.0),
                 envMapIntensity: reflectivity,
-                envMap: (isWater && window.engine?.localReflectionTexture) || window.engine?.getActiveEnvironmentMap?.() || null
+                envMap: window.engine?.getActiveEnvironmentMap?.() || null,
+                normalMap: normalMapTex,
+                normalScale: normalMapTex ? new THREE.Vector2(1.0, 1.0) : undefined
             };
 
             if (isPlasma) {
@@ -1869,7 +1894,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             scene: null, camera: null, renderer: null, pmremGenerator: null, composer: null, bloomPass: null, ssaoPass: null, raysPass: null,
             orbit: null, transformControl: null, raycaster: null, mouse: null,
             blocks: [], selectedBlocks: [], spawnPointObj: null,
-            gridHelper: null, dirLight: null, ambientLight: null, sky: null, sun: null,
+            gridHelper: null, dirLight: null, ambientLight: null, hemiLight: null, sky: null, sun: null,
             outlines: [], clock: new THREE.Clock(),
             fpsCounterEnabled: false, fpsFrameCount: 0, fpsElapsed: 0,
             weatherParticles: null, weatherType: 'clear', targetWeatherIntensity: 0,
@@ -2083,11 +2108,11 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.inputMode = this.isMobile ? 'touch' : 'mouse';
                 
                 const canvas = document.getElementById('glcanvas');
-                this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: "high-performance" });
+                this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: "high-performance", precision: "highp" });
                 this.renderer.setSize(window.innerWidth, window.innerHeight, false); this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
                 this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-                this.renderer.toneMappingExposure = 1.04;
+                this.renderer.toneMapping = THREE.LinearToneMapping;
+                this.renderer.toneMappingExposure = 1.00;
                 this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                 
                 this.pmremGenerator = new THREE.PMREMGenerator(this.renderer); this.pmremGenerator.compileEquirectangularShader();
@@ -2095,7 +2120,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
                 // ── EffectComposer — colour-only targets (no depth texture = no feedback loop)
                 const _cw = window.innerWidth, _ch = window.innerHeight;
-                const _compTarget = new THREE.WebGLRenderTarget(_cw, _ch, { type: THREE.HalfFloatType, depthBuffer: true });
+                const _compTarget = new THREE.WebGLRenderTarget(_cw, _ch, { type: THREE.UnsignedByteType, depthBuffer: true });
                 this.composer = new EffectComposer(this.renderer, _compTarget);
                 this.composer.addPass(new RenderPass(this.scene, this.camera));
 
@@ -2114,7 +2139,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                         tDiffuse:    { value: null },
                         tDepth:      { value: null },
                         resolution:  { value: new THREE.Vector2(_cw, _ch) },
-                        intensity:   { value: 1.75 },
+                        intensity:   { value: 0.55 },
                         bias:        { value: 0.025 },
                         projInverse: { value: new THREE.Matrix4() }
                     },
@@ -2179,12 +2204,12 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                             /* ── Depth-adaptive screen radius (geometrically correct) ──────── */
                             /* projInverse[1][1] = tan(halfFovY); converts world→UV at this depth */
                             float tanHalfFovY  = projInverse[1][1];
-                            const float WRAD   = 2.0;  /* world-space AO radius (units) */
+                            const float WRAD   = 1.35; /* light contact AO radius (units) */
                             float screenRY = clamp(WRAD / (depth * tanHalfFovY * 2.0), 0.004, 0.10);
                             float screenRX = screenRY / aspect;
 
                             /* ── 24-sample golden-angle hemisphere AO ────────────────────── */
-                            const int   S  = 24;
+                            const int   S  = 16;
                             const float GA = 2.39996322972865332;
                             float ao     = 0.0;
                             float totalW = 0.0;
@@ -2219,12 +2244,12 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                             if (totalW > 0.0) ao /= totalW;
 
                             /* ×4 because per-sample nDotS averages ~0.25 for hemisphere */
-                            ao = clamp(ao * intensity * 4.0, 0.0, 0.82);
+                            ao = clamp(ao * intensity * 3.0, 0.0, 0.45);
                             ao = ao * ao * (3.0 - 2.0 * ao);
 
                             /* Cap final darkening to 55% — no global scene darkening */
                             // Only apply AO to crevices, do NOT darken the whole scene
-float aoFactor = 1.0 - (ao * 0.38);
+float aoFactor = 1.0 - (ao * 0.20);
 gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         }
                     `
@@ -2235,10 +2260,10 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 this.ssaoPass.uniforms.tDepth.value      = this._depthTarget.depthTexture;
                 this.ssaoPass.uniforms.resolution.value.set(_cw, _ch);
                 this.ssaoPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
-                this.ssaoPass.enabled = true;
+                this.ssaoPass.enabled = false;
                 this.composer.addPass(this.ssaoPass);
 
-                this.bloomPass = new UnrealBloomPass(new THREE.Vector2(_cw, _ch), 1.85, 0.52, 0.78); this.bloomPass.enabled = false; this.composer.addPass(this.bloomPass);
+                this.bloomPass = new UnrealBloomPass(new THREE.Vector2(_cw, _ch), 0.65, 0.22, 0.92); this.bloomPass.enabled = false; this.composer.addPass(this.bloomPass);
 
                 // ── Volumetric Rays (God Rays / Light Shafts from sun direction)
                 const _raysShader = {
@@ -2297,15 +2322,28 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 this.skyEnvGroup = new THREE.Group(); this.skyEnvGroup.add(this.sky); this.scene.add(this.skyEnvGroup);
                 this.initStarsAndMoon(); this.initClouds();
 
-                this.ambientLight = new THREE.AmbientLight(0xffffff, 0.6); this.scene.add(this.ambientLight);
-                this.dirLight = new THREE.DirectionalLight(0xfff8ee, 1.2); this.dirLight.position.set(100, 150, 100); this.dirLight.castShadow = true;
-                this.dirLight.shadow.mapSize.width = 1024; this.dirLight.shadow.mapSize.height = 1024; this.dirLight.shadow.camera.near = 0.5; this.dirLight.shadow.camera.far = 400; this.dirLight.shadow.camera.left = -100; this.dirLight.shadow.camera.right = 100; this.dirLight.shadow.camera.top = 100; this.dirLight.shadow.camera.bottom = -100; this.dirLight.shadow.bias = -0.0005;
+                // GoreBox-style calibrated daylight: bright fill, soft readable shadows, stable in Chrome/WebView.
+                this.ambientLight = new THREE.AmbientLight(0xffffff, 0.88); this.scene.add(this.ambientLight);
+                this.hemiLight = new THREE.HemisphereLight(0xe8f4ff, 0xc7b69c, 0.42); this.scene.add(this.hemiLight);
+                this.dirLight = new THREE.DirectionalLight(0xfff2dc, 0.86); this.dirLight.position.set(100, 150, 100); this.dirLight.castShadow = true;
+                this.dirLight.shadow.mapSize.width = 512; this.dirLight.shadow.mapSize.height = 512;
+                this.dirLight.shadow.camera.near = 0.5; this.dirLight.shadow.camera.far = 360;
+                this.dirLight.shadow.camera.left = -90; this.dirLight.shadow.camera.right = 90; this.dirLight.shadow.camera.top = 90; this.dirLight.shadow.camera.bottom = -90;
+                this.dirLight.shadow.bias = -0.00012;
+                this.dirLight.shadow.normalBias = 0.018;
+                this.dirLight.shadow.radius = 3.5;
                 this.scene.add(this.dirLight);
 
                 this.gridHelper = new THREE.GridHelper(300, 150, 0x1e293b, 0x0f172a); this.gridHelper.material.opacity = 0.5; this.gridHelper.material.transparent = true; this.gridHelper.position.y = -0.01; this.gridHelper.visible = false; this.scene.add(this.gridHelper);
                 this.shadowCatcher = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.ShadowMaterial({ color: 0x000000, opacity: 0.0 })); this.shadowCatcher.rotation.x = -Math.PI / 2; this.shadowCatcher.position.y = -0.02; this.shadowCatcher.receiveShadow = false; this.shadowCatcher.visible = false; this.scene.add(this.shadowCatcher);
-                this.reflectionRenderTarget = new THREE.WebGLCubeRenderTarget(512, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat });
-                this.reflectionCubeCamera = new THREE.CubeCamera(0.1, 1000, this.reflectionRenderTarget); this.reflectionCubeCamera.visible = false; this.scene.add(this.reflectionCubeCamera); this.localReflectionTexture = null; this.lastReflectionCapturePos = new THREE.Vector3(999999, 999999, 999999); this.reflectionDistance = 10; this.lastReflectionCaptureTime = -Infinity;
+                // Skybox-only water reflections: no CubeCamera, no cube/object reflection render pass.
+                // This keeps water glossy but removes the expensive real-time object reflections.
+                this.reflectionRenderTarget = null;
+                this.reflectionCubeCamera = null;
+                this.localReflectionTexture = null;
+                this.lastReflectionCapturePos = new THREE.Vector3(999999, 999999, 999999);
+                this.reflectionDistance = 10;
+                this.lastReflectionCaptureTime = -Infinity;
 
                 this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
                 this.orbit.enableDamping = true;
@@ -2545,7 +2583,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 obj.renderOrder = isWater ? 3 : 0;
                 if (isWater) obj.castShadow = false;
                 const envIntensity = this.getMaterialEnvIntensity(obj);
-                const envForThis = (isWater && this.localReflectionTexture) || currentEnv;
+                const envForThis = currentEnv;
                 if (Array.isArray(obj.material)) {
                     obj.material.forEach(m => {
                         m.envMap = envForThis;
@@ -2575,111 +2613,35 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
             },
 
             getWaterReflectionTarget: function() {
-                const waterBlocks = this.blocks.filter(b => this.isWaterBlock ? this.isWaterBlock(b) : (b?.userData && isWaterLike(b.userData.texture, b.userData.materialType)));
-                if (!waterBlocks.length) return null;
-                let best = waterBlocks[0];
-                let bestDist = Infinity;
-                const cam = this.camera?.position || new THREE.Vector3();
-                for (const w of waterBlocks) {
-                    const center = new THREE.Vector3();
-                    w.getWorldPosition(center);
-                    const d = center.distanceToSquared(cam);
-                    if (d < bestDist) { bestDist = d; best = w; }
-                }
-                const pos = new THREE.Vector3();
-                const scale = new THREE.Vector3();
-                best.getWorldPosition(pos);
-                best.getWorldScale(scale);
-                // Capture at the water surface, not at the camera, so the skybox/object reflection is spatially correct.
-                pos.y += Math.max(0.04, Math.abs(scale.y) * 0.52);
-                return { mesh: best, position: pos };
+                // Object/cube reflections are intentionally disabled for optimization.
+                // Water uses only scene.environment (skybox/PMREM) plus scene lights.
+                return null;
             },
 
             updateLocalReflections: function(force = false) {
-                if (!this.reflectionCubeCamera || !this.renderer || !this.scene || !this.camera) return;
-                if (this.customSkyboxLoading) return; // не рендерим, пока скайбокс ещё грузится — иначе можно зацепить disposed-текстуру
-                // Настройка "Water Waves" управляет волнами ВМЕСТЕ с реалтайм-отражениями объектов в воде.
-                // Если выключена — реалтайм-отражения не считаются (экономия производительности),
-                // а у воды остаётся только статичное отражение текущего скайбокса (всегда активно).
-                const wavesEnabled = document.getElementById('setting-water-waves')?.checked ?? true;
-                if (!wavesEnabled) {
-                    if (this.localReflectionTexture !== null) {
-                        this.localReflectionTexture = null;
-                        this.syncAllObjectMaterials(false);
-                    }
-                    return;
-                }
+                // Оптимизация: никаких CubeCamera-рендеров. Вода отражает только скайбокс/scene.environment
+                // и освещается обычными источниками света. Оставлено как lightweight no-op для совместимости.
+                if (this.localReflectionTexture !== null) this.localReflectionTexture = null;
+                if (!force) return; // animate() вызывает это каждый кадр — не трогаем материалы без необходимости.
 
-                const target = this.getWaterReflectionTarget();
-                if (!target) { this.localReflectionTexture = null; return; }
-
-                const REFLECTION_INTERVAL_MS = 1800; // frequent enough for rotating skybox and moving cubes
-                const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-                const moved = target.position.distanceTo(this.lastReflectionCapturePos || target.position) > 0.35;
-                if (!force && !moved && (now - this.lastReflectionCaptureTime) < REFLECTION_INTERVAL_MS) return;
-
-                // Принудительный (force) захват может быть вызван прямо во время загрузки проекта
-                // (updateGraphics -> updateLocalReflections), когда материалы блоков ещё не до конца
-                // синхронизированы. Откладываем такой захват на следующий кадр, чтобы сцена была стабильна.
-                if (force) {
-                    requestAnimationFrame(() => this.captureLocalReflection());
-                    return;
-                }
-                this.captureLocalReflection(target);
-            },
-
-            captureLocalReflection: function(targetInfo = null) {
-                if (!this.reflectionCubeCamera || !this.renderer || !this.scene || !this.camera) return;
-                if (this.customSkyboxLoading) return;
-                const wavesEnabled = document.getElementById('setting-water-waves')?.checked ?? true;
-                if (!wavesEnabled) { this.localReflectionTexture = null; return; }
-                const target = targetInfo || this.getWaterReflectionTarget();
-                if (!target) { this.localReflectionTexture = null; return; }
-
-                this.lastReflectionCaptureTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-                this.lastReflectionCapturePos.copy(target.position);
-
-                // Прячем служебные элементы редактора и саму воду, чтобы в отражение не попали гизмо/контуры/самоотражение.
-                const prevGridVisible = this.gridHelper ? this.gridHelper.visible : null;
-                if (this.gridHelper) this.gridHelper.visible = false;
-                const prevOutlineVisible = this.outlines.map(o => o.visible);
-                this.outlines.forEach(o => { o.visible = false; });
-                const prevSpawnVisible = this.spawnPointObj ? this.spawnPointObj.visible : null;
-                if (this.spawnPointObj) this.spawnPointObj.visible = false;
-                const hiddenWater = [];
-                this.blocks.forEach(obj => {
-                    if (this.isWaterBlock(obj)) {
-                        hiddenWater.push([obj, obj.visible]);
-                        obj.visible = false;
-                    }
-                });
-
-                try {
-                    this.reflectionCubeCamera.position.copy(target.position);
-                    this.reflectionCubeCamera.update(this.renderer, this.scene);
-                    this.localReflectionTexture = this.reflectionRenderTarget.texture;
-                } catch (err) {
-                    console.error('Water reflection capture error (CubeCamera):', err);
-                    this.localReflectionTexture = null;
-                }
-
-                if (this.gridHelper) this.gridHelper.visible = prevGridVisible;
-                this.outlines.forEach((o, i) => { o.visible = prevOutlineVisible[i]; });
-                if (this.spawnPointObj) this.spawnPointObj.visible = prevSpawnVisible;
-                hiddenWater.forEach(([obj, wasVisible]) => { obj.visible = wasVisible; });
-
-                // Применяем свежее отражение ко всем материалам воды
-                this.blocks.forEach(obj => {
-                    if (!obj.userData || !isWaterLike(obj.userData.texture, obj.userData.materialType) || !obj.material) return;
+                // При смене skybox/environment обновляем envMap у воды один раз.
+                const skyEnv = this.getActiveEnvironmentMap ? this.getActiveEnvironmentMap() : (this.scene ? this.scene.environment : null);
+                this.blocks?.forEach(obj => {
+                    if (!obj?.userData || !isWaterLike(obj.userData.texture, obj.userData.materialType) || !obj.material) return;
                     const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
                     mats.forEach(m => {
-                        if (m.userData && m.userData.isWater) {
-                            m.envMap = this.localReflectionTexture || this.getActiveEnvironmentMap();
+                        if (m?.userData?.isWater) {
+                            m.envMap = skyEnv;
                             m.envMapIntensity = this.getMaterialEnvIntensity(obj);
                             m.needsUpdate = true;
                         }
                     });
                 });
+            },
+
+            captureLocalReflection: function() {
+                // Отключено специально: никаких отражений кубов/объектов, только skybox + свет.
+                this.updateLocalReflections(false);
             },
 
             setupMobileJoystick: function() {
@@ -3791,6 +3753,17 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         sel.appendChild(opt);
                     }
                     document.getElementById('sel-texture').value = texVal; 
+                // Update normal map label
+                const normalLabel = document.getElementById("normal-map-label");
+                if (normalLabel) {
+                    const texKey = obj.userData.texture || "grid";
+                    if (activeProjectNormalMaps[texKey] && activeProjectNormalMaps[texKey].name) {
+                        const n = activeProjectNormalMaps[texKey].name;
+                        normalLabel.innerText = n.length > 18 ? n.slice(0,15) + "..." : n;
+                    } else {
+                        normalLabel.innerText = "No normal map";
+                    }
+                }
                     document.getElementById('sel-material').value = obj.userData.materialType || 'Concrete'; 
                     document.getElementById('inp-color').value = obj.userData.colorHex || '#ffffff';
                     document.getElementById('sel-tiling').value = obj.userData.tilingMode || 'stretch';
@@ -3837,6 +3810,20 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         obj.userData.skyboxReflectivity = reflect;
                         obj.userData.skyboxBlur = blur;
                         obj.userData.texture = tex;
+                // Update normal map label for current texture
+                setTimeout(() => {
+                    const nlab = document.getElementById("normal-map-label");
+                    if (nlab && this.selectedBlocks.length) {
+                        const tkey = this.selectedBlocks[0].userData.texture || "grid";
+                        if (activeProjectNormalMaps[tkey]) {
+                            const nmn = activeProjectNormalMaps[tkey].name || "Normal";
+                            nlab.innerText = nmn.length > 18 ? nmn.substring(0,15)+"..." : nmn;
+                        } else {
+                            nlab.innerText = "No normal map";
+                        }
+                    }
+                }, 30);
+
                         obj.userData.materialType = matT;
                         obj.userData.colorHex = col;
                         obj.userData.materialName = resolvedMaterialName;
@@ -3856,7 +3843,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 this.dirLight.castShadow = shadowsEnabled;
                 if (this.shadowCatcher) this.shadowCatcher.visible = false;
 
-                const shadowSizes = [256, 512, 1024, 2048, 4096];
+                const shadowSizes = [128, 256, 512, 1024, 2048];
                 const shadowQualityIdx = parseInt(document.getElementById('setting-shadow-quality')?.value ?? '2', 10);
                 const shadowSize = shadowSizes[shadowQualityIdx] ?? 512;
                 const sqValEl = document.getElementById('shadow-quality-val');
@@ -3869,16 +3856,28 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         this.dirLight.shadow.map = null;
                     }
                 }
+                this.dirLight.shadow.camera.left = -90;
+                this.dirLight.shadow.camera.right = 90;
+                this.dirLight.shadow.camera.top = 90;
+                this.dirLight.shadow.camera.bottom = -90;
+                this.dirLight.shadow.camera.near = 0.5;
+                this.dirLight.shadow.camera.far = 360;
+                this.dirLight.shadow.bias = -0.00012;
+                this.dirLight.shadow.normalBias = 0.018;
+                this.dirLight.shadow.radius = 3.5;
+                this.dirLight.shadow.camera.updateProjectionMatrix();
                 this.renderer.shadowMap.needsUpdate = true;
 
                 const bloomEnabled = document.getElementById('setting-bloom').checked;
                 const bloomStrength = parseFloat(document.getElementById('setting-bloom-strength')?.value || '1');
                 this.bloomPass.enabled = bloomEnabled;
-                this.bloomPass.strength = Math.max(0.5, bloomStrength * 1.25);
+                this.bloomPass.strength = Math.max(0.0, bloomStrength * 0.55);
+                this.bloomPass.radius = 0.22;
+                this.bloomPass.threshold = 0.92;
                 const _aoEnabled = document.getElementById('setting-ssao').checked;
                 this.ssaoPass.enabled = _aoEnabled;
                 if (_aoEnabled && this.ssaoPass.uniforms) {
-                    const _aoInt = parseFloat(document.getElementById('setting-ao-intensity')?.value ?? '1.6');
+                    const _aoInt = parseFloat(document.getElementById('setting-ao-intensity')?.value ?? '0.55');
                     this.ssaoPass.uniforms.intensity.value = _aoInt;
                     this.ssaoPass.uniforms.resolution.value.set(
                         this.renderer.domElement.width,
@@ -3922,7 +3921,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 this.updateSelectionPanels();
             },
 
-            getEnvState: function() { return { skybox: document.getElementById('setting-skybox').value, weather: document.getElementById('setting-weather').value, fogColor: document.getElementById('setting-fog-color').value, fogStart: parseFloat(document.getElementById('setting-fog-start').value) || 15, fogEnd: parseFloat(document.getElementById('setting-fog-end').value) || 250, sunAngle: parseFloat(document.getElementById('setting-sun-angle').value) || 180, shadows: document.getElementById('setting-shadows').checked, shadowQuality: parseInt(document.getElementById('setting-shadow-quality')?.value ?? '2', 10), bloom: document.getElementById('setting-bloom').checked, bloomStrength: parseFloat(document.getElementById('setting-bloom-strength')?.value || '1'), cameraSensitivity: parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'), ssao: document.getElementById('setting-ssao').checked, waterWaves: document.getElementById('setting-water-waves') ? document.getElementById('setting-water-waves').checked : true, textureSmoothing: document.getElementById('setting-texture-smoothing') ? document.getElementById('setting-texture-smoothing').checked : false, customSkyboxDataUrl: this.customSkyboxDataUrl || null, customSkyboxName: this.customSkyboxName || null, gridVisible: document.getElementById('setting-grid') ? document.getElementById('setting-grid').checked : true }; },
+            getEnvState: function() { return { skybox: document.getElementById('setting-skybox').value, weather: document.getElementById('setting-weather').value, fogColor: document.getElementById('setting-fog-color').value, fogStart: parseFloat(document.getElementById('setting-fog-start').value) || 15, fogEnd: parseFloat(document.getElementById('setting-fog-end').value) || 250, sunAngle: parseFloat(document.getElementById('setting-sun-angle').value) || 180, shadows: document.getElementById('setting-shadows').checked, shadowQuality: parseInt(document.getElementById('setting-shadow-quality')?.value ?? '2', 10), bloom: document.getElementById('setting-bloom').checked, bloomStrength: parseFloat(document.getElementById('setting-bloom-strength')?.value || '1'), cameraSensitivity: parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'), aoIntensity: parseFloat(document.getElementById('setting-ao-intensity')?.value || '0.55'), ssao: document.getElementById('setting-ssao').checked, waterWaves: document.getElementById('setting-water-waves') ? document.getElementById('setting-water-waves').checked : true, textureSmoothing: document.getElementById('setting-texture-smoothing') ? document.getElementById('setting-texture-smoothing').checked : false, customSkyboxDataUrl: this.customSkyboxDataUrl || null, customSkyboxName: this.customSkyboxName || null, gridVisible: document.getElementById('setting-grid') ? document.getElementById('setting-grid').checked : true }; },
 
             setCustomSkybox: function(dataUrl, fileName = 'Custom Skybox') {
                 this.customSkyboxDataUrl = dataUrl;
@@ -3993,10 +3992,10 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
                 this.weatherType = weather;
                 let uniforms = this.sky.material.uniforms;
-                uniforms['turbidity'].value = 8;
-                uniforms['rayleigh'].value = 1.2;
-                uniforms['mieCoefficient'].value = 0.003;
-                uniforms['mieDirectionalG'].value = 0.75;
+                uniforms['turbidity'].value = 7.0;
+                uniforms['rayleigh'].value = 0.95;
+                uniforms['mieCoefficient'].value = 0.0025;
+                uniforms['mieDirectionalG'].value = 0.72;
 
                 let phi = 0;
                 let theta = THREE.MathUtils.degToRad(sunAngle);
@@ -4005,34 +4004,38 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
                 if (skybox === 'day') {
                     phi = THREE.MathUtils.degToRad(60);
-                    this.dirLight.intensity = 1.2;
-                    this.dirLight.color.setHex(0xfff8ee);
-                    this.ambientLight.intensity = 0.6;
-                    bgColor = '#8bc5eb';
+                    this.dirLight.intensity = 0.86;
+                    this.dirLight.color.setHex(0xfff2dc);
+                    this.ambientLight.intensity = 0.88;
+                    if (this.hemiLight) { this.hemiLight.intensity = 0.42; this.hemiLight.color.setHex(0xe8f4ff); this.hemiLight.groundColor.setHex(0xc7b69c); }
+                    bgColor = '#9fcfec';
                     this.sky.visible = true;
                     if (this.cloudsObj) this.cloudsObj.visible = true;
                 } else if (skybox === 'sunrise') {
                     phi = THREE.MathUtils.degToRad(55);
-                    this.dirLight.intensity = 0.95;
+                    this.dirLight.intensity = 0.72;
                     this.dirLight.color.setHex(0xffc28a);
-                    this.ambientLight.intensity = 0.45;
+                    this.ambientLight.intensity = 0.62;
+                    if (this.hemiLight) { this.hemiLight.intensity = 0.32; this.hemiLight.color.setHex(0xffe4c0); this.hemiLight.groundColor.setHex(0xb89a80); }
                     bgColor = '#ffb17a';
                     this.sky.visible = true;
                     if (this.cloudsObj) this.cloudsObj.visible = true;
                 } else if (skybox === 'dusk') {
                     phi = THREE.MathUtils.degToRad(87);
-                    this.dirLight.intensity = 0.8;
-                    this.dirLight.color.setHex(0xff6633);
-                    this.ambientLight.intensity = 0.35;
+                    this.dirLight.intensity = 0.62;
+                    this.dirLight.color.setHex(0xff7744);
+                    this.ambientLight.intensity = 0.52;
+                    if (this.hemiLight) { this.hemiLight.intensity = 0.25; this.hemiLight.color.setHex(0xffb080); this.hemiLight.groundColor.setHex(0x8f7465); }
                     bgColor = '#df5234';
                     fEnd = Math.min(fEnd, 200);
                     this.sky.visible = true;
                     if (this.cloudsObj) this.cloudsObj.visible = true;
                 } else if (skybox === 'night') {
                     phi = THREE.MathUtils.degToRad(110);
-                    this.dirLight.intensity = 0.1;
+                    this.dirLight.intensity = 0.08;
                     this.dirLight.color.setHex(0x88aaff);
-                    this.ambientLight.intensity = 0.15;
+                    this.ambientLight.intensity = 0.22;
+                    if (this.hemiLight) { this.hemiLight.intensity = 0.10; this.hemiLight.color.setHex(0x9eb8ff); this.hemiLight.groundColor.setHex(0x1d2230); }
                     bgColor = '#050710';
                     fEnd = Math.min(fEnd, 150);
                     this.sky.visible = true;
@@ -4040,9 +4043,10 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     this.setNightSky(true, 0.85);
                 } else if (skybox === 'midnight') {
                     phi = THREE.MathUtils.degToRad(125);
-                    this.dirLight.intensity = 0.05;
+                    this.dirLight.intensity = 0.035;
                     this.dirLight.color.setHex(0x6677ff);
-                    this.ambientLight.intensity = 0.08;
+                    this.ambientLight.intensity = 0.12;
+                    if (this.hemiLight) { this.hemiLight.intensity = 0.06; this.hemiLight.color.setHex(0x7d8cff); this.hemiLight.groundColor.setHex(0x080b14); }
                     bgColor = '#02030a';
                     fEnd = Math.min(fEnd, 120);
                     this.sky.visible = true;
@@ -4050,9 +4054,10 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     this.setNightSky(true, 1.0);
                 } else if (skybox === 'custom' && this.customSkyboxTexture) {
                     bgColor = '#000000';
-                    this.dirLight.intensity = 0.9;
+                    this.dirLight.intensity = 0.78;
                     this.dirLight.color.setHex(0xffffff);
-                    this.ambientLight.intensity = 0.4;
+                    this.ambientLight.intensity = 0.72;
+                    if (this.hemiLight) { this.hemiLight.intensity = 0.30; this.hemiLight.color.setHex(0xffffff); this.hemiLight.groundColor.setHex(0xb0b0b0); }
                     if (this.cloudsObj) this.cloudsObj.visible = false;
                     this.scene.background = this.customSkyboxTexture;
                     this.scene.environment = this.customSkyboxEnvMap || null;
@@ -4259,10 +4264,22 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     }
                 }
 
+                // Save normal maps for current textures
+                const normalMapsToSave = {};
+                for (let key in activeProjectNormalMaps) {
+                    if (activeProjectNormalMaps[key] && activeProjectNormalMaps[key].dataUrl) {
+                        normalMapsToSave[key] = {
+                            name: activeProjectNormalMaps[key].name,
+                            dataUrl: activeProjectNormalMaps[key].dataUrl
+                        };
+                    }
+                }
+
                 await storageManager.saveProjectData(window.appState.currentProjectId, { 
                     blocks: mapBlocks, 
                     env: this.getEnvState(),
-                    projectCustomTextures: localTexturesToSave
+                    projectCustomTextures: localTexturesToSave,
+                    projectNormalMaps: normalMapsToSave
                 });
                 
                 if(wasGrouped) this.buildTransformGroup();
@@ -4299,6 +4316,32 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     uiManager.refreshTextureOptions();
                 }
 
+                // Restore normal maps
+                if (data && data.projectNormalMaps) {
+                    const nmPromises = [];
+                    for (let key in data.projectNormalMaps) {
+                        const nmData = data.projectNormalMaps[key];
+                        nmPromises.push( (async () => {
+                            try {
+                                const img = new Image();
+                                await new Promise(r => { img.onload = r; img.src = nmData.dataUrl; });
+                                const canvas = document.createElement("canvas");
+                                canvas.width = img.width; canvas.height = img.height;
+                                const ctx = canvas.getContext("2d");
+                                ctx.drawImage(img, 0, 0);
+                                const tex = new THREE.CanvasTexture(canvas);
+                                tex.wrapS = THREE.RepeatWrapping;
+                                tex.wrapT = THREE.RepeatWrapping;
+                                tex.colorSpace = THREE.LinearSRGBColorSpace;
+                                tex.minFilter = THREE.LinearMipmapLinearFilter;
+                                tex.magFilter = THREE.LinearFilter;
+                                activeProjectNormalMaps[key] = { texture: tex, name: nmData.name, dataUrl: nmData.dataUrl };
+                            } catch(e) { console.warn("Failed to load normal map", key); }
+                        })() );
+                    }
+                    await Promise.all(nmPromises);
+                }
+
                 if (data && data.blocks) { data.blocks.forEach(bData => { if (bData.type === 'spawn') this.addSpawnPoint(bData); else this.addCube(bData); }); }
                 if (data && data.env) {
                     document.getElementById('setting-skybox').value = data.env.skybox || 'day'; document.getElementById('setting-weather').value = data.env.weather || 'clear';
@@ -4323,6 +4366,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     document.getElementById('setting-camera-sensitivity').value = String(data.env.cameraSensitivity ?? parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1'));
                     document.getElementById('camera-sensitivity-val').innerText = Number(document.getElementById('setting-camera-sensitivity').value).toFixed(2);
                     document.getElementById('setting-ssao').checked = data.env.ssao === true;
+                    if (document.getElementById('setting-ao-intensity')) { document.getElementById('setting-ao-intensity').value = String(data.env.aoIntensity ?? 0.55); if (document.getElementById('ao-intensity-val')) document.getElementById('ao-intensity-val').innerText = Number(document.getElementById('setting-ao-intensity').value).toFixed(2); }
                     if (document.getElementById('setting-water-waves')) document.getElementById('setting-water-waves').checked = data.env.waterWaves !== false;
                     if (document.getElementById('setting-texture-smoothing')) document.getElementById('setting-texture-smoothing').checked = data.env.textureSmoothing === true;
                     if(document.getElementById('setting-grid')) {
@@ -4503,6 +4547,23 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 await this.renderProjectList(); this.loadInterfaceScale();
                 ['pos', 'rot', 'sca'].forEach(type => { ['x', 'y', 'z'].forEach(axis => { document.getElementById(`inp-${type}-${axis}`).addEventListener('input', () => engine.updateObjectFromUI()); document.getElementById(`inp-${type}-${axis}`).addEventListener('change', () => { if(!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); }); });});
                 ['sel-texture', 'sel-material', 'inp-color', 'sel-tiling', 'inp-reflect', 'inp-reflect-blur'].forEach(id => { const el = document.getElementById(id); if (el) { el.addEventListener('input', () => { engine.updateObjectFromUI(); if(!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); }); el.addEventListener('change', () => { engine.updateObjectFromUI(); if(!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); }); } });
+
+// Update normal map label when texture dropdown changes
+const texSel = document.getElementById('sel-texture');
+if (texSel) {
+    texSel.addEventListener('change', () => {
+        const nl = document.getElementById('normal-map-label');
+        if (nl && engine.selectedBlocks && engine.selectedBlocks.length) {
+            const tk = engine.selectedBlocks[0].userData.texture || 'grid';
+            if (activeProjectNormalMaps[tk] && activeProjectNormalMaps[tk].name) {
+                const nmn = activeProjectNormalMaps[tk].name;
+                nl.innerText = nmn.length > 18 ? nmn.substring(0,15) + '...' : nmn;
+            } else {
+                nl.innerText = 'No normal map';
+            }
+        }
+    });
+}
                 const reflect = document.getElementById('inp-reflect'); if (reflect) reflect.addEventListener('input', () => { const el = document.getElementById('reflect-val'); if (el) el.innerText = reflect.value; });
                 const blur = document.getElementById('inp-reflect-blur'); if (blur) blur.addEventListener('input', () => { const el = document.getElementById('blur-val'); if (el) el.innerText = blur.value; });
                 const bloomStrength = document.getElementById('setting-bloom-strength'); if (bloomStrength) bloomStrength.addEventListener('input', () => { const el = document.getElementById('bloom-strength-val'); if (el) el.innerText = Number(bloomStrength.value).toFixed(2); engine.updateGraphics(); });
@@ -4744,6 +4805,150 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
             },
             
             importSkybox: function(event) { const file = event.target.files && event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { const dataUrl = e.target.result; const fileName = file.name; const label = document.getElementById('skybox-file-name'); if (label) label.innerText = fileName; const skySel = document.getElementById('setting-skybox'); if (skySel) skySel.value = 'custom'; engine.setCustomSkybox(dataUrl, fileName); engine.updateEnvironment(); if(!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); event.target.value = ''; }; reader.readAsDataURL(file); },
+            selectNormalMap: function() {
+                if (!engine.selectedBlocks.length || engine.selectedBlocks.includes(engine.spawnPointObj)) {
+                    alert("Select a cube first to apply a Normal Map");
+                    return;
+                }
+                const input = document.getElementById("file-normal-map");
+                if (input) input.click();
+            },
+            importNormalMap: function(event) {
+                const file = event.target.files && event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const dataUrl = e.target.result;
+                    const texName = file.name;
+                    
+                    // Apply to currently selected texture
+                    if (!engine.selectedBlocks.length) {
+                        alert("Select a cube with texture first.");
+                        event.target.value = "";
+                        return;
+                    }
+                    
+                    const firstObj = engine.selectedBlocks[0];
+                    const texKey = firstObj.userData.texture || "grid";
+                    
+                    this.applyNormalMapToTexture(texKey, texName, dataUrl);
+                    
+                    // Update label
+                    const labelEl = document.getElementById("normal-map-label");
+                    if (labelEl) labelEl.innerText = texName.length > 18 ? texName.substring(0,15)+"..." : texName;
+                    
+                    event.target.value = "";
+                };
+                reader.readAsDataURL(file);
+            },
+            
+            applyNormalMapToTexture: function(textureKey, normalName, dataUrl) {
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement("canvas");
+                        canvas.width = img.width; canvas.height = img.height;
+                        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+                        ctx.drawImage(img, 0, 0);
+                        
+                        const tex = new THREE.CanvasTexture(canvas);
+                        tex.wrapS = THREE.RepeatWrapping;
+                        tex.wrapT = THREE.RepeatWrapping;
+                        tex.colorSpace = THREE.LinearSRGBColorSpace; // Normal maps are linear
+                        tex.minFilter = THREE.LinearMipmapLinearFilter;
+                        tex.magFilter = THREE.LinearFilter;
+                        tex.generateMipmaps = true;
+                        tex.needsUpdate = true;
+                        
+                        activeProjectNormalMaps[textureKey] = {
+                            texture: tex,
+                            name: normalName,
+                            dataUrl: dataUrl
+                        };
+                        
+                        // Rebuild all materials using this texture key (PROFESSIONAL)
+                        // This applies normal map to ALL cubes that share the same texture
+                        engine.blocks.forEach(obj => {
+                            if (obj.userData.texture === textureKey) {
+                                try {
+                                    const oldMat = obj.material;
+                                    const newMat = createMaterial(
+                                        textureKey, 
+                                        obj.userData.materialType || "Concrete", 
+                                        obj.userData.colorHex || "#ffffff",
+                                        { 
+                                            reflectivity: obj.userData.skyboxReflectivity, 
+                                            reflectBlur: obj.userData.skyboxBlur 
+                                        }
+                                    );
+                                    obj.material = newMat;
+                                    if (oldMat) {
+                                        try { oldMat.dispose(); } catch(e){}
+                                    }
+                                } catch(e) { console.warn("Normal map material update error", e); }
+                            }
+                        });
+                        
+                        // Refresh UI for selected
+                        if (engine.selectedBlocks.length) {
+                            engine.updateUIFromObject();
+                        }
+                        
+                        // Force full re-render
+                        if (engine.scene) {
+                            engine.syncAllObjectMaterials(true);
+                        }
+                        
+                        resolve();
+                    };
+                    img.onerror = () => resolve();
+                    img.src = dataUrl;
+                });
+            },
+            
+            clearNormalMap: function() {
+                if (!engine.selectedBlocks.length) {
+                    // Clear all
+                    activeProjectNormalMaps = {};
+                    engine.syncAllObjectMaterials(true);
+                    const label = document.getElementById("normal-map-label");
+                    if (label) label.innerText = "No normal map";
+                    return;
+                }
+                
+                const first = engine.selectedBlocks[0];
+                const texKey = first.userData.texture || "grid";
+                
+                if (activeProjectNormalMaps[texKey]) {
+                    const nm = activeProjectNormalMaps[texKey];
+                    if (nm.texture) {
+                        try { nm.texture.dispose(); } catch(e){}
+                    }
+                    delete activeProjectNormalMaps[texKey];
+                }
+                
+                // Rebuild materials for all cubes sharing the texture
+                engine.blocks.forEach(obj => {
+                    if (obj.userData.texture === texKey) {
+                        try {
+                            const old = obj.material;
+                            obj.material = createMaterial(
+                                texKey, 
+                                obj.userData.materialType || "Concrete", 
+                                obj.userData.colorHex || "#ffffff",
+                                { reflectivity: obj.userData.skyboxReflectivity, reflectBlur: obj.userData.skyboxBlur }
+                            );
+                            if (old) try { old.dispose(); } catch(e){}
+                        } catch(e){}
+                    }
+                });
+                
+                engine.syncAllObjectMaterials(true);
+                
+                const label = document.getElementById("normal-map-label");
+                if (label) label.innerText = "No normal map";
+            },
+
             
             addTextureToEngine: function(matKey, texName, dataUrl, autoSelect, persist = true) {
                 return new Promise((resolve, reject) => {
