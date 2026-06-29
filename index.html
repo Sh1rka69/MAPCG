@@ -1348,30 +1348,101 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             const tex = new THREE.CanvasTexture(canvas); tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace; return tex;
         }
         function createWaterTexture() {
-            const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
+            // Procedural GBWater albedo: deep teal volume + bright silver-blue moving-looking wave streaks.
+            // The real motion/refraction is done in the PBR shader below; this texture gives the cube
+            // a GoreBox-like "photographic water" base even before the shader starts animating.
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
             const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, 256, 256);
-            // Базовый полупрозрачный тёмно-синий цвет воды (GBWater)
-            ctx.fillStyle = 'rgba(7, 28, 56, 0.80)';
-            ctx.fillRect(0, 0, 256, 256);
-            // Лёгкий вертикальный градиент для ощущения глубины
-            const grad = ctx.createLinearGradient(0, 0, 0, 256);
-            grad.addColorStop(0, 'rgba(22, 74, 120, 0.30)');
-            grad.addColorStop(0.55, 'rgba(10, 42, 78, 0.12)');
-            grad.addColorStop(1, 'rgba(3, 14, 32, 0.40)');
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, 256, 256);
-            for (let y = 0; y < 256; y += 18) {
-                ctx.strokeStyle = `rgba(150, 210, 255, ${0.04 + Math.random() * 0.08})`;
-                ctx.lineWidth = 2;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const base = ctx.createLinearGradient(0, 0, 0, 512);
+            base.addColorStop(0.00, 'rgba(76, 185, 218, 0.84)');
+            base.addColorStop(0.35, 'rgba(26, 118, 158, 0.78)');
+            base.addColorStop(0.72, 'rgba(10, 63, 93, 0.82)');
+            base.addColorStop(1.00, 'rgba(3, 25, 44, 0.90)');
+            ctx.fillStyle = base;
+            ctx.fillRect(0, 0, 512, 512);
+
+            // Broad soft shadows/depth patches.
+            for (let i = 0; i < 34; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const r = 45 + Math.random() * 110;
+                const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+                g.addColorStop(0, `rgba(3, 20, 38, ${0.06 + Math.random() * 0.10})`);
+                g.addColorStop(1, 'rgba(3, 20, 38, 0)');
+                ctx.fillStyle = g;
                 ctx.beginPath();
-                for (let x = 0; x <= 256; x += 16) {
-                    const yy = y + Math.sin((x * 0.03) + y * 0.08) * 4 + Math.cos((x * 0.06) - y * 0.04) * 2;
-                    if (x === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Curved wave bands and silvery highlights.
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            for (let layer = 0; layer < 4; layer++) {
+                const step = [22, 30, 42, 58][layer];
+                const amp = [5.5, 8.0, 12.0, 17.0][layer];
+                const alpha = [0.18, 0.12, 0.085, 0.055][layer];
+                ctx.lineWidth = [1.25, 1.7, 2.4, 3.2][layer];
+                for (let y = -80; y < 590; y += step) {
+                    const offset = Math.random() * Math.PI * 2;
+                    const grad = ctx.createLinearGradient(0, y, 512, y + 32);
+                    grad.addColorStop(0.00, `rgba(210, 245, 255, 0)`);
+                    grad.addColorStop(0.20, `rgba(215, 247, 255, ${alpha * 0.55})`);
+                    grad.addColorStop(0.52, `rgba(255, 255, 255, ${alpha})`);
+                    grad.addColorStop(0.78, `rgba(114, 215, 244, ${alpha * 0.50})`);
+                    grad.addColorStop(1.00, `rgba(210, 245, 255, 0)`);
+                    ctx.strokeStyle = grad;
+                    ctx.beginPath();
+                    for (let x = -8; x <= 520; x += 8) {
+                        const yy = y
+                            + Math.sin(x * (0.018 + layer * 0.006) + offset) * amp
+                            + Math.cos(x * (0.041 + layer * 0.004) - offset * 0.7) * amp * 0.33;
+                        if (x === -8) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+                    }
+                    ctx.stroke();
                 }
+            }
+
+            // Tiny sparkling foam/glint flecks.
+            for (let i = 0; i < 360; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const len = 2 + Math.random() * 14;
+                const a = Math.random() * Math.PI;
+                ctx.globalAlpha = 0.08 + Math.random() * 0.22;
+                ctx.strokeStyle = Math.random() > 0.72 ? '#ffffff' : '#bff3ff';
+                ctx.lineWidth = Math.random() > 0.75 ? 1.3 : 0.75;
+                ctx.beginPath();
+                ctx.moveTo(x - Math.cos(a) * len * 0.5, y - Math.sin(a) * len * 0.5);
+                ctx.lineTo(x + Math.cos(a) * len * 0.5, y + Math.sin(a) * len * 0.5);
                 ctx.stroke();
             }
-            const tex = new THREE.CanvasTexture(canvas); tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace; tex.userData = { hasAlpha: true }; return tex;
+            ctx.globalAlpha = 1;
+
+            // A little transparent crest pattern. Alpha is intentionally not fully opaque so the
+            // physical material can show refraction/transmission through the volume.
+            const alphaGrad = ctx.createLinearGradient(0, 0, 0, 512);
+            alphaGrad.addColorStop(0, 'rgba(255,255,255,0.06)');
+            alphaGrad.addColorStop(0.5, 'rgba(255,255,255,0.00)');
+            alphaGrad.addColorStop(1, 'rgba(255,255,255,0.10)');
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = alphaGrad;
+            ctx.fillRect(0, 0, 512, 512);
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.magFilter = THREE.LinearFilter;
+            tex.minFilter = THREE.LinearMipmapLinearFilter;
+            tex.anisotropy = 8;
+            tex.generateMipmaps = true;
+            tex.userData = { hasAlpha: true, isProceduralWater: true };
+            return tex;
         }
 
         // --- Глобальная база базовых встроенных текстур ---
@@ -1504,6 +1575,31 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
         const weatherUniforms = { uTime: { value: 0 }, uWeatherType: { value: 0 }, uWeatherIntensity: { value: 0 } };
         const waterUniforms = { uWavesEnabled: { value: 1.0 } };
 
+        function isWaterLike(textureId, matType) {
+            return matType === 'Water' || textureId === 'GBWater';
+        }
+
+        function createBlockGeometry(textureId = 'grid', matType = 'Concrete') {
+            const water = isWaterLike(textureId, matType);
+            // Water receives a dense top mesh so vertex waves are real geometry, not only a flat texture.
+            // Side faces are also lightly segmented so the top edge moves without visual cracks.
+            const geo = water ? new THREE.BoxGeometry(1, 1, 1, 32, 6, 32) : new THREE.BoxGeometry(1, 1, 1);
+            geo.userData = geo.userData || {};
+            geo.userData.isWaterGeometry = water;
+            return geo;
+        }
+
+        function ensureBlockGeometryMatchesMaterial(mesh) {
+            if (!mesh || !mesh.geometry || !mesh.userData || mesh.userData.type !== 'cube') return false;
+            const water = isWaterLike(mesh.userData.texture, mesh.userData.materialType);
+            const already = !!mesh.geometry.userData?.isWaterGeometry;
+            if (already === water) return false;
+            const old = mesh.geometry;
+            mesh.geometry = createBlockGeometry(mesh.userData.texture, mesh.userData.materialType);
+            try { old.dispose(); } catch(e) {}
+            return true;
+        }
+
         const BUILTIN_TEXTURE_KEYS = new Set(['grid', 'plain', 'dark', 'grass', 'dirt', 'sand', 'snow', 'wood', 'metal', 'carpet', 'GBWater']);
 
         const ALL_DEFAULT_TEXTURE_KEYS = [
@@ -1519,7 +1615,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             Snow: { roughness: 0.82, metalness: 0.0, envMapIntensity: 0.35 },
             Wood: { roughness: 0.88, metalness: 0.0, envMapIntensity: 0.14 },
             Carpet: { roughness: 1.0, metalness: 0.0, envMapIntensity: 0.02 },
-            Water: { roughness: 0.05, metalness: 0.0, envMapIntensity: 1.7, transparent: true, opacity: 0.78 }
+            Water: { roughness: 0.018, metalness: 0.0, envMapIntensity: 2.65, transparent: true, opacity: 0.70 }
         };
         const GOREBOX_FALLBACK_MATERIAL_NAMES = { Concrete: 'Wall', Wood: 'Wood Plank', Metal: 'Tile Bottom', Grass: 'Dirt', Carpet: 'Fabric', Dirt: 'Dirt', Sand: 'Sand', Snow: 'Snow', Water: 'Water' };
         const GOREBOX_FALLBACK_TAGS = { Concrete: 'Concrete', Wood: 'Wood', Metal: 'Metal', Grass: 'Grass', Carpet: 'Carpet', Dirt: 'Grass', Sand: 'Grass', Snow: 'Grass', Water: 'Water' };
@@ -1527,7 +1623,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
         function normalizeTextureKey(name) { return String(name || 'texture').replace(/\\/g, '/').split('/').pop().replace(/\.[^.]+$/, '').trim() || 'texture'; }
         function getFallbackGoreBoxMaterialName(materialType) { return GOREBOX_FALLBACK_MATERIAL_NAMES[materialType] || GOREBOX_FALLBACK_MATERIAL_NAMES.Concrete; }
         function getFallbackGoreBoxTag(materialType) { return GOREBOX_FALLBACK_TAGS[materialType] || GOREBOX_FALLBACK_TAGS.Concrete; }
-        function mapGoreBoxTagToMaterialType(tag) { if (tag === 'Wood') return 'Wood'; if (tag === 'Metal') return 'Metal'; if (tag === 'Grass' || tag === 'Dirt' || tag === 'Sand') return 'Grass'; if (tag === 'Carpet') return 'Carpet'; return 'Concrete'; }
+        function mapGoreBoxTagToMaterialType(tag) { if (tag === 'Water' || tag === 'GBWater') return 'Water'; if (tag === 'Wood') return 'Wood'; if (tag === 'Metal') return 'Metal'; if (tag === 'Grass' || tag === 'Dirt' || tag === 'Sand') return 'Grass'; if (tag === 'Carpet') return 'Carpet'; return 'Concrete'; }
         function mapTileModeToTiling(tileMode) { return tileMode === 0 ? 'xy' : tileMode === 1 ? 'yx' : 'stretch'; }
         function blobToDataURL(blob) {
             return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(reader.error); reader.readAsDataURL(blob); });
@@ -1584,7 +1680,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             const texture = getActiveTexture(textureId);
             const preset = MATERIAL_PRESETS[matType] || MATERIAL_PRESETS.Concrete;
             const pbrEnabled = true; // PBR теперь включен всегда для красоты
-            const isWater = matType === 'Water' || textureId === 'GBWater';
+            const isWater = isWaterLike(textureId, matType);
             const isMetal = matType === 'Metal' || textureId === 'metal';
             const isGlass = textureId === 'glass';
             const isPlasma = textureId === 'plasma';
@@ -1592,12 +1688,13 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             const reflectivity = extra.reflectivity !== undefined ? extra.reflectivity : (isGlass ? 2.0 : (isMetal || isWater ? preset.envMapIntensity : Math.min(preset.envMapIntensity, 0.12)));
             const reflectBlur = extra.reflectBlur !== undefined ? extra.reflectBlur : (isGlass ? 0.05 : preset.roughness);
             const hasAlpha = !!(texture && texture.userData && texture.userData.hasAlpha) || isGlass;
+            const baseColor = new THREE.Color(colorHex || 0xffffff);
 
             const props = {
                 map: texture,
-                color: new THREE.Color(colorHex || 0xffffff),
+                color: baseColor,
                 roughness: Math.min(1, Math.max(0.02, reflectBlur)),
-                metalness: isMetal ? 0.85 : (isWater || isGlass ? 0.1 : preset.metalness || 0.0),
+                metalness: isMetal ? 0.85 : (isWater || isGlass ? 0.0 : preset.metalness || 0.0),
                 envMapIntensity: reflectivity,
                 envMap: (isWater && window.engine?.localReflectionTexture) || window.engine?.getActiveEnvironmentMap?.() || null
             };
@@ -1609,23 +1706,32 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
 
             if (hasAlpha || isWater || preset.transparent || isGlass) {
                 props.transparent = true;
-                props.opacity = isGlass ? 0.5 : (isWater ? (preset.opacity ?? 0.8) : 1.0);
-                props.alphaTest = hasAlpha && !isGlass ? 0.02 : 0.0;
+                props.opacity = isGlass ? 0.5 : (isWater ? (preset.opacity ?? 0.7) : 1.0);
+                props.alphaTest = hasAlpha && !isGlass && !isWater ? 0.02 : 0.0;
                 props.depthWrite = false;
             }
 
             let mat;
             if (isWater || pbrEnabled) {
                 if (isWater) {
-                    props.roughness = Math.min(0.09, Math.max(0.02, reflectBlur * 0.22));
-                    props.metalness = 0.02;
-                    props.transmission = 0.97;
-                    props.thickness = 0.72;
-                    props.ior = 1.33;
+                    // Physically plausible water: low roughness, IOR 1.333, transmission/refraction,
+                    // absorption through depth, high skybox reflection and a glossy clearcoat layer.
+                    props.roughness = Math.min(0.045, Math.max(0.006, reflectBlur * 0.10));
+                    props.metalness = 0.0;
+                    props.transmission = 0.88;
+                    props.thickness = 1.18;
+                    props.ior = 1.333;
+                    props.attenuationColor = new THREE.Color(0x0a6f91);
+                    props.attenuationDistance = 3.4;
                     props.clearcoat = 1.0;
-                    props.clearcoatRoughness = 0.02;
-                    props.opacity = 0.82;
-                    props.envMapIntensity = 2.45;
+                    props.clearcoatRoughness = 0.018;
+                    props.specularIntensity = 1.0;
+                    props.specularColor = new THREE.Color(0xd8f8ff);
+                    props.reflectivity = 0.82;
+                    props.opacity = 0.68;
+                    props.envMapIntensity = Math.max(2.35, reflectivity || 0);
+                    props.depthWrite = false;
+                    props.premultipliedAlpha = false;
                 } else {
                     props.clearcoat = isMetal ? 0.2 : 0.05;
                     props.clearcoatRoughness = isMetal ? 0.16 : 0.35;
@@ -1635,6 +1741,12 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                 mat = new THREE.MeshStandardMaterial(props);
             }
 
+            if (isWater) {
+                mat.side = THREE.DoubleSide;
+                mat.transparent = true;
+                mat.depthWrite = false;
+            }
+
             mat.userData = { isWater, hasAlpha, reflectivity, reflectBlur, pbrMode: pbrEnabled, textureId, materialType: matType, colorHex };
 
             mat.onBeforeCompile = (shader) => {
@@ -1642,56 +1754,107 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                 shader.uniforms.uWeatherType = weatherUniforms.uWeatherType;
                 shader.uniforms.uWeatherIntensity = weatherUniforms.uWeatherIntensity;
                 shader.uniforms.uWaterWavesEnabled = waterUniforms.uWavesEnabled;
-                shader.fragmentShader = `uniform float uTime; uniform float uWeatherType; uniform float uWeatherIntensity; uniform float uWaterWavesEnabled; varying vec3 vCustomWorldPos;
-${shader.fragmentShader}`;
 
                 if (isWater) {
+                    shader.vertexShader = `uniform float uTime; uniform float uWaterWavesEnabled; varying vec3 vCustomWorldPos; varying float vWaterTopFace; varying float vWaterWaveHeight;
+${shader.vertexShader}`;
+                    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+float waterTopFace = smoothstep(0.36, 0.96, normal.y) * smoothstep(0.42, 0.50, position.y);
+float waterSideTop = (1.0 - smoothstep(0.18, 0.92, abs(normal.y))) * smoothstep(0.36, 0.50, position.y) * 0.22;
+vWaterTopFace = clamp(waterTopFace, 0.0, 1.0);
+vec2 waterWorldForWave = (modelMatrix * vec4(position, 1.0)).xz;
+float waterTime = uTime;
+float waterWaveHeight =
+    sin(waterWorldForWave.x * 1.35 + waterTime * 0.72) * 0.020 +
+    cos(waterWorldForWave.y * 1.18 - waterTime * 0.56) * 0.017 +
+    sin((waterWorldForWave.x + waterWorldForWave.y) * 2.15 + waterTime * 1.06) * 0.010 +
+    cos((waterWorldForWave.x - waterWorldForWave.y) * 3.55 - waterTime * 1.42) * 0.006;
+vWaterWaveHeight = waterWaveHeight * vWaterTopFace;
+if (uWaterWavesEnabled > 0.5) {
+    transformed.y += waterWaveHeight * (vWaterTopFace + waterSideTop);
+}`);
+                    shader.vertexShader = shader.vertexShader.replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
+vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
+
+                    shader.fragmentShader = `uniform float uTime; uniform float uWeatherType; uniform float uWeatherIntensity; uniform float uWaterWavesEnabled; varying vec3 vCustomWorldPos; varying float vWaterTopFace; varying float vWaterWaveHeight;
+float waterHash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+float waterNoise(vec2 p){ vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f); float a=waterHash(i); float b=waterHash(i+vec2(1.0,0.0)); float c=waterHash(i+vec2(0.0,1.0)); float d=waterHash(i+vec2(1.0,1.0)); return mix(mix(a,b,f.x), mix(c,d,f.x), f.y); }
+${shader.fragmentShader}`;
+
                     shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
-float waterMask = smoothstep(0.72, 1.0, vNormal.y);
-float t = uTime * 0.72;  // SLOWER, more natural movement
-vec2 uv = vCustomWorldPos.xz * 0.22;
+float waterTop = clamp(vWaterTopFace, 0.0, 1.0);
+float waterT = uTime;
+vec2 waterP = vCustomWorldPos.xz;
+vec2 waterUV = waterP * 0.22;
 
-/* Professional multi-octave waves - slower & more realistic */
-float w1 = sin(uv.x*2.4 + t*0.65) * cos(uv.y*2.1 - t*0.55) * 0.042;
-float w2 = cos(uv.x*3.8 - t*0.95) * sin(uv.y*3.5 + t*0.8) * 0.031;
-float w3 = sin(uv.x*6.5 + t*1.55) * cos(uv.y*6.1 - t*1.35) * 0.019;
-float w4 = sin(uv.x*11.2 + t*2.4) * cos(uv.y*10.7 - t*2.15) * 0.011;
-float wave = w1 + w2 + w3 + w4;
+float swell = sin(waterUV.x * 2.15 + waterT * 0.48) * cos(waterUV.y * 1.85 - waterT * 0.42) * 0.040;
+float crossWave = cos(waterUV.x * 4.10 - waterT * 0.92) * sin(waterUV.y * 3.75 + waterT * 0.78) * 0.025;
+float ripple = sin((waterUV.x + waterUV.y) * 8.40 + waterT * 1.55) * 0.012;
+float micro = cos((waterUV.x - waterUV.y) * 15.20 - waterT * 2.10) * 0.006;
+float wave = swell + crossWave + ripple + micro + vWaterWaveHeight * 1.25;
 
-/* Stronger procedural caustics */
-float caust = pow(sin(uv.x*19.0 + t*2.1) * sin(uv.y*18.5 - t*1.9), 4.5) * 0.85;
+float n1 = waterNoise(waterP * 1.65 + vec2(waterT * 0.070, -waterT * 0.045));
+float n2 = waterNoise(waterP * 5.20 - vec2(waterT * 0.115, waterT * 0.085));
+float causticShape = abs(sin((waterP.x + waterP.y) * 7.8 + waterT * 1.18) * sin((waterP.x - waterP.y) * 9.6 - waterT * 1.07));
+float caustics = pow(causticShape, 7.5) * (0.38 + 0.62 * n2) * waterTop;
+float crest = smoothstep(0.026, 0.083, abs(wave)) * smoothstep(0.54, 1.0, n1) * waterTop;
 
-/* Edge foam (white) */
-float edgeFoam = smoothstep(0.78, 0.995, sin(uv.x*4.8 + t*1.3) * 0.5 + 0.5) * 0.42;
+float rainRipple = 0.0;
+if (uWeatherType > 0.5 && uWeatherType < 1.5 && uWeatherIntensity > 0.0) {
+    vec2 rainGrid = floor(waterP * 2.7);
+    vec2 rainLocal = fract(waterP * 2.7) - 0.5;
+    float rainRnd = waterHash(rainGrid);
+    float rainAge = fract(waterT * 1.75 + rainRnd);
+    float ring = smoothstep(0.030, 0.010, abs(length(rainLocal) - rainAge * 0.45));
+    rainRipple = ring * exp(-rainAge * 3.5) * uWeatherIntensity * waterTop;
+}
 
-/* Beautiful realistic water colors (matching reference) */
-diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.04, 0.32, 0.52), wave * 2.35);
-diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.02, 0.15, 0.28), 0.18);
-diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.97, 1.0), caust * 0.65);
-diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), edgeFoam);
+vec3 deepWater = vec3(0.012, 0.115, 0.185);
+vec3 midWater = vec3(0.030, 0.325, 0.455);
+vec3 shallowWater = vec3(0.150, 0.650, 0.760);
+float depthShade = clamp(0.48 + wave * 4.2 + n1 * 0.26 + waterTop * 0.15, 0.0, 1.0);
+vec3 waterColor = mix(deepWater, midWater, depthShade);
+waterColor = mix(waterColor, shallowWater, clamp(caustics * 0.55 + crest * 0.18, 0.0, 0.75));
+waterColor += vec3(0.85, 0.98, 1.0) * caustics * 0.62;
+waterColor += vec3(1.0, 1.0, 1.0) * (crest * 0.24 + rainRipple * 0.20);
 
-/* Strong specular highlights */
-float spec = pow(max(0.0, sin(uv.x*5.8 + t*2.4) * cos(uv.y*5.5 - t*2.1)), 13.0) * 1.25;
-diffuseColor.rgb += vec3(0.95, 0.98, 1.0) * spec * 1.8;
+float viewFacing = clamp(abs(dot(normalize(vNormal), normalize(vViewPosition + vec3(0.0001)))), 0.0, 1.0);
+float fresnel = pow(1.0 - viewFacing, 3.15);
+waterColor += vec3(0.52, 0.78, 1.0) * fresnel * (0.18 + waterTop * 0.18);
 
-diffuseColor.a *= 0.88;`);
-                    // Искажение отражений скайбокса волнами (можно включить/выключить в настройках графики)
+// Mix with the procedural GBWater bitmap, preserving small photographed streaks while the shader provides depth.
+diffuseColor.rgb = mix(diffuseColor.rgb, waterColor, 0.88);
+diffuseColor.a = clamp(mix(0.56, 0.70, waterTop) + fresnel * 0.13, 0.46, 0.82);`);
+
+                    // Wave normals distort the physically based skybox reflection and the transmitted background.
                     shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 if (uWaterWavesEnabled > 0.5) {
-    float waveNx = sin(vCustomWorldPos.x * 2.2 + uTime * 0.9) * 0.16 + cos(vCustomWorldPos.z * 1.7 - uTime * 0.6) * 0.12;
-    float waveNz = cos(vCustomWorldPos.x * 1.9 - uTime * 0.7) * 0.14 + sin(vCustomWorldPos.z * 2.4 + uTime * 0.5) * 0.10;
-    normal = normalize(normal + vec3(waveNx, 0.0, waveNz));
+    float waterTopN = clamp(vWaterTopFace, 0.0, 1.0);
+    vec2 nP = vCustomWorldPos.xz;
+    float nT = uTime;
+    float dHx =
+        cos(nP.x * 1.35 + nT * 0.72) * 0.105 +
+        cos((nP.x + nP.y) * 2.15 + nT * 1.06) * 0.050 +
+        cos((nP.x - nP.y) * 3.55 - nT * 1.42) * 0.030;
+    float dHz =
+        -sin(nP.y * 1.18 - nT * 0.56) * 0.085 +
+        cos((nP.x + nP.y) * 2.15 + nT * 1.06) * 0.050 -
+        cos((nP.x - nP.y) * 3.55 - nT * 1.42) * 0.030;
+    vec3 waveNormalWorld = normalize(vec3(-dHx, 1.0, -dHz));
+    vec3 waveNormalView = normalize((viewMatrix * vec4(waveNormalWorld, 0.0)).xyz);
+    normal = normalize(mix(normal, waveNormalView, waterTopN * 0.86));
 }`);
                 } else {
+                    shader.fragmentShader = `uniform float uTime; uniform float uWeatherType; uniform float uWeatherIntensity; uniform float uWaterWavesEnabled; varying vec3 vCustomWorldPos;
+${shader.fragmentShader}`;
                     shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
 if(uWeatherType==2.0&&uWeatherIntensity>0.0){float isTop=smoothstep(0.8,1.0,vNormal.y);vec3 snowColor=vec3(0.9,0.95,1.0);float snowCoverage=isTop*clamp(uWeatherIntensity,0.0,1.0);diffuseColor.rgb=mix(diffuseColor.rgb,snowColor,snowCoverage);}`);
                     shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 if((uWeatherType==1.0||uWeatherType==3.0)&&uWeatherIntensity>0.0){float isTop=smoothstep(0.7,1.0,vNormal.y);vec2 grid=floor(vCustomWorldPos.xz*3.0);vec2 uvPos=fract(vCustomWorldPos.xz*3.0)-0.5;float dropNoise=fract(sin(dot(grid,vec2(12.9898,78.233)))*43758.5453);float dropTime=fract(uTime*2.0+dropNoise);float ring=smoothstep(0.0,0.05,length(uvPos)-dropTime*0.4)-smoothstep(0.05,0.15,length(uvPos)-dropTime*0.4);float rippleEffect=ring*exp(-dropTime*5.0);float wetness=isTop*uWeatherIntensity;roughnessFactor=mix(roughnessFactor,clamp(0.05-rippleEffect*0.2,0.0,1.0),wetness);}`);
-                }
-
-                shader.vertexShader = `varying vec3 vCustomWorldPos;
+                    shader.vertexShader = `varying vec3 vCustomWorldPos;
 ${shader.vertexShader}`.replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
 vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
+                }
             };
             mat.needsUpdate = true;
             return mat;
@@ -1718,93 +1881,188 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             mobileJoystick: { active: false, pointerId: null, x: 0, y: 0 },
             
 
-            // === WATER EDGE FOAM PARTICLES ===
+            // === REALISTIC WATER CONTACT FOAM PARTICLES ===
             waterFoamParticles: [],
-            foamParticleGeometry: null,
-            foamParticleMaterial: null,
+            foamSpriteTexture: null,
+            foamBaseMaterial: null,
+            foamEmitAccumulator: 0,
+            foamMaxParticles: 360,
+            foamAABBWater: new THREE.Box3(),
+            foamAABBOther: new THREE.Box3(),
 
-            createWaterFoamParticles: function(waterMesh) {
-                if (!waterMesh || !waterMesh.userData.texture === 'GBWater') return;
-                
-                const pos = waterMesh.position;
-                const size = 1.0;
-                
-                // Create foam along the 4 edges
-                const edges = [
-                    {x: pos.x - size/2, z: pos.z, dir: 'x'},
-                    {x: pos.x + size/2, z: pos.z, dir: 'x'},
-                    {x: pos.x, z: pos.z - size/2, dir: 'z'},
-                    {x: pos.x, z: pos.z + size/2, dir: 'z'}
-                ];
-                
-                for (let edge of edges) {
-                    const count = 8;
-                    for (let i = 0; i < count; i++) {
-                        const particle = this.createFoamParticle(edge, pos.y + 0.51);
-                        if (particle) this.waterFoamParticles.push(particle);
+            isWaterBlock: function(obj) {
+                return !!(obj && obj.userData && obj.userData.type === 'cube' && obj.userData.visible !== false && isWaterLike(obj.userData.texture, obj.userData.materialType));
+            },
+
+            ensureFoamResources: function() {
+                if (this.foamSpriteTexture && this.foamBaseMaterial) return;
+                const canvas = document.createElement('canvas');
+                canvas.width = 96;
+                canvas.height = 96;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, 96, 96);
+                const g = ctx.createRadialGradient(48, 48, 2, 48, 48, 48);
+                g.addColorStop(0.00, 'rgba(255,255,255,0.95)');
+                g.addColorStop(0.32, 'rgba(245,252,255,0.70)');
+                g.addColorStop(0.62, 'rgba(215,242,255,0.28)');
+                g.addColorStop(1.00, 'rgba(255,255,255,0.0)');
+                ctx.fillStyle = g;
+                ctx.beginPath();
+                ctx.arc(48, 48, 48, 0, Math.PI * 2);
+                ctx.fill();
+                // A few tiny bubbles inside the sprite so every particle looks like broken foam.
+                for (let i = 0; i < 9; i++) {
+                    const x = 24 + Math.random() * 48;
+                    const y = 24 + Math.random() * 48;
+                    const r = 2 + Math.random() * 6;
+                    ctx.fillStyle = `rgba(255,255,255,${0.22 + Math.random() * 0.34})`;
+                    ctx.beginPath();
+                    ctx.arc(x, y, r, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                this.foamSpriteTexture = new THREE.CanvasTexture(canvas);
+                this.foamSpriteTexture.colorSpace = THREE.SRGBColorSpace;
+                this.foamSpriteTexture.needsUpdate = true;
+                this.foamBaseMaterial = new THREE.SpriteMaterial({
+                    map: this.foamSpriteTexture,
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.78,
+                    depthWrite: false,
+                    depthTest: true,
+                    blending: THREE.AdditiveBlending
+                });
+            },
+
+            createFoamParticle: function(position, outward = new THREE.Vector3(0, 0, 1), strength = 1.0) {
+                if (!this.scene) return null;
+                this.ensureFoamResources();
+                if (this.waterFoamParticles.length >= this.foamMaxParticles) {
+                    const old = this.waterFoamParticles.shift();
+                    if (old) {
+                        this.scene.remove(old);
+                        if (old.material) old.material.dispose();
+                    }
+                }
+                const p = new THREE.Sprite(this.foamBaseMaterial.clone());
+                const size = (0.045 + Math.random() * 0.075) * Math.max(0.65, strength);
+                p.scale.set(size * (1.2 + Math.random() * 0.9), size * (0.65 + Math.random() * 0.8), 1);
+                const tangentJitter = new THREE.Vector3(-outward.z, 0, outward.x).normalize().multiplyScalar((Math.random() - 0.5) * 0.045);
+                p.position.copy(position)
+                    .addScaledVector(outward, 0.012 + Math.random() * 0.035)
+                    .add(tangentJitter);
+                p.userData = {
+                    life: 0.58 + Math.random() * 0.72,
+                    maxLife: 0.58 + Math.random() * 0.72,
+                    velocity: outward.clone().multiplyScalar(0.035 + Math.random() * 0.085).add(new THREE.Vector3(0, 0.025 + Math.random() * 0.055, 0)),
+                    spin: (Math.random() - 0.5) * 3.5,
+                    baseOpacity: 0.42 + Math.random() * 0.36
+                };
+                p.userData.maxLife = p.userData.life;
+                p.renderOrder = 4;
+                this.scene.add(p);
+                this.waterFoamParticles.push(p);
+                return p;
+            },
+
+            updateWaterFoamParticles: function(dt) {
+                for (let i = this.waterFoamParticles.length - 1; i >= 0; i--) {
+                    const p = this.waterFoamParticles[i];
+                    if (!p || !p.userData) { this.waterFoamParticles.splice(i, 1); continue; }
+                    p.userData.life -= dt;
+                    p.position.addScaledVector(p.userData.velocity, dt);
+                    p.position.x += Math.sin((p.userData.life + i) * 8.0) * 0.0025;
+                    p.position.z += Math.cos((p.userData.life + i) * 7.0) * 0.0025;
+                    p.material.rotation += p.userData.spin * dt;
+                    const age = 1.0 - Math.max(0, p.userData.life) / Math.max(0.001, p.userData.maxLife);
+                    p.material.opacity = p.userData.baseOpacity * Math.sin(Math.PI * Math.min(1, age)) * Math.max(0, p.userData.life / p.userData.maxLife);
+                    const grow = 1.0 + age * 1.35;
+                    p.scale.x *= 1.0 + dt * 0.26;
+                    p.scale.y *= 1.0 + dt * 0.18;
+                    if (p.userData.life <= 0) {
+                        this.scene.remove(p);
+                        if (p.material) p.material.dispose();
+                        this.waterFoamParticles.splice(i, 1);
                     }
                 }
             },
-            
-            createFoamParticle: function(edge, y) {
-                if (!this.foamParticleGeometry) {
-                    this.foamParticleGeometry = new THREE.SphereGeometry(0.035, 4, 4);
-                    this.foamParticleMaterial = new THREE.MeshBasicMaterial({
-                        color: 0xffffff,
-                        transparent: true,
-                        opacity: 0.75,
-                        depthWrite: false,
-                        blending: THREE.AdditiveBlending
-                    });
+
+            emitFoamLine: function(a, b, outward, waterTopY, densityMul = 1.0) {
+                const len = a.distanceTo(b);
+                if (len < 0.035) return;
+                const count = Math.max(1, Math.min(10, Math.ceil(len * 2.7 * densityMul)));
+                for (let i = 0; i < count; i++) {
+                    if (Math.random() > 0.82) continue; // natural intermittent appearing/disappearing
+                    const f = (i + Math.random()) / count;
+                    const pos = new THREE.Vector3().lerpVectors(a, b, f);
+                    pos.y = waterTopY + 0.018 + Math.random() * 0.030;
+                    this.createFoamParticle(pos, outward, densityMul);
                 }
-                
-                const mesh = new THREE.Mesh(this.foamParticleGeometry, this.foamParticleMaterial.clone());
-                
-                if (edge.dir === 'x') {
-                    mesh.position.set(
-                        edge.x,
-                        y + (Math.random() - 0.5) * 0.08,
-                        edge.z + (Math.random() - 0.5) * 1.05
-                    );
-                } else {
-                    mesh.position.set(
-                        edge.x + (Math.random() - 0.5) * 1.05,
-                        y + (Math.random() - 0.5) * 0.08,
-                        edge.z
-                    );
-                }
-                
-                mesh.userData = {
-                    life: 1.0 + Math.random() * 1.2,
-                    speed: 0.012 + Math.random() * 0.018,
-                    startY: mesh.position.y,
-                    fadeSpeed: 0.012 + Math.random() * 0.01
-                };
-                
-                this.scene.add(mesh);
-                return mesh;
             },
-            
-            updateWaterFoam: function() {
-                for (let i = this.waterFoamParticles.length - 1; i >= 0; i--) {
-                    const p = this.waterFoamParticles[i];
-                    if (!p || !p.userData) continue;
-                    
-                    p.position.y += p.userData.speed;
-                    p.userData.life -= p.userData.fadeSpeed;
-                    
-                    // Gentle bobbing
-                    p.position.x += Math.sin(p.userData.life * 4) * 0.001;
-                    p.position.z += Math.cos(p.userData.life * 3.5) * 0.001;
-                    
-                    const alpha = Math.max(0, p.userData.life * 0.85);
-                    p.material.opacity = alpha;
-                    
-                    if (p.userData.life <= 0) {
-                        this.scene.remove(p);
-                        p.geometry.dispose();
-                        p.material.dispose();
-                        this.waterFoamParticles.splice(i, 1);
+
+            emitWaterContactFoam: function(waterObj, otherObj, waterBox, otherBox) {
+                const eps = 0.075;
+                const waterTopY = waterBox.max.y;
+                const x0 = Math.max(waterBox.min.x, otherBox.min.x);
+                const x1 = Math.min(waterBox.max.x, otherBox.max.x);
+                const z0 = Math.max(waterBox.min.z, otherBox.min.z);
+                const z1 = Math.min(waterBox.max.z, otherBox.max.z);
+                const overlapX = x1 - x0;
+                const overlapZ = z1 - z0;
+                const overlapsYAtSurface = otherBox.max.y > waterBox.min.y - eps && otherBox.min.y < waterBox.max.y + eps;
+
+                // Foam line along vertical side contacts (wall/solid next to the water volume).
+                if (overlapsYAtSurface && overlapZ > 0.04) {
+                    if (Math.abs(otherBox.max.x - waterBox.min.x) < eps) {
+                        this.emitFoamLine(new THREE.Vector3(waterBox.min.x, waterTopY, z0), new THREE.Vector3(waterBox.min.x, waterTopY, z1), new THREE.Vector3(1, 0, 0), waterTopY, 1.15);
+                    }
+                    if (Math.abs(otherBox.min.x - waterBox.max.x) < eps) {
+                        this.emitFoamLine(new THREE.Vector3(waterBox.max.x, waterTopY, z0), new THREE.Vector3(waterBox.max.x, waterTopY, z1), new THREE.Vector3(-1, 0, 0), waterTopY, 1.15);
+                    }
+                }
+                if (overlapsYAtSurface && overlapX > 0.04) {
+                    if (Math.abs(otherBox.max.z - waterBox.min.z) < eps) {
+                        this.emitFoamLine(new THREE.Vector3(x0, waterTopY, waterBox.min.z), new THREE.Vector3(x1, waterTopY, waterBox.min.z), new THREE.Vector3(0, 0, 1), waterTopY, 1.15);
+                    }
+                    if (Math.abs(otherBox.min.z - waterBox.max.z) < eps) {
+                        this.emitFoamLine(new THREE.Vector3(x0, waterTopY, waterBox.max.z), new THREE.Vector3(x1, waterTopY, waterBox.max.z), new THREE.Vector3(0, 0, -1), waterTopY, 1.15);
+                    }
+                }
+
+                // If an object intersects or stands in the water, draw foam around the footprint at the waterline.
+                const penetratesWaterSurface = overlapX > 0.055 && overlapZ > 0.055 && otherBox.min.y < waterTopY + eps && otherBox.max.y > waterBox.min.y + eps;
+                if (penetratesWaterSurface) {
+                    const ix0 = Math.max(x0, waterBox.min.x + 0.01);
+                    const ix1 = Math.min(x1, waterBox.max.x - 0.01);
+                    const iz0 = Math.max(z0, waterBox.min.z + 0.01);
+                    const iz1 = Math.min(z1, waterBox.max.z - 0.01);
+                    if (ix1 > ix0 && iz1 > iz0) {
+                        this.emitFoamLine(new THREE.Vector3(ix0, waterTopY, iz0), new THREE.Vector3(ix1, waterTopY, iz0), new THREE.Vector3(0, 0, -1), waterTopY, 0.95);
+                        this.emitFoamLine(new THREE.Vector3(ix0, waterTopY, iz1), new THREE.Vector3(ix1, waterTopY, iz1), new THREE.Vector3(0, 0, 1), waterTopY, 0.95);
+                        this.emitFoamLine(new THREE.Vector3(ix0, waterTopY, iz0), new THREE.Vector3(ix0, waterTopY, iz1), new THREE.Vector3(-1, 0, 0), waterTopY, 0.95);
+                        this.emitFoamLine(new THREE.Vector3(ix1, waterTopY, iz0), new THREE.Vector3(ix1, waterTopY, iz1), new THREE.Vector3(1, 0, 0), waterTopY, 0.95);
+                    }
+                }
+            },
+
+            updateWaterContactFoam: function(dt) {
+                this.updateWaterFoamParticles(dt);
+                this.foamEmitAccumulator += dt;
+                if (this.foamEmitAccumulator < 0.055) return;
+                this.foamEmitAccumulator = 0;
+                const waterBlocks = this.blocks.filter(b => this.isWaterBlock(b));
+                if (!waterBlocks.length) return;
+                const solidBlocks = this.blocks.filter(b => b && b.userData && b.userData.type === 'cube' && b.userData.visible !== false && !this.isWaterBlock(b));
+                if (!solidBlocks.length) return;
+
+                for (const water of waterBlocks) {
+                    const wb = new THREE.Box3().setFromObject(water);
+                    wb.expandByScalar(0.02);
+                    for (const other of solidBlocks) {
+                        const ob = new THREE.Box3().setFromObject(other);
+                        const near = !(ob.max.x < wb.min.x - 0.08 || ob.min.x > wb.max.x + 0.08 || ob.max.y < wb.min.y - 0.08 || ob.min.y > wb.max.y + 0.08 || ob.max.z < wb.min.z - 0.08 || ob.min.z > wb.max.z + 0.08);
+                        if (!near) continue;
+                        this.emitWaterContactFoam(water, other, wb, ob);
                     }
                 }
             },
@@ -1827,6 +2085,9 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 const canvas = document.getElementById('glcanvas');
                 this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: "high-performance" });
                 this.renderer.setSize(window.innerWidth, window.innerHeight, false); this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+                this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.toneMappingExposure = 1.04;
                 this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                 
                 this.pmremGenerator = new THREE.PMREMGenerator(this.renderer); this.pmremGenerator.compileEquirectangularShader();
@@ -2043,7 +2304,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
                 this.gridHelper = new THREE.GridHelper(300, 150, 0x1e293b, 0x0f172a); this.gridHelper.material.opacity = 0.5; this.gridHelper.material.transparent = true; this.gridHelper.position.y = -0.01; this.gridHelper.visible = false; this.scene.add(this.gridHelper);
                 this.shadowCatcher = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.ShadowMaterial({ color: 0x000000, opacity: 0.0 })); this.shadowCatcher.rotation.x = -Math.PI / 2; this.shadowCatcher.position.y = -0.02; this.shadowCatcher.receiveShadow = false; this.shadowCatcher.visible = false; this.scene.add(this.shadowCatcher);
-                this.reflectionRenderTarget = new THREE.WebGLCubeRenderTarget(512, { generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat });
+                this.reflectionRenderTarget = new THREE.WebGLCubeRenderTarget(512, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat });
                 this.reflectionCubeCamera = new THREE.CubeCamera(0.1, 1000, this.reflectionRenderTarget); this.reflectionCubeCamera.visible = false; this.scene.add(this.reflectionCubeCamera); this.localReflectionTexture = null; this.lastReflectionCapturePos = new THREE.Vector3(999999, 999999, 999999); this.reflectionDistance = 10; this.lastReflectionCaptureTime = -Infinity;
 
                 this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
@@ -2253,9 +2514,11 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
             getMaterialEnvIntensity: function(obj) {
                 const type = obj?.userData?.materialType || 'Concrete';
+                const textureKey = obj?.userData?.texture;
                 const preset = MATERIAL_PRESETS[type] || MATERIAL_PRESETS.Concrete;
                 const base = obj?.userData?.skyboxReflectivity ?? preset.envMapIntensity;
-                if (type === 'Metal' || type === 'Water' || obj?.userData?.texture === 'metal' || obj?.userData?.texture === 'GBWater' || obj?.userData?.texture === 'glass') return Math.min(2.5, Math.max(0.08, base));
+                if (isWaterLike(textureKey, type)) return Math.min(3.4, Math.max(2.15, base));
+                if (type === 'Metal' || textureKey === 'metal' || textureKey === 'glass') return Math.min(2.5, Math.max(0.08, base));
                 return Math.min(0.14, Math.max(0.02, base));
             },
 
@@ -2275,23 +2538,27 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     obj.material = createMaterial(tex, matT, col, { reflectivity: obj.userData.skyboxReflectivity, reflectBlur: obj.userData.skyboxBlur });
                 }
                 const preset = MATERIAL_PRESETS[matT] || MATERIAL_PRESETS.Concrete;
-                const isWater = matT === 'Water' || tex === 'GBWater';
+                const isWater = isWaterLike(tex, matT);
                 const isMetal = matT === 'Metal' || tex === 'metal';
+                const geometryChanged = ensureBlockGeometryMatchesMaterial(obj);
+                if (geometryChanged) this.updateCubeUVs(obj);
+                obj.renderOrder = isWater ? 3 : 0;
+                if (isWater) obj.castShadow = false;
                 const envIntensity = this.getMaterialEnvIntensity(obj);
                 const envForThis = (isWater && this.localReflectionTexture) || currentEnv;
                 if (Array.isArray(obj.material)) {
                     obj.material.forEach(m => {
                         m.envMap = envForThis;
                         m.envMapIntensity = envIntensity;
-                        if ('roughness' in m) m.roughness = isWater ? 0.06 : Math.min(1, Math.max(0.18, obj.userData.skyboxBlur ?? preset.roughness));
-                        if ('metalness' in m) m.metalness = isMetal ? 0.9 : 0.02;
+                        if ('roughness' in m) m.roughness = isWater ? 0.018 : Math.min(1, Math.max(0.18, obj.userData.skyboxBlur ?? preset.roughness));
+                        if ('metalness' in m) m.metalness = isMetal ? 0.9 : 0.0;
                         m.needsUpdate = true;
                     });
                 } else {
                     obj.material.envMap = envForThis;
                     obj.material.envMapIntensity = envIntensity;
-                    if ('roughness' in obj.material) obj.material.roughness = isWater ? 0.06 : Math.min(1, Math.max(0.18, obj.userData.skyboxBlur ?? preset.roughness));
-                    if ('metalness' in obj.material) obj.material.metalness = isMetal ? 0.9 : 0.02;
+                    if ('roughness' in obj.material) obj.material.roughness = isWater ? 0.018 : Math.min(1, Math.max(0.18, obj.userData.skyboxBlur ?? preset.roughness));
+                    if ('metalness' in obj.material) obj.material.metalness = isMetal ? 0.9 : 0.0;
                     obj.material.needsUpdate = true;
                 }
                 if (obj.userData.visible === false) {
@@ -2305,6 +2572,27 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 if (this.spawnPointObj?.material) {
                     this.spawnPointObj.material.needsUpdate = true;
                 }
+            },
+
+            getWaterReflectionTarget: function() {
+                const waterBlocks = this.blocks.filter(b => this.isWaterBlock ? this.isWaterBlock(b) : (b?.userData && isWaterLike(b.userData.texture, b.userData.materialType)));
+                if (!waterBlocks.length) return null;
+                let best = waterBlocks[0];
+                let bestDist = Infinity;
+                const cam = this.camera?.position || new THREE.Vector3();
+                for (const w of waterBlocks) {
+                    const center = new THREE.Vector3();
+                    w.getWorldPosition(center);
+                    const d = center.distanceToSquared(cam);
+                    if (d < bestDist) { bestDist = d; best = w; }
+                }
+                const pos = new THREE.Vector3();
+                const scale = new THREE.Vector3();
+                best.getWorldPosition(pos);
+                best.getWorldScale(scale);
+                // Capture at the water surface, not at the camera, so the skybox/object reflection is spatially correct.
+                pos.y += Math.max(0.04, Math.abs(scale.y) * 0.52);
+                return { mesh: best, position: pos };
             },
 
             updateLocalReflections: function(force = false) {
@@ -2321,13 +2609,14 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     }
                     return;
                 }
-                // Отражения объектов обновляются только если на карте есть куб(ы) с текстурой воды (GBWater)
-                const hasWaterCube = this.blocks.some(b => b.userData && b.userData.texture === 'GBWater');
-                if (!hasWaterCube) { this.localReflectionTexture = null; return; }
 
-                const REFLECTION_INTERVAL_MS = 4 * 60 * 1000; // каждые 4 минуты
+                const target = this.getWaterReflectionTarget();
+                if (!target) { this.localReflectionTexture = null; return; }
+
+                const REFLECTION_INTERVAL_MS = 1800; // frequent enough for rotating skybox and moving cubes
                 const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-                if (!force && (now - this.lastReflectionCaptureTime) < REFLECTION_INTERVAL_MS) return;
+                const moved = target.position.distanceTo(this.lastReflectionCapturePos || target.position) > 0.35;
+                if (!force && !moved && (now - this.lastReflectionCaptureTime) < REFLECTION_INTERVAL_MS) return;
 
                 // Принудительный (force) захват может быть вызван прямо во время загрузки проекта
                 // (updateGraphics -> updateLocalReflections), когда материалы блоков ещё не до конца
@@ -2336,30 +2625,37 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     requestAnimationFrame(() => this.captureLocalReflection());
                     return;
                 }
-                this.captureLocalReflection();
+                this.captureLocalReflection(target);
             },
 
-            captureLocalReflection: function() {
+            captureLocalReflection: function(targetInfo = null) {
                 if (!this.reflectionCubeCamera || !this.renderer || !this.scene || !this.camera) return;
                 if (this.customSkyboxLoading) return;
                 const wavesEnabled = document.getElementById('setting-water-waves')?.checked ?? true;
                 if (!wavesEnabled) { this.localReflectionTexture = null; return; }
-                const hasWaterCube = this.blocks.some(b => b.userData && b.userData.texture === 'GBWater');
-                if (!hasWaterCube) { this.localReflectionTexture = null; return; }
+                const target = targetInfo || this.getWaterReflectionTarget();
+                if (!target) { this.localReflectionTexture = null; return; }
 
                 this.lastReflectionCaptureTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+                this.lastReflectionCapturePos.copy(target.position);
 
-                // Прячем служебные элементы редактора, чтобы они не попали в фото окружения
+                // Прячем служебные элементы редактора и саму воду, чтобы в отражение не попали гизмо/контуры/самоотражение.
                 const prevGridVisible = this.gridHelper ? this.gridHelper.visible : null;
                 if (this.gridHelper) this.gridHelper.visible = false;
                 const prevOutlineVisible = this.outlines.map(o => o.visible);
                 this.outlines.forEach(o => { o.visible = false; });
                 const prevSpawnVisible = this.spawnPointObj ? this.spawnPointObj.visible : null;
                 if (this.spawnPointObj) this.spawnPointObj.visible = false;
+                const hiddenWater = [];
+                this.blocks.forEach(obj => {
+                    if (this.isWaterBlock(obj)) {
+                        hiddenWater.push([obj, obj.visible]);
+                        obj.visible = false;
+                    }
+                });
 
                 try {
-                    // Реалистично фотографируем окружение вокруг игрока (CubeCamera 512px)
-                    this.reflectionCubeCamera.position.copy(this.camera.position);
+                    this.reflectionCubeCamera.position.copy(target.position);
                     this.reflectionCubeCamera.update(this.renderer, this.scene);
                     this.localReflectionTexture = this.reflectionRenderTarget.texture;
                 } catch (err) {
@@ -2370,14 +2666,16 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 if (this.gridHelper) this.gridHelper.visible = prevGridVisible;
                 this.outlines.forEach((o, i) => { o.visible = prevOutlineVisible[i]; });
                 if (this.spawnPointObj) this.spawnPointObj.visible = prevSpawnVisible;
+                hiddenWater.forEach(([obj, wasVisible]) => { obj.visible = wasVisible; });
 
                 // Применяем свежее отражение ко всем материалам воды
                 this.blocks.forEach(obj => {
-                    if (!obj.userData || obj.userData.texture !== 'GBWater' || !obj.material) return;
+                    if (!obj.userData || !isWaterLike(obj.userData.texture, obj.userData.materialType) || !obj.material) return;
                     const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
                     mats.forEach(m => {
                         if (m.userData && m.userData.isWater) {
-                            m.envMap = this.localReflectionTexture;
+                            m.envMap = this.localReflectionTexture || this.getActiveEnvironmentMap();
+                            m.envMapIntensity = this.getMaterialEnvIntensity(obj);
                             m.needsUpdate = true;
                         }
                     });
@@ -2764,8 +3062,8 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 const preset = MATERIAL_PRESETS[matT] || MATERIAL_PRESETS.Concrete;
                 const initialReflect = reflectivity !== null && reflectivity !== undefined ? reflectivity : preset.envMapIntensity;
                 const initialBlur = reflectBlur !== null && reflectBlur !== undefined ? reflectBlur : preset.roughness;
-                const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1).clone(), createMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur }));
-                mesh.castShadow = true;
+                const mesh = new THREE.Mesh(createBlockGeometry(tex, matT), createMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur }));
+                mesh.castShadow = !isWaterLike(tex, matT);
                 mesh.receiveShadow = true;
                 mesh.position.copy(origin)
                     .addScaledVector(basis.right, localPos.x)
@@ -2799,8 +3097,8 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 const preset = MATERIAL_PRESETS[matT] || MATERIAL_PRESETS.Concrete;
                 const initialReflect = reflectivity !== null && reflectivity !== undefined ? reflectivity : preset.envMapIntensity;
                 const initialBlur = reflectBlur !== null && reflectBlur !== undefined ? reflectBlur : preset.roughness;
-                const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1).clone(), createMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur }));
-                mesh.castShadow = true;
+                const mesh = new THREE.Mesh(createBlockGeometry(tex, matT), createMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur }));
+                mesh.castShadow = !isWaterLike(tex, matT);
                 mesh.receiveShadow = true;
                 mesh.position.copy(origin)
                     .addScaledVector(basis.right, localPos.x)
@@ -2845,9 +3143,6 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 const groupId = this.makeShapeGroupId('collection');
                 const created = [];
 
-                // Shared geometry base
-                const baseBoxGeo = new THREE.BoxGeometry(1,1,1);
-
                 item.cubes.forEach(cubeDef => {
                     // Resolve material: materialName is a GoreBox named texture (e.g. "Red Bricks", "BlackConcrete")
                     // We use it as the texture key. materialType comes from tag.
@@ -2863,8 +3158,8 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
                     const mat = createMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur });
 
-                    const mesh = new THREE.Mesh(baseBoxGeo.clone(), mat);
-                    mesh.castShadow = true;
+                    const mesh = new THREE.Mesh(createBlockGeometry(tex, matT), mat);
+                    mesh.castShadow = !isWaterLike(tex, matT);
                     mesh.receiveShadow = true;
 
                     // Position: collection objects are relative to center, place relative to origin in world
@@ -3105,7 +3400,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 sharedMat.userData._sharedImportMat = true;
 
                 // Базовая геометрия клонируется per-mesh (у каждого куба уникальные pos/scale/rot)
-                const baseBoxGeo = new THREE.BoxGeometry(1, 1, 1);
+                const baseBoxGeo = createBlockGeometry(tex, matT);
 
                 const ab = new THREE.Vector3(), ac = new THREE.Vector3(), normal = new THREE.Vector3();
                 const center = new THREE.Vector3(), localX = new THREE.Vector3(), localY = new THREE.Vector3();
@@ -3166,7 +3461,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
                     // Общий материал — НЕ создаём новый MeshPhysicalMaterial на каждый куб
                     const mesh = new THREE.Mesh(baseBoxGeo.clone(), sharedMat);
-                    mesh.castShadow = true; mesh.receiveShadow = true;
+                    mesh.castShadow = !isWaterLike(tex, matT); mesh.receiveShadow = true;
                     mesh.position.copy(center);
                     mesh.quaternion.copy(quat);
                     mesh.scale.set(sizeX, sizeY, thickness);
@@ -3344,9 +3639,9 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 const initialReflect = reflectivity !== null && reflectivity !== undefined ? reflectivity : preset.envMapIntensity;
                 const initialBlur = reflectBlur !== null && reflectBlur !== undefined ? reflectBlur : preset.roughness;
                 
-                const geometry = new THREE.BoxGeometry(1, 1, 1).clone(); 
+                const geometry = createBlockGeometry(tex, matT); 
                 const mesh = new THREE.Mesh(geometry, createMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur })); 
-                mesh.castShadow = true; 
+                mesh.castShadow = !isWaterLike(tex, matT); 
                 mesh.receiveShadow = true;
                 
                 const resolvedMaterialName = matName || (BUILTIN_TEXTURE_KEYS.has(tex) ? getFallbackGoreBoxMaterialName(matT) : tex); 
@@ -3455,7 +3750,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         if (!groupMap.has(data.userData.groupId)) groupMap.set(data.userData.groupId, this.makeShapeGroupId(data.userData.shapeType || 'group'));
                         data.userData.groupId = groupMap.get(data.userData.groupId);
                     }
-                    const newGeo = new THREE.BoxGeometry(1,1,1).clone(); const mesh = new THREE.Mesh(newGeo, createMaterial(data.userData.texture, data.userData.materialType, data.userData.colorHex)); mesh.castShadow = true; mesh.receiveShadow = true;
+                    const newGeo = createBlockGeometry(data.userData.texture, data.userData.materialType); const mesh = new THREE.Mesh(newGeo, createMaterial(data.userData.texture, data.userData.materialType, data.userData.colorHex)); mesh.castShadow = !isWaterLike(data.userData.texture, data.userData.materialType); mesh.receiveShadow = true;
                     mesh.position.set(data.pos.x, data.pos.y, data.pos.z); mesh.rotation.set(data.rot.x, data.rot.y, data.rot.z); mesh.scale.set(data.scl.x, data.scl.y, data.scl.z); mesh.userData = data.userData;
                     if (mesh.userData.visible === false) { mesh.material.transparent = true; mesh.material.opacity = 0.3; mesh.castShadow = false; }
                     this.updateCubeUVs(mesh); this.scene.add(mesh); this.blocks.push(mesh); duplicated.push(mesh);
@@ -3469,7 +3764,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 if (this.selectedBlocks.length === 0) return; const val = !this.selectedBlocks[0].userData[prop];
                 this.selectedBlocks.forEach(obj => {
                     obj.userData[prop] = val;
-                    if (prop === 'visible' && obj !== this.spawnPointObj) { obj.material.transparent = !val; obj.material.opacity = val ? 1.0 : 0.3; obj.castShadow = val && document.getElementById('setting-shadows').checked; }
+                    if (prop === 'visible' && obj !== this.spawnPointObj) { obj.material.transparent = !val; obj.material.opacity = val ? 1.0 : 0.3; obj.castShadow = val && document.getElementById('setting-shadows').checked && !isWaterLike(obj.userData?.texture, obj.userData?.materialType); }
                 });
                 this.updateUIFromObject(); if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
             },
@@ -3607,8 +3902,10 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 const newMinFilter = textureSmoothingEnabled ? THREE.LinearFilter : THREE.NearestFilter;
                 Object.values(baseTextures).forEach(tex => {
                     if (!tex) return;
-                    tex.magFilter = newMagFilter;
-                    tex.minFilter = newMinFilter;
+                    const keepWaterSmooth = !!tex.userData?.isProceduralWater;
+                    tex.magFilter = keepWaterSmooth ? THREE.LinearFilter : newMagFilter;
+                    tex.minFilter = keepWaterSmooth ? THREE.LinearMipmapLinearFilter : newMinFilter;
+                    if (keepWaterSmooth) tex.generateMipmaps = true;
                     tex.needsUpdate = true;
                 });
 
@@ -3617,7 +3914,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 this.updateLocalReflections(true);
                 this.scene.traverse(child => {
                     if (child.isMesh && child.material) {
-                        child.castShadow = shadowsEnabled && child.userData?.type !== 'spawn';
+                        child.castShadow = shadowsEnabled && child.userData?.type !== 'spawn' && !isWaterLike(child.userData?.texture, child.userData?.materialType);
                         child.receiveShadow = shadowsEnabled && child.userData?.type !== 'spawn';
                         child.material.needsUpdate = true;
                     }
@@ -4159,6 +4456,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 }
 
                 this.animateWeather(dt);
+                this.updateWaterContactFoam?.(dt);
                 while(this.outlines.length < this.selectedBlocks.length) { const line = new THREE.LineSegments(sharedEdgeGeo, outlineMat); this.scene.add(line); this.outlines.push(line); }
                 this.outlines.forEach((o, i) => { if (i < this.selectedBlocks.length) { const obj = this.selectedBlocks[i]; o.visible = true; obj.getWorldPosition(o.position); obj.getWorldQuaternion(o.quaternion); obj.getWorldScale(o.scale); o.scale.addScalar(0.04); } else { o.visible = false; } });
                 try {
