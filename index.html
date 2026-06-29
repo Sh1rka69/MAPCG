@@ -250,68 +250,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             --joystick-opacity: 0.85;
             --joystick-knob-size: 62px;
         }
-        .mobile-joystick {
-            position: fixed;
-            left: max(14px, env(safe-area-inset-left));
-            bottom: max(18px, env(safe-area-inset-bottom));
-            width: var(--joystick-size);
-            height: var(--joystick-size);
-            border-radius: 9999px;
-            background: radial-gradient(circle at 50% 50%, rgba(59,130,246,0.22) 0%, rgba(15,23,42,0.55) 56%, rgba(0,0,0,0.08) 100%);
-            border: 1.5px solid rgba(96,165,250,0.38);
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.06) inset, 0 12px 30px rgba(0,0,0,0.45);
-            backdrop-filter: blur(10px);
-            display: block;
-            opacity: var(--joystick-opacity);
-            z-index: 45;
-            touch-action: none;
-            user-select: none;
-            -webkit-user-select: none;
-            pointer-events: auto;
-            transition: opacity 0.2s;
-        }
-        .mobile-joystick.joystick-hidden { display: none; }
-        .mobile-joystick:hover { opacity: min(1, calc(var(--joystick-opacity) + 0.1)); }
-        .mobile-joystick .mobile-joystick-ring {
-            position: absolute;
-            inset: 14px;
-            border-radius: 9999px;
-            border: 1px dashed rgba(96,165,250,0.25);
-            background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 70%, rgba(255,255,255,0) 100%);
-        }
-        .mobile-joystick .mobile-joystick-arrows {
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .mobile-joystick .mobile-joystick-arrows::before,
-        .mobile-joystick .mobile-joystick-arrows::after {
-            content: '';
-            position: absolute;
-            border: 6px solid transparent;
-        }
-        .mobile-joystick .mobile-joystick-knob {
-            position: absolute;
-            left: 50%;
-            top: 50%;
-            width: var(--joystick-knob-size);
-            height: var(--joystick-knob-size);
-            border-radius: 9999px;
-            transform: translate(-50%, -50%);
-            background: linear-gradient(180deg, rgba(96,165,250,0.95) 0%, rgba(37,99,235,0.95) 100%);
-            border: 1.5px solid rgba(191,219,254,0.75);
-            box-shadow: 0 0 24px rgba(59,130,246,0.6), inset 0 1px 2px rgba(255,255,255,0.4);
-            pointer-events: none;
-            transition: transform 0.06s cubic-bezier(0.25,0.46,0.45,0.94);
-        }
-        .mobile-joystick .joystick-label {
-            position: absolute;
-            bottom: -22px;
-            left: 50%;
-            transform: translateX(-50%);
+        /* Joystick removed - using WASD + E/Q keys for camera movement */
             font-size: 11px;
             color: rgba(148,163,184,0.7);
             white-space: nowrap;
@@ -550,11 +489,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             </div>
         </div>
 
-        <div id="mobile-joystick" aria-label="Camera movement joystick" class="mobile-joystick">
-            <div class="mobile-joystick-ring"></div>
-            <div id="mobile-joystick-knob" class="mobile-joystick-knob"></div>
-            <span class="joystick-label">MOVE</span>
-        </div>
+        <!-- Joystick removed - using WASD + E/Q keys for camera movement -->
 
         <div id="ui-layer" class="ui-scale-layer">
             <!-- FPS COUNTER (левый верхний угол) -->
@@ -939,18 +874,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                         <!-- JOYSTICK SETTINGS -->
                         <div class="mt-5 border-t border-gray-700/50 pt-4">
                             <p class="text-blue-300 text-lg font-bold mb-3 uppercase tracking-wider">🕹 Joystick</p>
-                            <label class="text-gray-400 block mb-1">Joystick Size</label>
-                            <div class="flex items-center gap-3">
-                                <input type="range" id="setting-joystick-size" min="80" max="260" step="5" value="150" class="w-full accent-blue-500 cursor-pointer"
-                                    oninput="document.getElementById('joystick-size-val').innerText=this.value+'px'; engine.applyJoystickSize(parseInt(this.value));">
-                                <span id="joystick-size-val" class="text-blue-300 font-bold w-16 text-right">150px</span>
-                            </div>
-                            <label class="text-gray-400 block mt-4 mb-1">Joystick Opacity</label>
-                            <div class="flex items-center gap-3">
-                                <input type="range" id="setting-joystick-opacity" min="0.1" max="1" step="0.05" value="0.85" class="w-full accent-blue-500 cursor-pointer"
-                                    oninput="document.getElementById('joystick-opacity-val').innerText=Math.round(this.value*100)+'%'; engine.applyJoystickOpacity(parseFloat(this.value));">
-                                <span id="joystick-opacity-val" class="text-blue-300 font-bold w-16 text-right">85%</span>
-                            </div>
+
                         </div>
                     </div>
 
@@ -998,17 +922,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                             </div>
                         </div>
 
-                        <label class="flex items-center gap-3 mb-2 cursor-pointer group">
-                            <input type="checkbox" id="setting-rays" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" class="w-6 h-6 accent-yellow-400">
-                            <span class="group-hover:text-white text-gray-300 transition">&#9728; Rays (Volumetric Light Shafts)</span>
-                        </label>
-                        <div class="bg-black/30 p-2 rounded border border-gray-800 mb-3">
-                            <label class="text-gray-400 text-sm uppercase font-bold block mb-1">Rays Intensity</label>
-                            <div class="flex items-center gap-2">
-                                <input type="range" id="setting-rays-intensity" min="0.1" max="2.0" step="0.05" value="0.8" class="w-full accent-yellow-400 cursor-pointer" oninput="document.getElementById('rays-intensity-val').innerText=Number(this.value).toFixed(2); engine.updateGraphics();">
-                                <span id="rays-intensity-val" class="text-yellow-300 text-sm w-14 text-right">0.80</span>
-                            </div>
-                        </div>
+
 
                         <label class="flex items-center gap-3 mb-3 cursor-pointer group">
                             <input type="checkbox" id="setting-water-waves" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked class="w-6 h-6 accent-blue-500">
@@ -1891,7 +1805,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
         // --- ДВИЖОК ---
         const engine = {
-            scene: null, camera: null, renderer: null, pmremGenerator: null, composer: null, bloomPass: null, ssaoPass: null, raysPass: null,
+            scene: null, camera: null, renderer: null, pmremGenerator: null, composer: null, bloomPass: null, ssaoPass: null, _renderSkipFrames: 0,
             orbit: null, transformControl: null, raycaster: null, mouse: null,
             blocks: [], selectedBlocks: [], spawnPointObj: null,
             gridHelper: null, dirLight: null, ambientLight: null, hemiLight: null, sky: null, sun: null,
@@ -2265,58 +2179,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
                 this.bloomPass = new UnrealBloomPass(new THREE.Vector2(_cw, _ch), 0.65, 0.22, 0.92); this.bloomPass.enabled = false; this.composer.addPass(this.bloomPass);
 
-                // ── Volumetric Rays (God Rays / Light Shafts from sun direction)
-                const _raysShader = {
-                    uniforms: {
-                        tDiffuse:   { value: null },
-                        sunPos:     { value: new THREE.Vector2(0.5, 0.75) },
-                        intensity:  { value: 0.95 },
-                        exposure:   { value: 0.14 },
-                        decay:      { value: 0.94 },
-                        density:    { value: 0.97 },
-                        weight:     { value: 0.40 },
-                        sunVisible: { value: 1.0 }
-                    },
-                    vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-                    fragmentShader: `
-                        precision highp float;
-                        uniform sampler2D tDiffuse;
-                        uniform vec2  sunPos;
-                        uniform float intensity;
-                        uniform float exposure;
-                        uniform float decay;
-                        uniform float density;
-                        uniform float weight;
-                        uniform float sunVisible;
-                        varying vec2 vUv;
 
-                        void main() {
-                            vec4 col = texture2D(tDiffuse, vUv);
-                            if (intensity < 0.01 || sunVisible < 0.5) { gl_FragColor = col; return; }
-
-                            const int STEPS = 64;
-                            vec2 delta = (vUv - sunPos) * (density / float(STEPS));
-                            vec2 tc    = vUv;
-                            float illumDecay = 1.0;
-                            vec3  rays = vec3(0.0);
-
-                            for (int i = 0; i < STEPS; i++) {
-                                tc -= delta;
-                                vec3 s = texture2D(tDiffuse, clamp(tc, vec2(0.001), vec2(0.999))).rgb;
-                                /* Only sky/sun bright areas act as the light source */
-                                float lum  = dot(s, vec3(0.2126, 0.7152, 0.0722));
-                                float mask = smoothstep(0.40, 0.92, lum);
-                                rays += s * mask * weight * illumDecay;
-                                illumDecay *= decay;
-                            }
-
-                            gl_FragColor = vec4(col.rgb + rays * exposure * intensity, col.a);
-                        }
-                    `
-                };
-                this.raysPass = new ShaderPass(_raysShader);
-                this.raysPass.enabled = false;
-                this.composer.addPass(this.raysPass);
 
                 this.sky = new Sky(); this.sky.scale.setScalar(25000); this.sun = new THREE.Vector3();
                 this.skyEnvGroup = new THREE.Group(); this.skyEnvGroup.add(this.sky); this.scene.add(this.skyEnvGroup);
@@ -2379,7 +2242,6 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
                 window.addEventListener('resize', this.onWindowResize.bind(this));
                 window.addEventListener('orientationchange', () => { setTimeout(() => this.onWindowResize(), 50); setTimeout(() => this.onWindowResize(), 300); });
-                this.setupMobileJoystick();
                 this.setupTouchLook();
 
                 // Улучшенный обработчик нажатий для исключения ложных срабатываний при свайпе
@@ -2391,7 +2253,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 window.addEventListener('keydown', this.onKeyDown.bind(this));
                 window.addEventListener('keyup', this.onKeyUp.bind(this));
 
-                this.updateEnvironment(); this.applyCameraSensitivity(parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1')); this.applyCameraMoveSpeed(parseFloat(localStorage.getItem('mmcg_camera_move_55') || '1')); this.applyPixelRatio(parseFloat(localStorage.getItem('mmcg_pixel_ratio_55') || '0.8')); this.applyFpsCounterVisibility(localStorage.getItem('mmcg_show_fps_55') === '1'); this.updateSelectionPanels(); this.animate();
+                this.updateEnvironment(); this.applyCameraSensitivity(parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1')); this.applyCameraMoveSpeed(parseFloat(localStorage.getItem('mmcg_camera_move_55') || '1')); this.applyPixelRatio(parseFloat(localStorage.getItem('mmcg_pixel_ratio_55') || '0.8')); this.applyFpsCounterVisibility(localStorage.getItem('mmcg_show_fps_55') === '1'); this.updateSelectionPanels(); this.camera.far = 2000; this.camera.updateProjectionMatrix(); this.animate();
             },
 
             initClouds: function() {
@@ -3886,14 +3748,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     this.ssaoPass.uniforms.tDepth.value = this._depthTarget.depthTexture;
                     this.ssaoPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
                 }
-                const _raysEnabled = document.getElementById('setting-rays')?.checked ?? false;
-                if (this.raysPass) {
-                    this.raysPass.enabled = _raysEnabled;
-                    if (_raysEnabled) {
-                        const _ri = parseFloat(document.getElementById('setting-rays-intensity')?.value ?? '0.8');
-                        this.raysPass.uniforms.intensity.value = _ri;
-                    }
-                }
+
                 waterUniforms.uWavesEnabled.value = (document.getElementById('setting-water-waves')?.checked ?? true) ? 1.0 : 0.0;
 
                 const textureSmoothingEnabled = document.getElementById('setting-texture-smoothing')?.checked ?? false;
@@ -4447,21 +4302,6 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         }
                     }
 
-                    // Джойстик работает на всех платформах, движение по полному 3D-направлению взгляда
-                    if (this.mobileJoystick && (Math.abs(this.mobileJoystick.x) > 0.03 || Math.abs(this.mobileJoystick.y) > 0.03)) {
-                        const moveSpeed = 18 * (this.cameraMoveSpeed || 1) * dt;
-                        const moveForward = -this.mobileJoystick.y * moveSpeed;
-                        const moveRight = this.mobileJoystick.x * moveSpeed;
-                        // direction — полный 3D вектор куда смотрит камера (включая вертикаль)
-                        if (direction.lengthSq() > 0.0001) {
-                            this.camera.position.addScaledVector(direction, moveForward);
-                            this.orbit.target.addScaledVector(direction, moveForward);
-                        }
-                        if (sideways.lengthSq() > 0.0001) {
-                            this.camera.position.addScaledVector(sideways, -moveRight);
-                            this.orbit.target.addScaledVector(sideways, -moveRight);
-                        }
-                    }
 
                     this.orbit.update();
                     if (isNaN(this.camera.position.x)) { this.camera.position.set(15, 20, 15); this.orbit.target.set(0,0,0); }
@@ -4477,11 +4317,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     this.sun.setFromSphericalCoords(1, this.skyPhiCache, this.skyRotationAngle);
                     uniforms['sunPosition'].value.copy(this.sun);
                     this.dirLight.position.copy(this.sun).multiplyScalar(200);
-                    if (this.raysPass && this.raysPass.enabled) {
-                        const _sv = this.sun.clone().multiplyScalar(10000).project(this.camera);
-                        this.raysPass.uniforms.sunPos.value.set(_sv.x * 0.5 + 0.5, _sv.y * 0.5 + 0.5);
-                        this.raysPass.uniforms.sunVisible.value = (_sv.z < 1.0 && this.sun.y > -0.1) ? 1.0 : 0.0;
-                    }
+
                     // Синхронизируем ползунок в UI чтобы отражал реальный угол
                     const sliderDeg = Math.round(THREE.MathUtils.radToDeg(this.skyRotationAngle) % 360);
                     const sunSlider = document.getElementById('setting-sun-angle');
@@ -4504,6 +4340,19 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 while(this.outlines.length < this.selectedBlocks.length) { const line = new THREE.LineSegments(sharedEdgeGeo, outlineMat); this.scene.add(line); this.outlines.push(line); }
                 this.outlines.forEach((o, i) => { if (i < this.selectedBlocks.length) { const obj = this.selectedBlocks[i]; o.visible = true; obj.getWorldPosition(o.position); obj.getWorldQuaternion(o.quaternion); obj.getWorldScale(o.scale); o.scale.addScalar(0.04); } else { o.visible = false; } });
                 try {
+                    // ── Adaptive render skipping for performance when many objects exist ──
+                    const blockCount = this.blocks.length;
+                    if (blockCount > 50) {
+                        this._renderSkipFrames = (this._renderSkipFrames || 0) + 1;
+                        if (this._renderSkipFrames % 2 !== 0) {
+                            this.orbit.update();
+                            document.getElementById('cam-x').innerText = this.camera.position.x.toFixed(1);
+                            document.getElementById('cam-y').innerText = this.camera.position.y.toFixed(1);
+                            document.getElementById('cam-z').innerText = this.camera.position.z.toFixed(1);
+                            if (this._fpsCounter) this._fpsCounter.textContent = 'FPS: ' + (this._lastFps || 60);
+                            return;
+                        }
+                    }
                     // ── Depth pre-pass for AO (separate target → no WebGL feedback loop) ──
                     if (this.ssaoPass.enabled && this._depthTarget) {
                         const _prevOverride = this.scene.overrideMaterial;
@@ -4514,7 +4363,8 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         this.scene.overrideMaterial = _prevOverride;
                         this.renderer.setRenderTarget(null);
                     }
-                    if (this.bloomPass.enabled || this.ssaoPass.enabled || (this.raysPass && this.raysPass.enabled)) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+                    if (this.bloomPass.enabled || this.ssaoPass.enabled) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+                    this._renderSkipFrames = 0;
                 } catch (err) {
                     console.error('Scene render error:', err);
                 }
@@ -4525,8 +4375,8 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
         const gameplay = {
             isPlaytest: false, controls: null, velocity: new THREE.Vector3(), direction: new THREE.Vector3(), moveState: { forward: false, backward: false, left: false, right: false, jump: false, sprint: false, crouch: false }, canJump: false, raycasterDown: new THREE.Raycaster(new THREE.Vector3(), new THREE.Vector3(0, -1, 0), 0, 1.5), lastStepTime: 0, baseHeight: 1.8, crouchHeight: 0.9,
             init: function() { this.controls = new PointerLockControls(engine.camera, document.body); this.controls.addEventListener('lock', () => { this.isPlaytest = true; }); this.controls.addEventListener('unlock', () => { this.stopPlaytest(); }); document.addEventListener('keydown', (e) => this.onKeyDown(e)); document.addEventListener('keyup', (e) => this.onKeyUp(e)); },
-            startPlaytest: function() { engine.deselect(); document.getElementById('ui-layer').style.display = 'none'; document.getElementById('playtest-overlay').style.display = 'block'; const js = document.getElementById('mobile-joystick'); if (js) js.classList.add('joystick-hidden'); if (engine.spawnPointObj) { engine.camera.position.copy(engine.spawnPointObj.position); engine.camera.position.y += 1; } else { engine.camera.position.set(0, 5, 0); } engine.spawnPointObj && (engine.spawnPointObj.visible = false); this.velocity.set(0,0,0); audioEngine.init(); this.controls.lock(); },
-            stopPlaytest: function() { this.isPlaytest = false; document.getElementById('ui-layer').style.display = 'flex'; document.getElementById('playtest-overlay').style.display = 'none'; engine.spawnPointObj && (engine.spawnPointObj.visible = true); const js = document.getElementById('mobile-joystick'); if (js) js.classList.remove('joystick-hidden'); },
+            startPlaytest: function() { engine.deselect(); document.getElementById('ui-layer').style.display = 'none'; document.getElementById('playtest-overlay').style.display = 'block'; if (engine.spawnPointObj) { engine.camera.position.copy(engine.spawnPointObj.position); engine.camera.position.y += 1; } else { engine.camera.position.set(0, 5, 0); } engine.spawnPointObj && (engine.spawnPointObj.visible = false); this.velocity.set(0,0,0); audioEngine.init(); this.controls.lock(); },
+            stopPlaytest: function() { this.isPlaytest = false; document.getElementById('ui-layer').style.display = 'flex'; document.getElementById('playtest-overlay').style.display = 'none'; engine.spawnPointObj && (engine.spawnPointObj.visible = true); },
             onKeyDown: function(e) { if(!this.isPlaytest) return; switch(e.code) { case 'KeyW': this.moveState.forward = true; break; case 'KeyS': this.moveState.backward = true; break; case 'KeyA': this.moveState.left = true; break; case 'KeyD': this.moveState.right = true; break; case 'Space': if(this.canJump) this.velocity.y += 12; this.canJump = false; break; case 'ShiftLeft': this.moveState.sprint = true; break; case 'ControlLeft': case 'KeyC': this.moveState.crouch = true; break; } },
             onKeyUp: function(e) { if(!this.isPlaytest) return; switch(e.code) { case 'KeyW': this.moveState.forward = false; break; case 'KeyS': this.moveState.backward = false; break; case 'KeyA': this.moveState.left = false; break; case 'KeyD': this.moveState.right = false; break; case 'ShiftLeft': this.moveState.sprint = false; break; case 'ControlLeft': case 'KeyC': this.moveState.crouch = false; break; } },
             update: function(dt) {
