@@ -823,7 +823,23 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                 </div>
                 <div class="flex text-2xl font-bold bg-black/20">
                     <button onclick="uiManager.hideExportModal()" data-i18n="cancel" class="flex-1 py-5 text-center border-r border-gray-800 text-gray-400 hover:bg-white/5 hover:text-white transition">Cancel</button>
-                    <button onclick="uiManager.exportToGoreBoxZIP()" data-i18n="saveZip" class="flex-1 py-5 text-center hover:bg-blue-600/20 transition text-blue-400 hover:text-blue-300">Save ZIP</button>
+                    <button onclick="uiManager.exportToGoreBoxZIP()" data-i18n="saveZip" class="flex-1 py-5 text-center border-r border-gray-800 hover:bg-blue-600/20 transition text-blue-400 hover:text-blue-300">Save ZIP</button>
+                </div>
+                <button onclick="uiManager.exportToGoreBoxZIPWithLighting()" data-i18n="saveZipLit" class="w-full py-5 text-center text-2xl font-bold hover:bg-amber-500/20 transition text-amber-400 hover:text-amber-300 border-t border-gray-800 flex items-center justify-center gap-2">
+                    <span class="ui-icon ui-icon-anim" aria-hidden="true">☀️</span>
+                    <span>Export with Lighting</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- LIGHT BAKE PROGRESS MODAL -->
+        <div id="bake-progress-modal" class="ui-scale-layer hidden fixed inset-0 z-[70] flex items-center justify-center pointer-events-auto bg-black/80 transition-opacity">
+            <div class="w-[460px] bg-[#0b121c] border border-amber-500/30 rounded-xl flex flex-col relative modal-enter overflow-hidden p-8 text-center">
+                <span class="ui-icon ui-icon-xl ui-icon-anim" aria-hidden="true">☀️</span>
+                <h3 class="text-2xl text-gray-200 font-bold mt-2 mb-1">Baking Lighting…</h3>
+                <p id="bake-progress-text" class="text-lg text-gray-500 mb-4">Preparing…</p>
+                <div class="w-full h-3 bg-black/50 rounded-full overflow-hidden border border-gray-800">
+                    <div id="bake-progress-bar" class="h-full bg-amber-500 transition-all" style="width:0%"></div>
                 </div>
             </div>
         </div>
@@ -1076,7 +1092,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                     ssao: "Corner Shadows", waterWaves: "Water Waves (+ Skybox Reflections Only)", textureSmoothing: "Texture Smoothing", showFps: "Show FPS", fogHeader: "Fog", fogColorLabel: "Fog Color (if clear)",
                     fogStart: "Start", fogEnd: "End", exportTitle: "EXPORT TO GOREBOX",
                     exportDesc: "A ZIP archive with MapData.json (v4) and CustomTextures folder will be generated.",
-                    saveZip: "Save ZIP", optGrid: "Grid", optPlain: "Plain (White)",
+                    saveZip: "Save ZIP", saveZipLit: "Export with Lighting", bakePreparing: "Preparing…", bakingFace: "Baking face", bakeAssemblingZip: "Assembling ZIP…", optGrid: "Grid", optPlain: "Plain (White)",
                     optDark: "Dark", optGrass: "Grass (Texture)", optStretch: "Stretch",
                     optXY: "X Y Tiling (1x1 m)", optYX: "Y X Tiling (Inverse)", optConcrete: "Concrete",
                     optWood: "Wood", optMetal: "Metal", optCarpet: "Carpet (Fabric)",
@@ -4604,6 +4620,249 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 return { type: obj.userData.type, pos: {x: pos.x, y: pos.y, z: pos.z}, rot: {x: euler.x, y: euler.y, z: euler.z}, rotOrder: 'YXZ', quat: qData, scl: {x: scl.x, y: scl.y, z: scl.z}, userData: {...obj.userData, tilingMode: obj.userData.tilingMode || 'stretch', materialName: resolvedMaterialName, sourceTag: obj.userData.sourceTag || materialType} }; 
             },
 
+            // ===================================================================================
+            // === LIGHT-BAKED EXPORT ("Export with Lighting") ===
+            // Для каждого видимого куба фотографирует все 6 граней ортографической камерой строго
+            // по их периметру (с учётом текущего освещения/теней/бликов/отражений сцены), и заменяет
+            // куб на 6 тончайших декаль-кубов — по одному на грань — каждый со своей запечённой
+            // текстурой в режиме Stretch. Формат GoreBox поддерживает только одну текстуру на куб,
+            // поэтому отдельные текстуры на грань физически возможны только через раздельные кубы.
+            // ===================================================================================
+
+            bakeBlockFaceTextures: async function(progressCb) {
+                const BAKE_SIZE = 512;
+
+                // Локальные нормали и tangent/bitangent для 6 граней BoxGeometry (порядок: +X -X +Y -Y +Z -Z)
+                const FACES = [
+                    { id: 'px', normal: new THREE.Vector3( 1, 0, 0), tangent: new THREE.Vector3(0, 0, -1), bitangent: new THREE.Vector3(0, 1, 0) },
+                    { id: 'nx', normal: new THREE.Vector3(-1, 0, 0), tangent: new THREE.Vector3(0, 0,  1), bitangent: new THREE.Vector3(0, 1, 0) },
+                    { id: 'py', normal: new THREE.Vector3( 0, 1, 0), tangent: new THREE.Vector3(1, 0, 0),  bitangent: new THREE.Vector3(0, 0, -1) },
+                    { id: 'ny', normal: new THREE.Vector3( 0,-1, 0), tangent: new THREE.Vector3(1, 0, 0),  bitangent: new THREE.Vector3(0, 0, 1) },
+                    { id: 'pz', normal: new THREE.Vector3( 0, 0, 1), tangent: new THREE.Vector3(1, 0, 0),  bitangent: new THREE.Vector3(0, 1, 0) },
+                    { id: 'nz', normal: new THREE.Vector3( 0, 0,-1), tangent: new THREE.Vector3(-1, 0, 0), bitangent: new THREE.Vector3(0, 1, 0) }
+                ];
+
+                // --- ВАЖНО: НЕ создаём второй THREE.WebGLRenderer — на мобильных WebView это часто приводит к
+                // сбою создания WebGL-контекста (лимит одновременных контекстов / нет offscreen canvas).
+                // Вместо этого переиспользуем уже существующий this.renderer и рендерим во временный
+                // WebGLRenderTarget — это штатный, кроссплатформенный способ offscreen-рендеринга в three.js. ---
+                const renderer = this.renderer;
+                const bakeTarget = new THREE.WebGLRenderTarget(BAKE_SIZE, BAKE_SIZE, {
+                    type: THREE.UnsignedByteType,
+                    format: THREE.RGBAFormat,
+                    colorSpace: THREE.SRGBColorSpace,
+                    depthBuffer: true,
+                    stencilBuffer: false
+                });
+
+                const orthoCam = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, -10, 10);
+
+                // --- Временно скрываем редакторские служебные объекты (но НЕ кубы — они должны отбрасывать тени друг на друга) ---
+                const hidden = [];
+                const hide = (obj) => { if (obj && obj.visible) { hidden.push(obj); obj.visible = false; } };
+                hide(this.gridHelper);
+                hide(this.transformControl);
+                hide(this.cloudsObj);
+                hide(this.weatherParticles);
+                this.outlines.forEach(hide);
+                this.sparksList.forEach(hide);
+                this.waterFoamParticles.forEach(hide);
+                if (this.spawnPointObj) hide(this.spawnPointObj);
+                const lightIconStates = [];
+                this.manualLights.forEach(l => { if (l.material) { lightIconStates.push([l.material, l.material.visible]); l.material.visible = false; } });
+
+                // Сохраняем состояние основного рендерера, чтобы корректно восстановить его после бейка
+                const prevRenderTarget = renderer.getRenderTarget();
+                const prevShadowAutoUpdate = renderer.shadowMap.autoUpdate;
+                const prevToneMapping = renderer.toneMapping;
+                const prevXrEnabled = renderer.xr ? renderer.xr.enabled : undefined;
+                if (renderer.xr) renderer.xr.enabled = false;
+                renderer.shadowMap.autoUpdate = true;
+                renderer.shadowMap.needsUpdate = true;
+
+                // Прогреваем shadow map обычным кадром, чтобы тени точно были актуальны перед бейком
+                renderer.setRenderTarget(null);
+                renderer.render(this.scene, this.camera);
+
+                const bakedTextures = {}; // name -> dataURL
+                const tmpPos = new THREE.Vector3(), tmpQuat = new THREE.Quaternion(), tmpScale = new THREE.Vector3();
+                const worldNormal = new THREE.Vector3(), worldTangent = new THREE.Vector3(), worldBitangent = new THREE.Vector3(), faceCenter = new THREE.Vector3();
+                const camPos = new THREE.Vector3(), camTarget = new THREE.Vector3(), camUp = new THREE.Vector3();
+
+                // Переиспользуемый буфер пикселей и canvas для конвертации RenderTarget -> PNG dataURL.
+                // readRenderTargetPixels работает на ЛЮБОМ WebGLRenderer (включая мобильные WebView),
+                // в отличие от toDataURL на отдельном offscreen-контексте.
+                const pixelBuffer = new Uint8Array(BAKE_SIZE * BAKE_SIZE * 4);
+                const pngCanvas = document.createElement('canvas');
+                pngCanvas.width = BAKE_SIZE; pngCanvas.height = BAKE_SIZE;
+                const pngCtx = pngCanvas.getContext('2d');
+                const imageData = pngCtx.createImageData(BAKE_SIZE, BAKE_SIZE);
+
+                const litCubes = this.blocks.filter(b => b.userData?.type === 'cube' && b.userData.visible !== false && !isWaterLike(b.userData.texture, b.userData.materialType));
+                const totalFaces = litCubes.length * 6;
+                let doneFaces = 0;
+
+                const newDecalDefs = []; // { cubeRef, faceId, materialName, ... }
+
+                try {
+                    for (const cube of litCubes) {
+                        cube.getWorldPosition(tmpPos);
+                        cube.getWorldQuaternion(tmpQuat);
+                        cube.getWorldScale(tmpScale);
+                        const sx = Math.abs(tmpScale.x), sy = Math.abs(tmpScale.y), sz = Math.abs(tmpScale.z);
+
+                        for (const face of FACES) {
+                            // Размер грани в мировых юнитах (BoxGeometry — это единичный куб, грань скейлится по двум осям, не считая нормали)
+                            let faceW, faceH;
+                            if (face.id === 'px' || face.id === 'nx') { faceW = sz; faceH = sy; }
+                            else if (face.id === 'py' || face.id === 'ny') { faceW = sx; faceH = sz; }
+                            else { faceW = sx; faceH = sy; }
+                            faceW = Math.max(faceW, 0.001); faceH = Math.max(faceH, 0.001);
+
+                            worldNormal.copy(face.normal).applyQuaternion(tmpQuat).normalize();
+                            worldTangent.copy(face.tangent).applyQuaternion(tmpQuat).normalize();
+                            worldBitangent.copy(face.bitangent).applyQuaternion(tmpQuat).normalize();
+
+                            // Центр грани = центр куба + нормаль * половина соответствующего локального измерения
+                            const halfAxis = face.id === 'px' || face.id === 'nx' ? sx * 0.5 : (face.id === 'py' || face.id === 'ny' ? sy * 0.5 : sz * 0.5);
+                            faceCenter.copy(tmpPos).addScaledVector(worldNormal, halfAxis);
+
+                            // Камера строго по периметру грани: ortho-bounds равны фактическому размеру грани
+                            orthoCam.left = -faceW / 2; orthoCam.right = faceW / 2;
+                            orthoCam.top = faceH / 2; orthoCam.bottom = -faceH / 2;
+                            const camDist = Math.max(faceW, faceH, 0.05) * 1.5 + 0.5;
+                            camPos.copy(faceCenter).addScaledVector(worldNormal, camDist);
+                            camTarget.copy(faceCenter);
+                            camUp.copy(worldBitangent);
+                            orthoCam.position.copy(camPos);
+                            orthoCam.up.copy(camUp);
+                            orthoCam.lookAt(camTarget);
+                            orthoCam.near = 0.01;
+                            orthoCam.far = camDist + halfAxis + 5;
+                            orthoCam.updateProjectionMatrix();
+                            orthoCam.updateMatrixWorld(true);
+
+                            renderer.shadowMap.needsUpdate = true;
+                            renderer.setRenderTarget(bakeTarget);
+                            renderer.clear(true, true, false);
+                            renderer.render(this.scene, orthoCam);
+                            renderer.readRenderTargetPixels(bakeTarget, 0, 0, BAKE_SIZE, BAKE_SIZE, pixelBuffer);
+
+                            // readRenderTargetPixels возвращает строки снизу вверх (OpenGL), а Canvas ImageData
+                            // ожидает строки сверху вниз — переворачиваем по вертикали при копировании.
+                            const rowBytes = BAKE_SIZE * 4;
+                            for (let row = 0; row < BAKE_SIZE; row++) {
+                                const srcStart = (BAKE_SIZE - 1 - row) * rowBytes;
+                                const dstStart = row * rowBytes;
+                                imageData.data.set(pixelBuffer.subarray(srcStart, srcStart + rowBytes), dstStart);
+                            }
+                            pngCtx.putImageData(imageData, 0, 0);
+                            const dataUrl = pngCanvas.toDataURL('image/png');
+
+                            const matName = `Lit_${cube.uuid.slice(0, 8)}_${face.id}`;
+                            bakedTextures[matName] = dataUrl;
+                            newDecalDefs.push({ cubeRef: cube, faceId: face.id, materialName: matName, faceW, faceH, halfAxis, worldNormal: worldNormal.clone(), worldTangent: worldTangent.clone(), worldBitangent: worldBitangent.clone(), faceCenter: faceCenter.clone(), worldQuat: tmpQuat.clone() });
+
+                            doneFaces++;
+                            if (progressCb) progressCb(doneFaces, totalFaces);
+                            // Дадим браузеру вдохнуть, чтобы UI прогресс-бара не подвисал на больших картах
+                            if (doneFaces % 4 === 0) await new Promise(r => setTimeout(r, 0));
+                        }
+                    }
+                } finally {
+                    // --- Восстанавливаем рендерер и сцену в исходное состояние независимо от результата ---
+                    renderer.setRenderTarget(prevRenderTarget);
+                    renderer.shadowMap.autoUpdate = prevShadowAutoUpdate;
+                    renderer.toneMapping = prevToneMapping;
+                    if (renderer.xr && prevXrEnabled !== undefined) renderer.xr.enabled = prevXrEnabled;
+                    bakeTarget.dispose();
+                    hidden.forEach(o => o.visible = true);
+                    lightIconStates.forEach(([mat, vis]) => mat.visible = vis);
+                }
+
+                return { bakedTextures, newDecalDefs, litCubes };
+            },
+
+            // Строит мировую трансформацию (position, quaternion, scale) тонкого декаль-куба для одной грани.
+            // Локальные оси декаля: X = tangent (вдоль faceW), Y = bitangent (вдоль faceH), Z = normal (толщина).
+            // Это гарантирует, что BoxGeometry(1,1,1) декаля, отмасштабированный на (faceW, faceH, thickness),
+            // своей лицевой стороной (+Z локально) будет смотреть точно вдоль мировой нормали исходной грани —
+            // то есть наружу куба, ровно по его периметру, без перекоса и без зазоров по краям.
+            buildDecalTransform: function(decal, thickness, offset) {
+                const m = new THREE.Matrix4();
+                const xAxis = decal.worldTangent.clone().normalize();
+                const zAxis = decal.worldNormal.clone().normalize();
+                // Гарантируем строго ортонормированную правую тройку (на случай числовых неточностей
+                // после applyQuaternion), пересчитывая Y из Z×X, а не используя bitangent напрямую.
+                const yAxis = new THREE.Vector3().crossVectors(zAxis, xAxis).normalize();
+                m.makeBasis(xAxis, yAxis, zAxis);
+                const quaternion = new THREE.Quaternion().setFromRotationMatrix(m);
+                const position = decal.faceCenter.clone().addScaledVector(zAxis, offset);
+                const scale = new THREE.Vector3(decal.faceW, decal.faceH, thickness);
+                return { position, quaternion, scale };
+            },
+
+            // Строит MapData.json для lit-экспорта: каждый куб с освещением заменяется на скрытый
+            // коллизионный куб (физика/геометрия сохраняется) + 6 видимых тонких декаль-кубов с запечёнными текстурами.
+            // Кубы, для которых bake не делался (вода и т.п.) экспортируются как обычно.
+            serializeToGoreBoxFormatLit: function(bakeResult) {
+                const SKIN_THICKNESS = 0.004;
+                const SKIN_OFFSET = 0.003;
+                const mapData = { version: 4, cubes: [] };
+                const bakedCubeIds = new Set(bakeResult.litCubes.map(c => c.uuid));
+
+                this.blocks.forEach(b => {
+                    const gbTag = b.userData.sourceTag || getFallbackGoreBoxTag(b.userData.materialType || 'Concrete');
+
+                    if (bakedCubeIds.has(b.uuid)) {
+                        // Исходный куб — оставляем НЕВИДИМЫМ, но с коллизией, чтобы физика/геометрия уровня не изменилась.
+                        let pos = new THREE.Vector3(), rot = new THREE.Quaternion(), scl = new THREE.Vector3();
+                        b.getWorldPosition(pos); b.getWorldQuaternion(rot); b.getWorldScale(scl);
+                        const gbEuler = threeQuaternionToUnityEulerDeg(rot);
+                        mapData.cubes.push({
+                            name: "MapCube", tag: gbTag, tileMode: 2, visible: false,
+                            collisions: b.userData.collisions !== false, physics: false,
+                            materialName: getFallbackGoreBoxMaterialName(b.userData.materialType || 'Concrete'),
+                            position: { x: pos.x, y: pos.y, z: -pos.z },
+                            rotation: { x: gbEuler.x, y: gbEuler.y, z: gbEuler.z },
+                            scale: { x: scl.x, y: scl.y, z: scl.z }
+                        });
+                        return;
+                    }
+
+                    // Кубы без bake (вода и т.п.) — обычная сериализация, как в стандартном экспорте.
+                    const gbMatName = b.userData.materialName || (BUILTIN_TEXTURE_KEYS.has(b.userData.texture) ? getFallbackGoreBoxMaterialName(b.userData.materialType || 'Concrete') : (b.userData.texture || getFallbackGoreBoxMaterialName(b.userData.materialType || 'Concrete')));
+                    let pos = new THREE.Vector3(), rot = new THREE.Quaternion(), scl = new THREE.Vector3();
+                    b.getWorldPosition(pos); b.getWorldQuaternion(rot); b.getWorldScale(scl);
+                    const gbEuler = threeQuaternionToUnityEulerDeg(rot);
+                    mapData.cubes.push({
+                        name: "MapCube", tag: gbTag,
+                        tileMode: b.userData.tilingMode === 'xy' ? 0 : (b.userData.tilingMode === 'yx' ? 1 : 2),
+                        visible: b.userData.visible !== false, collisions: b.userData.collisions !== false, physics: false,
+                        materialName: gbMatName,
+                        position: { x: pos.x, y: pos.y, z: -pos.z },
+                        rotation: { x: gbEuler.x, y: gbEuler.y, z: gbEuler.z },
+                        scale: { x: scl.x, y: scl.y, z: scl.z }
+                    });
+                });
+
+                // Декаль-кубы — по одному на грань, с запечёнными текстурами, режим Stretch (tileMode: 2).
+                bakeResult.newDecalDefs.forEach(decal => {
+                    const t = this.buildDecalTransform(decal, SKIN_THICKNESS, SKIN_OFFSET);
+                    const gbEuler = threeQuaternionToUnityEulerDeg(t.quaternion);
+                    const gbTag = decal.cubeRef.userData.sourceTag || getFallbackGoreBoxTag(decal.cubeRef.userData.materialType || 'Concrete');
+                    mapData.cubes.push({
+                        name: "MapCube", tag: gbTag, tileMode: 2, visible: true, collisions: false, physics: false,
+                        materialName: decal.materialName,
+                        position: { x: t.position.x, y: t.position.y, z: -t.position.z },
+                        rotation: { x: gbEuler.x, y: gbEuler.y, z: gbEuler.z },
+                        scale: { x: t.scale.x, y: t.scale.y, z: t.scale.z }
+                    });
+                });
+
+                return mapData;
+            },
+
             serializeToGoreBoxFormat: function() {
                 const mapData = { version: 4, cubes: [] };
                 this.blocks.forEach(b => {
@@ -5609,6 +5868,69 @@ if (texSel) {
                     const ind = document.createElement('div'); ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-green-600/90 text-white px-8 py-3 rounded-full text-xl font-bold z-[100] modal-enter uppercase text-center'; ind.innerText = i18n.t('archiveSuccess'); document.body.appendChild(ind);
                     setTimeout(() => { ind.style.opacity = '0'; ind.style.transition='opacity 0.3s'; setTimeout(() => ind.remove(), 300); }, 3000);
                 } catch (err) { console.error("Export Error:", err); alert(i18n.t('exportError')); }
+            },
+
+            // === EXPORT WITH LIGHTING ===
+            // Фотографирует каждую грань каждого куба ортографической камерой строго по её периметру
+            // (с учётом текущих теней/освещения/бликов/отражений сцены), запекает результат в PNG-текстуры
+            // и собирает GoreBox-совместимый ZIP, где каждый куб заменён на 6 тонких декаль-кубов —
+            // по одному на грань — каждый со своей запечённой текстурой в режиме Stretch.
+            exportToGoreBoxZIPWithLighting: async function() {
+                const progModal = document.getElementById('bake-progress-modal');
+                const progBar = document.getElementById('bake-progress-bar');
+                const progText = document.getElementById('bake-progress-text');
+                try {
+                    this.hideExportModal();
+                    if (progModal) progModal.classList.remove('hidden');
+                    if (progBar) progBar.style.width = '0%';
+                    if (progText) progText.innerText = i18n.t('bakePreparing') || 'Preparing…';
+
+                    // Небольшая пауза, чтобы модалка прогресса успела отрисоваться перед тяжёлой работой
+                    await new Promise(r => setTimeout(r, 30));
+
+                    const bakeResult = await engine.bakeBlockFaceTextures((done, total) => {
+                        const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                        if (progBar) progBar.style.width = pct + '%';
+                        if (progText) progText.innerText = `${i18n.t('bakingFace') || 'Baking face'} ${done} / ${total}`;
+                    });
+
+                    if (progText) progText.innerText = i18n.t('bakeAssemblingZip') || 'Assembling ZIP…';
+                    await new Promise(r => setTimeout(r, 10));
+
+                    const zip = new JSZip();
+                    const mapData = engine.serializeToGoreBoxFormatLit(bakeResult);
+                    zip.file("MapData.json", JSON.stringify(mapData, null, 2));
+
+                    const customTexFolder = zip.folder("CustomTextures");
+                    for (const matName in bakeResult.bakedTextures) {
+                        const dataUrl = bakeResult.bakedTextures[matName];
+                        const base64Data = dataUrl.split(',')[1];
+                        if (base64Data) customTexFolder.file(`${matName}.png`, base64Data, { base64: true });
+                    }
+                    // Также включаем все обычные кастомные текстуры проекта на случай, если карта их использует (например, вода).
+                    for (const key in activeProjectCustomTextures) {
+                        const tex = activeProjectCustomTextures[key];
+                        if (tex.userData?.originalDataUrl) {
+                            const base64Data = tex.userData.originalDataUrl.split(',')[1];
+                            if (base64Data) customTexFolder.file(tex.userData.originalName, base64Data, { base64: true });
+                        }
+                    }
+
+                    const content = await zip.generateAsync({ type: "blob" });
+                    const url = URL.createObjectURL(content);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = `${window.appState.currentProjectName.replace(/\s+/g, '_')}_GoreBoxMap_Lit.zip`; a.click();
+                    URL.revokeObjectURL(url);
+
+                    if (progModal) progModal.classList.add('hidden');
+                    const ind = document.createElement('div'); ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-amber-500/90 text-white px-8 py-3 rounded-full text-xl font-bold z-[100] modal-enter uppercase text-center'; ind.innerText = i18n.t('archiveSuccess'); document.body.appendChild(ind);
+                    setTimeout(() => { ind.style.opacity = '0'; ind.style.transition = 'opacity 0.3s'; setTimeout(() => ind.remove(), 300); }, 3000);
+                } catch (err) {
+                    console.error("Lit Export Error:", err);
+                    if (progModal) progModal.classList.add('hidden');
+                    const detail = (err && (err.message || err.toString())) || 'Unknown error';
+                    alert((i18n.t('exportError') || 'Project export error.') + '\n\n' + detail);
+                }
             }
         };
 
