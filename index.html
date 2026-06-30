@@ -1726,6 +1726,49 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
         function blobToDataURL(blob) {
             return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(reader.error); reader.readAsDataURL(blob); });
         }
+
+        // --- GOREBOX/UNITY <-> THREE.JS ROTATION BRIDGE ---
+        // ВАЖНО: предыдущая попытка с ZXY ухудшила импорт. Для этого редактора и уже существующих
+        // карт правильная совместимая схема такая: при зеркале Z углы X/Y меняют знак, Z остаётся,
+        // а хранить/применять результат нужно именно в order='YXZ'. Главный баг был не в этой формуле,
+        // а в том, что при загрузке mesh.rotation.set(...) сбрасывал order обратно в XYZ.
+        function normalizeAngle360(deg) {
+            const n = Number.isFinite(deg) ? deg : 0;
+            return ((n % 360) + 360) % 360;
+        }
+
+        function normalizeUnitySignedAngle(deg) {
+            const d = parseFloat(deg) || 0;
+            return d > 180 ? d - 360 : d;
+        }
+
+        function unityEulerDegToThreeQuaternion(rotation = {}) {
+            const rx = THREE.MathUtils.degToRad(normalizeUnitySignedAngle(rotation.x));
+            const ry = THREE.MathUtils.degToRad(normalizeUnitySignedAngle(rotation.y));
+            const rz = THREE.MathUtils.degToRad(normalizeUnitySignedAngle(rotation.z));
+            return new THREE.Quaternion().setFromEuler(new THREE.Euler(-rx, -ry, rz, 'YXZ')).normalize();
+        }
+
+        function threeQuaternionToUnityEulerDeg(qThreeIn) {
+            const qThree = qThreeIn.clone().normalize();
+            const e = new THREE.Euler().setFromQuaternion(qThree, 'YXZ');
+            return {
+                x: normalizeAngle360(-THREE.MathUtils.radToDeg(e.x)),
+                y: normalizeAngle360(-THREE.MathUtils.radToDeg(e.y)),
+                z: normalizeAngle360(THREE.MathUtils.radToDeg(e.z))
+            };
+        }
+
+        function applySerializedTransform(obj, data, fallbackOrder = 'YXZ') {
+            if (!obj || !data) return;
+            if (data.pos) obj.position.set(data.pos.x || 0, data.pos.y || 0, data.pos.z || 0);
+            if (data.quat && Number.isFinite(data.quat.w)) {
+                obj.quaternion.set(data.quat.x || 0, data.quat.y || 0, data.quat.z || 0, data.quat.w).normalize();
+            } else if (data.rot) {
+                obj.quaternion.setFromEuler(new THREE.Euler(data.rot.x || 0, data.rot.y || 0, data.rot.z || 0, data.rotOrder || fallbackOrder));
+            }
+            if (data.scl) obj.scale.set(data.scl.x || 1, data.scl.y || 1, data.scl.z || 1);
+        }
         function mapGoreBoxCubeToProjectBlock(cube) {
             const materialName = cube.materialName || normalizeTextureKey(cube.name || 'texture');
             const materialType = mapGoreBoxTagToMaterialType(cube.tag);
@@ -1737,20 +1780,15 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             const posY = parseFloat(cube.position?.y) || 0;
             const posZ = -(parseFloat(cube.position?.z) || 0);
 
-            // Фикс поворота кубов: переводим углы Эйлера из левой системы Unity в правую Three.js
-            // Unity хранит углы в диапазоне 0–360, где значения > 180 — это отрицательные углы (349 = -11°)
-            const normalizeUnityAngle = (deg) => { const d = parseFloat(deg) || 0; return d > 180 ? d - 360 : d; };
-            const rx = THREE.MathUtils.degToRad(normalizeUnityAngle(cube.rotation?.x));
-            const ry = THREE.MathUtils.degToRad(normalizeUnityAngle(cube.rotation?.y));
-            const rz = THREE.MathUtils.degToRad(normalizeUnityAngle(cube.rotation?.z));
-
-            // При инверсии Z, углы X и Y меняют свое направление вращения. Порядок осей YXZ идеально подходит.
-            const euler = new THREE.Euler(-rx, -ry, rz, 'YXZ');
+            const q = unityEulerDegToThreeQuaternion(cube.rotation || { x: 0, y: 0, z: 0 });
+            const euler = new THREE.Euler().setFromQuaternion(q, 'YXZ');
 
             return {
                 type: 'cube',
                 pos: { x: posX, y: posY, z: posZ },
                 rot: { x: euler.x, y: euler.y, z: euler.z },
+                rotOrder: 'YXZ',
+                quat: { x: q.x, y: q.y, z: q.z, w: q.w },
                 scl: { x: parseFloat(cube.scale?.x) || 1, y: parseFloat(cube.scale?.y) || 1, z: parseFloat(cube.scale?.z) || 1 },
                 userData: {
                     type: 'cube', visible: cube.visible !== false, collisions: cube.collisions !== false, physics: cube.physics === true,
@@ -3177,12 +3215,9 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         origin.y + p.y,
                         origin.z + p.z
                     );
-                    mesh.rotation.set(
-                        THREE.MathUtils.degToRad(r.x),
-                        THREE.MathUtils.degToRad(r.y),
-                        THREE.MathUtils.degToRad(r.z),
-                        'YXZ'
-                    );
+                    // Collection cubes are stored in GoreBox/Unity-like degrees.
+                    // Convert them through the same bridge as imported GoreBox maps.
+                    mesh.quaternion.copy(unityEulerDegToThreeQuaternion(r));
                     mesh.scale.set(s.x, s.y, s.z);
 
                     const isVisible = cubeDef.visible !== false;
@@ -3653,7 +3688,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 const resolvedSourceTag = sourceTag || matT;
 
                 if (data) { 
-                    mesh.position.set(data.pos.x, data.pos.y, data.pos.z); mesh.rotation.set(data.rot.x, data.rot.y, data.rot.z); mesh.scale.set(data.scl.x, data.scl.y, data.scl.z); 
+                    applySerializedTransform(mesh, data); 
                     mesh.userData = { ...data.userData, texture: tex, materialType: matT, colorHex: col, tilingMode: tMode, materialName: resolvedMaterialName, sourceTag: resolvedSourceTag, skyboxReflectivity: initialReflect, skyboxBlur: initialBlur }; 
                 } 
                 else { 
@@ -3687,9 +3722,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
                 const defaultSize = parseFloat(ud.size ?? 0.8);
                 if (data) {
-                    mesh.position.set(data.pos.x, data.pos.y, data.pos.z);
-                    mesh.rotation.set(data.rot.x, data.rot.y, data.rot.z);
-                    mesh.scale.set(data.scl.x, data.scl.y, data.scl.z);
+                    applySerializedTransform(mesh, data);
                 } else {
                     const spawnPos = this.getSpawnPositionByRaycast(5);
                     spawnPos.y += 1.5;
@@ -3966,7 +3999,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         data.userData.groupId = groupMap.get(data.userData.groupId);
                     }
                     const newGeo = createBlockGeometry(data.userData.texture, data.userData.materialType); const mesh = new THREE.Mesh(newGeo, createMaterial(data.userData.texture, data.userData.materialType, data.userData.colorHex)); mesh.castShadow = !isWaterLike(data.userData.texture, data.userData.materialType); mesh.receiveShadow = true;
-                    mesh.position.set(data.pos.x, data.pos.y, data.pos.z); mesh.rotation.set(data.rot.x, data.rot.y, data.rot.z); mesh.scale.set(data.scl.x, data.scl.y, data.scl.z); mesh.userData = data.userData;
+                    applySerializedTransform(mesh, data); mesh.userData = data.userData;
                     if (mesh.userData.visible === false) { mesh.material.transparent = true; mesh.material.opacity = 0.3; mesh.castShadow = false; }
                     this.updateCubeUVs(mesh); this.scene.add(mesh); this.blocks.push(mesh); duplicated.push(mesh);
                 });
@@ -4560,14 +4593,15 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
             },
 
             serializeObject: function(obj) { 
-                let pos = new THREE.Vector3(), rot = new THREE.Quaternion(), scl = new THREE.Vector3(); obj.getWorldPosition(pos); obj.getWorldQuaternion(rot); obj.getWorldScale(scl); let euler = new THREE.Euler().setFromQuaternion(rot, 'YXZ');
+                let pos = new THREE.Vector3(), rot = new THREE.Quaternion(), scl = new THREE.Vector3(); obj.getWorldPosition(pos); obj.getWorldQuaternion(rot); obj.getWorldScale(scl); rot.normalize(); let euler = new THREE.Euler().setFromQuaternion(rot, 'YXZ');
+                const qData = { x: rot.x, y: rot.y, z: rot.z, w: rot.w };
                 if (obj.userData?.type === 'light') {
                     const ud = { ...obj.userData };
                     delete ud.lightSource; delete ud.lightTarget;
-                    return { type: 'light', pos: {x: pos.x, y: pos.y, z: pos.z}, rot: {x: euler.x, y: euler.y, z: euler.z}, scl: {x: scl.x, y: scl.y, z: scl.z}, userData: ud };
+                    return { type: 'light', pos: {x: pos.x, y: pos.y, z: pos.z}, rot: {x: euler.x, y: euler.y, z: euler.z}, rotOrder: 'YXZ', quat: qData, scl: {x: scl.x, y: scl.y, z: scl.z}, userData: ud };
                 }
                 const materialType = obj.userData.materialType || 'Concrete'; const textureKey = obj.userData.texture || 'grid'; const resolvedMaterialName = obj.userData.materialName || (BUILTIN_TEXTURE_KEYS.has(textureKey) ? getFallbackGoreBoxMaterialName(materialType) : textureKey);
-                return { type: obj.userData.type, pos: {x: pos.x, y: pos.y, z: pos.z}, rot: {x: euler.x, y: euler.y, z: euler.z}, scl: {x: scl.x, y: scl.y, z: scl.z}, userData: {...obj.userData, tilingMode: obj.userData.tilingMode || 'stretch', materialName: resolvedMaterialName, sourceTag: obj.userData.sourceTag || materialType} }; 
+                return { type: obj.userData.type, pos: {x: pos.x, y: pos.y, z: pos.z}, rot: {x: euler.x, y: euler.y, z: euler.z}, rotOrder: 'YXZ', quat: qData, scl: {x: scl.x, y: scl.y, z: scl.z}, userData: {...obj.userData, tilingMode: obj.userData.tilingMode || 'stretch', materialName: resolvedMaterialName, sourceTag: obj.userData.sourceTag || materialType} }; 
             },
 
             serializeToGoreBoxFormat: function() {
@@ -4581,18 +4615,18 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     b.getWorldQuaternion(rot); 
                     b.getWorldScale(scl);
                     
-                    // Преобразуем кватернион вращения в углы Эйлера порядка YXZ
-                    let euler = new THREE.Euler().setFromQuaternion(rot, 'YXZ');
+                    // Convert Three.js quaternion back to Unity/GoreBox Euler correctly.
+                    // This is the inverse of unityEulerDegToThreeQuaternion() and preserves combined rotations.
+                    const gbEuler = threeQuaternionToUnityEulerDeg(rot);
                     
                     // Возвращаем координаты в формат GoreBox: инвертируем Z обратно
                     const gbPosX = pos.x;
                     const gbPosY = pos.y;
                     const gbPosZ = -pos.z;
 
-                    // Переводим обратно в левую систему: инвертируем X и Y, возвращаем в градусы
-                    const gbRotX = -THREE.MathUtils.radToDeg(euler.x);
-                    const gbRotY = -THREE.MathUtils.radToDeg(euler.y);
-                    const gbRotZ = THREE.MathUtils.radToDeg(euler.z);
+                    const gbRotX = gbEuler.x;
+                    const gbRotY = gbEuler.y;
+                    const gbRotZ = gbEuler.z;
 
                     mapData.cubes.push({ 
                         name: "MapCube", 
@@ -5611,5 +5645,5 @@ if (texSel) {
         <button onclick="document.getElementById('tex-load-btn').style.display='none'" title="Закрыть" style="background:transparent;color:#94a3b8;border:none;border-radius:6px;width:26px;height:26px;font-size:18px;line-height:1;cursor:pointer;margin-left:4px;padding:0;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#94a3b8'">&#10005;</button>
     </div>
 
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a13b879d2ef7e40d',t:'MTc4MjgwNTI5OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a13bd3e70b4cc9cd',t:'MTc4MjgwODQyMw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
