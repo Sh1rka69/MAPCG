@@ -98,14 +98,12 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
         ::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #60a5fa; }
 
-        .ui-panel { background: rgba(11, 16, 26, 0.85); backdrop-filter: blur(8px); }
+        .ui-panel { background: rgba(11, 16, 26, 0.85); }
         input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         
         .btn-bottom { transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1); font-size: 1.3rem; text-transform: uppercase;}
         .btn-bottom:active { transform: translateY(2px) scale(0.95); background: rgba(255,255,255,0.1); }
-        .active-tool { background: rgba(59, 130, 246, 0.2) !important; box-shadow: inset 0 0 15px rgba(0,0,0,0.5); border: 1px solid #3b82f6 !important; color: #60a5fa !important;}
-        @keyframes groupPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.5); } 50% { box-shadow: 0 0 0 8px rgba(74,222,128,0); } }
-        #btn-group:not(.hidden) { animation: groupPulse 1.6s ease-in-out infinite; }
+        .active-tool { background: rgba(59, 130, 246, 0.2) !important; border: 1px solid #3b82f6 !important; color: #60a5fa !important;}
         .shape-panel {
             transform-origin: top right;
             transform: translateY(-6px) scaleY(0.92);
@@ -131,8 +129,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
         .shape-arrow.open { transform: rotate(180deg); }
         .collection-modal-overlay {
             position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 9999;
-            display: flex; align-items: center; justify-content: center;
-            backdrop-filter: blur(8px); animation: fadeInOverlay 0.2s ease;
+            display: flex; align-items: center; justify-content: center; animation: fadeInOverlay 0.2s ease;
         }
         .collection-modal-overlay.hidden { display: none; }
         @keyframes fadeInOverlay { from { opacity: 0; } to { opacity: 1; } }
@@ -141,7 +138,6 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             border: 1px solid rgba(96,165,250,0.3); border-radius: 20px;
             width: min(92vw, 640px); max-height: 85vh;
             display: flex; flex-direction: column;
-            box-shadow: 0 32px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(96,165,250,0.1), inset 0 1px 0 rgba(255,255,255,0.05);
             animation: slideUpModal 0.25s cubic-bezier(0.34,1.56,0.64,1);
         }
         @keyframes slideUpModal { from { opacity:0; transform: scale(0.92) translateY(30px); } to { opacity:1; transform: scale(1) translateY(0); } }
@@ -175,9 +171,9 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(96,165,250,0.0), rgba(59,130,246,0.0));
             transition: all 0.18s; border-radius: inherit;
         }
-        .collection-item:hover { border-color: rgba(96,165,250,0.5); background: rgba(96,165,250,0.06); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+        .collection-item:hover { border-color: rgba(96,165,250,0.5); background: rgba(96,165,250,0.06); transform: translateY(-1px); }
         .collection-item:hover::before { background: linear-gradient(135deg, rgba(96,165,250,0.05), rgba(59,130,246,0.03)); }
-        .collection-item.selected { border-color: #60a5fa; background: rgba(96,165,250,0.12); box-shadow: 0 0 0 1px rgba(96,165,250,0.3), 0 8px 24px rgba(0,0,0,0.4); }
+        .collection-item.selected { border-color: #60a5fa; background: rgba(96,165,250,0.12); }
         .collection-item-img {
             width: 80px; height: 80px; border-radius: 10px; object-fit: cover; flex-shrink: 0;
             border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.3);
@@ -205,7 +201,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: all 0.18s;
             border: 1px solid rgba(34,197,94,0.5); background: rgba(34,197,94,0.12); color: #86efac;
         }
-        .collection-btn-spawn:hover { background: rgba(34,197,94,0.25); border-color: #4ade80; box-shadow: 0 4px 16px rgba(34,197,94,0.2); }
+        .collection-btn-spawn:hover { background: rgba(34,197,94,0.25); border-color: #4ade80; }
         .collection-selected-preview {
             background: rgba(96,165,250,0.07); border: 1px solid rgba(96,165,250,0.2);
             border-radius: 10px; padding: 10px 14px; margin-bottom: 4px;
@@ -228,7 +224,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
         .btn-sidebar:hover { filter: brightness(1.3); transform: translateX(5px); border-color: #60a5fa;}
 
         #playtest-overlay { position: absolute; inset: 0; z-index: 20; pointer-events: none; display: none; background: radial-gradient(circle, transparent 50%, rgba(0,0,0,0.6) 100%); }
-        .crosshair { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: rgba(255,255,255,0.8); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 4px #000; }
+        .crosshair { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: rgba(255,255,255,0.8); border-radius: 50%; transform: translate(-50%, -50%); }
         
         .modal-enter { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes modalFadeIn { 0% { opacity: 0; transform: scale(0.95) translateY(10px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
@@ -308,8 +304,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             flex-shrink: 0;
             line-height: 1;
             font-size: 20px;
-            filter: drop-shadow(0 0 4px rgba(59,130,246,0.35));
-            transition: transform 0.15s ease, filter 0.15s ease;
+            transition: transform 0.15s ease;
             user-select: none;
         }
         .ui-icon-sm { width: 20px; height: 20px; }
@@ -326,10 +321,6 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             0%   { transform: translateY(-8px); opacity: 0; }
             100% { transform: translateY(0);    opacity: 1; }
         }
-        @keyframes iconPulse {
-            0%, 100% { filter: drop-shadow(0 0 4px rgba(59,130,246,0.35)); }
-            50%       { filter: drop-shadow(0 0 10px rgba(59,130,246,0.75)); }
-        }
 
         .ui-icon-anim  { animation: iconPopIn   0.45s cubic-bezier(0.175,0.885,0.32,1.275) both; }
         .ui-icon-slide { animation: iconFadeSlide 0.35s ease both; }
@@ -343,7 +334,6 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
 
         /* hover glow */
         button:hover .ui-icon, a:hover .ui-icon {
-            filter: drop-shadow(0 0 7px rgba(96,165,250,0.8));
             transform: scale(1.12);
         }
         button:active .ui-icon {
@@ -376,7 +366,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             <div class="absolute inset-0 border-4 border-blue-500 rounded-full border-t-transparent animate-spin"></div>
         </div>
         <h2 class="text-5xl text-blue-400 mb-6 font-bold tracking-[0.2em] animate-pulse text-center">LOADING ENGINE</h2>
-        <div class="w-96 h-2 bg-gray-900 rounded-full overflow-hidden border border-gray-700 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
+        <div class="w-96 h-2 bg-gray-900 rounded-full overflow-hidden border border-gray-700">
             <div id="loading-bar" class="h-full bg-gradient-to-r from-blue-600 to-cyan-400 w-0 transition-all duration-300 relative">
                 <div class="absolute inset-0 bg-white/20 w-full animate-[shimmer_1s_infinite]"></div>
             </div>
@@ -388,12 +378,12 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
     <!-- MAIN MENU (HUB) -->
     <div id="main-menu" class="ui-scale-layer menu-bg fixed inset-0 z-50 flex modal-enter">
         <!-- ЛЕВОЕ МЕНЮ (СТИЛЬ GOREBOX С КАРТИНКИ) -->
-        <div class="w-80 bg-[#060b11] h-full flex flex-col border-r-4 border-[#3b82f6] shadow-[8px_0_25px_rgba(0,0,0,0.7)] flex-shrink-0">
+        <div class="w-80 bg-[#060b11] h-full flex flex-col border-r-4 border-[#3b82f6] flex-shrink-0">
             <!-- Блок Логотипа MapCG v5.5 -->
             <div class="p-6 flex items-center border-b-2 border-[#16273b] bg-black/10 flex-shrink-0 gap-4">
                 <!-- Стилизованная иконка с перекрывающимися квадратами -->
-                <div class="w-14 h-14 bg-gradient-to-br from-[#3b82f6] to-[#0f172a] border-2 border-[#60a5fa] rounded shadow-[0_0_15px_rgba(59,130,246,0.5)] flex items-center justify-center flex-shrink-0 relative overflow-hidden">
-                    <div class="absolute w-7 h-7 bg-blue-400 border border-white top-2 left-2 shadow"></div>
+                <div class="w-14 h-14 bg-gradient-to-br from-[#3b82f6] to-[#0f172a] border-2 border-[#60a5fa] rounded flex items-center justify-center flex-shrink-0 relative overflow-hidden">
+                    <div class="absolute w-7 h-7 bg-blue-400 border border-white top-2 left-2"></div>
                     <div class="absolute w-7 h-7 bg-[#1e293b] border border-blue-400 bottom-2 right-2"></div>
                 </div>
                 <div class="flex flex-col justify-center min-w-0">
@@ -405,13 +395,13 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             <!-- Список Управляющих Кнопок -->
             <div class="flex-1 py-6 px-4 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
                 <!-- NEW PROJECT -->
-                <button onclick="uiManager.showNewProjectModal()" class="gbox-sidebar-btn w-full text-left py-3 px-4 text-xl sm:text-2xl font-bold rounded shadow-md flex items-center gap-3 min-w-0">
+                <button onclick="uiManager.showNewProjectModal()" class="gbox-sidebar-btn w-full text-left py-3 px-4 text-xl sm:text-2xl font-bold rounded flex items-center gap-3 min-w-0">
                     <span class="ui-icon ui-icon-anim" aria-hidden="true">🔨</span>
                     <span data-i18n="newProject" class="min-w-0 leading-tight break-words">New Project</span>
                 </button>
 
                 <!-- IMPORT MAP -->
-                <button onclick="uiManager.triggerMapImport()" class="gbox-sidebar-btn w-full text-left py-3 px-4 text-xl sm:text-2xl font-bold rounded shadow-md flex items-center gap-3 min-w-0">
+                <button onclick="uiManager.triggerMapImport()" class="gbox-sidebar-btn w-full text-left py-3 px-4 text-xl sm:text-2xl font-bold rounded flex items-center gap-3 min-w-0">
                     <span class="ui-icon ui-icon-anim" aria-hidden="true">📁</span>
                     <span data-i18n="importMap" class="min-w-0 leading-tight break-words">Import Map</span>
                 </button>
@@ -425,17 +415,17 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
 
             <!-- Нижние кнопки Sidebar (Help и Close Editor) -->
             <div class="p-4 border-t-2 border-[#16273b] bg-black/15 flex flex-col gap-3 flex-shrink-0">
-                <button onclick="alert('MapCG Web Editor v5.5\nDeveloper: Sh1rka\nHotkeys:\nCtrl+S - Save\nCtrl+D - Duplicate\nCtrl+Z / Ctrl+Y - Undo/Redo history\nG, R, T - Translate, Rotate, Scale')" class="gbox-sidebar-btn w-full text-left py-2.5 px-4 text-2xl font-bold rounded shadow flex items-center gap-2">
+                <button onclick="alert('MapCG Web Editor v5.5\nDeveloper: Sh1rka\nHotkeys:\nCtrl+S - Save\nCtrl+D - Duplicate\nCtrl+Z / Ctrl+Y - Undo/Redo history\nG, R, T - Translate, Rotate, Scale')" class="gbox-sidebar-btn w-full text-left py-2.5 px-4 text-2xl font-bold rounded flex items-center gap-2">
                     <span class="ui-icon ui-icon-anim" aria-hidden="true">❔</span>
                     <span data-i18n="helpBtn">Help / Info</span>
                 </button>
 
-                <button id="btn-fullscreen-toggle-sidebar" onclick="uiManager.toggleFullscreen()" class="gbox-sidebar-btn w-full text-left py-2.5 px-4 text-2xl font-bold rounded shadow flex items-center gap-2">
+                <button id="btn-fullscreen-toggle-sidebar" onclick="uiManager.toggleFullscreen()" class="gbox-sidebar-btn w-full text-left py-2.5 px-4 text-2xl font-bold rounded flex items-center gap-2">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ui-icon ui-icon-anim"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
                     <span data-i18n="fullscreenBtn">Fullscreen Mode</span>
                 </button>
 
-                <button onclick="window.close()" class="gbox-sidebar-btn w-full text-left py-2.5 px-4 text-2xl font-bold rounded shadow flex items-center gap-2 border-red-500/50">
+                <button onclick="window.close()" class="gbox-sidebar-btn w-full text-left py-2.5 px-4 text-2xl font-bold rounded flex items-center gap-2 border-red-500/50">
                     <span class="ui-icon ui-icon-anim" aria-hidden="true">🚪</span>
                     <span data-i18n="exit">Close Editor</span>
                 </button>
@@ -447,8 +437,8 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
     </div>
 
     <!-- NEW PROJECT MODAL -->
-    <div id="new-project-modal" class="ui-scale-layer hidden fixed inset-0 bg-black/90 z-[60] flex items-center justify-center pointer-events-auto backdrop-blur-sm transition-opacity">
-        <div class="bg-[#0b121c] border border-blue-500/30 p-8 w-[450px] rounded-xl shadow-[0_0_30px_rgba(0,0,0,0.8)] modal-enter">
+    <div id="new-project-modal" class="ui-scale-layer hidden fixed inset-0 bg-black/90 z-[60] flex items-center justify-center pointer-events-auto transition-opacity">
+        <div class="bg-[#0b121c] border border-blue-500/30 p-8 w-[450px] rounded-xl modal-enter">
             <h2 class="text-3xl mb-4 text-white font-bold border-b border-gray-800 pb-3 flex items-center gap-2">
                 <span class="ui-icon ui-icon-lg ui-icon-anim" aria-hidden="true">📄</span>
                 <span data-i18n="createMapTitle">Create Карту</span>
@@ -468,7 +458,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
 
             <div class="flex justify-end gap-3 text-xl mt-6">
                 <button onclick="document.getElementById('new-project-modal').classList.add('hidden')" data-i18n="cancel" class="px-5 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition">Cancel</button>
-                <button onclick="uiManager.createNewProject()" data-i18n="create" class="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-lg transition">Create</button>
+                <button onclick="uiManager.createNewProject()" data-i18n="create" class="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition">Create</button>
             </div>
         </div>
     </div>
@@ -479,7 +469,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
 
         <div id="playtest-overlay">
             <div class="crosshair"></div>
-            <div class="absolute top-6 left-6 bg-black/60 backdrop-blur border border-white/10 p-4 text-xl text-gray-200 rounded-lg shadow-2xl">
+            <div class="absolute top-6 left-6 bg-black/60 border border-white/10 p-4 text-xl text-gray-200 rounded-lg">
                 <div data-i18n="playtestControls" class="font-bold text-blue-400 mb-2 border-b border-white/20 pb-1">PLAYTEST CONTROLS</div>
                 <span data-i18n="ptEsc">[ESC] - Exit to Editor</span><br>
                 <span data-i18n="ptMove">[W A S D] - Movement</span><br>
@@ -499,7 +489,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             <button onclick="engine.applyPixelRatio(0.2); const pr = document.getElementById('setting-pixel-ratio'); if (pr) pr.value = 0.2; const lbl = document.getElementById('pixel-ratio-val'); if (lbl) lbl.innerText = '0.20x';" class="absolute bottom-2 left-2 z-50 bg-black/60 hover:bg-red-900/70 border border-gray-800 hover:border-red-500 rounded px-2 py-1 text-sm font-bold text-gray-300 hover:text-white pointer-events-auto select-none transition" title="Set Pixel Scale to 0.20x">MIN</button>
 
             <!-- TOP BAR -->
-            <div class="ui-panel h-14 w-full flex items-center justify-between px-4 text-xl pointer-events-auto border-b border-blue-900/30 z-40 relative shadow-md">
+            <div class="ui-panel h-14 w-full flex items-center justify-between px-4 text-xl pointer-events-auto border-b border-blue-900/30 z-40 relative">
                 <div class="flex gap-2 md:gap-4 h-full items-center">
                     <button onclick="uiManager.showExportModal()" class="flex items-center gap-2 hover:text-blue-400 transition py-2 px-3 bg-white/5 rounded hover:bg-white/10">
                         <span class="ui-icon ui-icon-sm ui-icon-slide" aria-hidden="true">🧾</span>
@@ -533,12 +523,12 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                         </button>
                     </div>
 
-                    <button id="playtest-btn" onclick="gameplay.startPlaytest()" class="flex items-center gap-1 text-green-400 hover:text-white transition px-3 py-1.5 bg-green-900/50 border border-green-500/30 rounded-lg font-bold shadow-[0_0_10px_rgba(34,197,94,0.2)] hover:bg-green-600">
+                    <button id="playtest-btn" onclick="gameplay.startPlaytest()" class="flex items-center gap-1 text-green-400 hover:text-white transition px-3 py-1.5 bg-green-900/50 border border-green-500/30 rounded-lg font-bold hover:bg-green-600">
                         <span class="ui-icon ui-icon-sm" aria-hidden="true">▶</span>
                         <span>PLAY</span>
                     </button>
 
-                    <button id="btn-fullscreen-toggle" onclick="uiManager.toggleFullscreen()" data-i18n-title="fullscreenBtn" title="Fullscreen Mode" aria-label="Fullscreen Mode" class="w-10 h-10 flex items-center justify-center text-white/80 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition shadow-sm" type="button">
+                    <button id="btn-fullscreen-toggle" onclick="uiManager.toggleFullscreen()" data-i18n-title="fullscreenBtn" title="Fullscreen Mode" aria-label="Fullscreen Mode" class="w-10 h-10 flex items-center justify-center text-white/80 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition" type="button">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" aria-hidden="true">
                             <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
                             <path d="M16 3h3a2 2 0 0 1 2 2v3"/>
@@ -556,8 +546,8 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                 </div>
 
                 <div class="text-2xl font-bold pr-2 text-white flex items-center gap-2">
-                    <span id="current-map-name" class="drop-shadow-md truncate max-w-[120px] md:max-w-[200px]">Map Name</span> 
-                    <span class="bg-blue-600 text-white text-sm px-2 py-0.5 rounded shadow">PRO</span>
+                    <span id="current-map-name" class="truncate max-w-[120px] md:max-w-[200px]">Map Name</span> 
+                    <span class="bg-blue-600 text-white text-sm px-2 py-0.5 rounded">PRO</span>
                 </div>
             </div>
 
@@ -566,15 +556,15 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                 
                 <!-- Spawn buttons -->
                 <div class="absolute top-6 right-4 sm:right-[290px] flex gap-3 pointer-events-auto">
-                    <button onclick="engine.addSpawnPoint()" class="bg-green-700/90 backdrop-blur border border-green-400 px-5 py-3 text-xl hover:bg-green-600 flex items-center gap-2 rounded-lg transition-all shadow-[0_4px_15px_rgba(0,0,0,0.5)] hover:scale-105 text-white">
+                    <button onclick="engine.addSpawnPoint()" class="bg-green-700/90 border border-green-400 px-5 py-3 text-xl hover:bg-green-600 flex items-center gap-2 rounded-lg transition-all hover:scale-105 text-white">
                         <span class="ui-icon ui-icon-anim" aria-hidden="true">🗺</span>
                         <span data-i18n="spawnBtn">SPAWN</span>
                     </button>
                     <div class="relative flex items-start gap-2">
-                        <button onclick="engine.toggleShapesPanel()" id="btn-shapes-toggle" class="shape-arrow bg-[#101826]/95 backdrop-blur border border-blue-400/70 w-12 h-[56px] flex items-center justify-center rounded-lg transition-all shadow-[0_4px_15px_rgba(0,0,0,0.5)] hover:bg-[#1f2a3a]" title="Shapes">
+                        <button onclick="engine.toggleShapesPanel()" id="btn-shapes-toggle" class="shape-arrow bg-[#101826]/95 border border-blue-400/70 w-12 h-[56px] flex items-center justify-center rounded-lg transition-all hover:bg-[#1f2a3a]" title="Shapes">
                             <span class="ui-icon ui-icon-sm" aria-hidden="true">⌄</span>
                         </button>
-                        <div id="shapes-panel" class="shape-panel absolute right-0 top-[calc(100%+8px)] w-[250px] bg-[#0b121c]/98 backdrop-blur border border-blue-500/30 rounded-xl shadow-[0_18px_40px_rgba(0,0,0,0.55)] p-3">
+                        <div id="shapes-panel" class="shape-panel absolute right-0 top-[calc(100%+8px)] w-[250px] bg-[#0b121c]/98 border border-blue-500/30 rounded-xl p-3">
                             <div class="flex flex-col gap-2">
                                 <div class="flex items-center justify-between gap-2">
                                     <span data-i18n="shapeMenu" class="text-gray-400 text-sm uppercase tracking-wider font-bold">SHAPES</span>
@@ -589,11 +579,11 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                                 </div>
                             </div>
                         </div>
-                        <button onclick="engine.addCube()" class="bg-[#1e293b]/90 backdrop-blur border border-blue-400 px-5 py-3 text-xl hover:bg-[#334155] flex items-center gap-2 rounded-lg transition-all shadow-[0_4px_15px_rgba(0,0,0,0.5)] hover:scale-105">
+                        <button onclick="engine.addCube()" class="bg-[#1e293b]/90 border border-blue-400 px-5 py-3 text-xl hover:bg-[#334155] flex items-center gap-2 rounded-lg transition-all hover:scale-105">
                             <span class="ui-icon ui-icon-anim" aria-hidden="true">🔨</span>
                             <span data-i18n="cubeBtn">CUBE</span>
                         </button>
-                        <button onclick="engine.addLight()" class="bg-yellow-500/90 backdrop-blur border border-yellow-200 px-5 py-3 text-xl hover:bg-yellow-400 flex items-center gap-2 rounded-lg transition-all shadow-[0_4px_15px_rgba(234,179,8,0.35)] hover:scale-105 text-black font-bold">
+                        <button onclick="engine.addLight()" class="bg-yellow-500/90 border border-yellow-200 px-5 py-3 text-xl hover:bg-yellow-400 flex items-center gap-2 rounded-lg transition-all hover:scale-105 text-black font-bold">
                             <span class="ui-icon ui-icon-anim" aria-hidden="true">💡</span>
                             <span>Light</span>
                         </button>
@@ -602,16 +592,16 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
 
                 <!-- BOTTOM LEFT BUTTONS -->
                 <div class="absolute bottom-[20px] left-[20px] pointer-events-auto flex flex-col gap-2 items-start">
-                    <button onclick="engine.groupSelectedBlocks()" id="btn-group" class="hidden bg-green-900/40 border border-green-400/60 px-5 py-3 text-2xl font-bold hover:bg-green-600/50 flex items-center justify-center gap-2 rounded-lg transition-all shadow-lg text-green-300 hover:text-white w-48">
+                    <button onclick="engine.groupSelectedBlocks()" id="btn-group" class="hidden bg-green-900/40 border border-green-400/60 px-5 py-3 text-2xl font-bold hover:bg-green-600/50 flex items-center justify-center gap-2 rounded-lg transition-all text-green-300 hover:text-white w-48">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
                         GROUP
                     </button>
                     <div class="flex flex-row gap-2">
-                    <button onclick="engine.toggleMultiSelect()" id="btn-shift" class="bg-[#1e293b]/90 border border-blue-400/50 px-5 py-3 text-2xl font-bold hover:bg-[#334155] flex items-center justify-center gap-2 rounded-lg transition-all shadow-lg text-gray-400 hover:text-white w-48">
+                    <button onclick="engine.toggleMultiSelect()" id="btn-shift" class="bg-[#1e293b]/90 border border-blue-400/50 px-5 py-3 text-2xl font-bold hover:bg-[#334155] flex items-center justify-center gap-2 rounded-lg transition-all text-gray-400 hover:text-white w-48">
                         <span class="ui-icon ui-icon-sm" aria-hidden="true">🕹</span>
                         SHIFT
                     </button>
-                    <button onclick="engine.deleteObject()" id="btn-delete-float" class="hidden bg-red-900/30 border border-red-500/50 px-5 py-3 text-2xl font-bold hover:bg-red-600 flex items-center justify-center gap-2 rounded-lg transition-all shadow-lg text-red-500 hover:text-white w-48">
+                    <button onclick="engine.deleteObject()" id="btn-delete-float" class="hidden bg-red-900/30 border border-red-500/50 px-5 py-3 text-2xl font-bold hover:bg-red-600 flex items-center justify-center gap-2 rounded-lg transition-all text-red-500 hover:text-white w-48">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         DELETE
                     </button>
@@ -619,11 +609,11 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                 </div>
 
                 <!-- RIGHT PANEL -->
-                <div id="right-sidebar" class="absolute right-0 top-0 bottom-0 w-[280px] pointer-events-auto overflow-y-auto pb-20 pt-6 px-3 custom-scrollbar shadow-[-10px_0_20px_rgba(0,0,0,0.5)] bg-[#0b1016]/95 backdrop-blur-md border-l border-gray-800 hidden">
+                <div id="right-sidebar" class="absolute right-0 top-0 bottom-0 w-[280px] pointer-events-auto overflow-y-auto pb-20 pt-6 px-3 custom-scrollbar bg-[#0b1016]/95 border-l border-gray-800 hidden">
                     
                     <div class="flex flex-col gap-4">
                         <!-- Tools Panel -->
-                        <div id="transform-panel" class="bg-[#151c27] rounded-lg border border-gray-700 p-4 shadow-lg transition-all hover:border-gray-500">
+                        <div id="transform-panel" class="bg-[#151c27] rounded-lg border border-gray-700 p-4 transition-all hover:border-gray-500">
                             <div class="flex justify-between mb-4 bg-black/40 p-1 rounded-lg">
                                 <button onclick="engine.setTransformMode('translate')" id="mode-translate" data-i18n-title="titleTranslate" class="flex-1 h-10 flex items-center justify-center rounded active-tool hover:bg-white/10 transition" title="Translate"><span class="ui-icon ui-icon-sm" aria-hidden="true">🎚</span></button>
                                 <button onclick="engine.setTransformMode('rotate')" id="mode-rotate" data-i18n-title="titleRotate" class="flex-1 h-10 flex items-center justify-center rounded hover:bg-white/10 transition" title="Rotation"><span class="ui-icon ui-icon-sm" aria-hidden="true">↻</span></button>
@@ -653,7 +643,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                         </div>
 
                         <!-- Texture/Material Panel -->
-                        <div id="material-panel" class="bg-[#151c27] rounded-lg border border-gray-700 p-4 flex flex-col gap-3 text-xl shadow-lg transition-all hover:border-gray-500">
+                        <div id="material-panel" class="bg-[#151c27] rounded-lg border border-gray-700 p-4 flex flex-col gap-3 text-xl transition-all hover:border-gray-500">
                             <label data-i18n="cubeMaterial" class="text-gray-400 text-sm uppercase font-bold -mb-1 tracking-wider">Cube Material (Tag)</label>
                             <div class="flex items-center gap-2">
                                 <div class="flex-1 bg-black/50 border border-gray-600 rounded-lg overflow-hidden relative">
@@ -665,7 +655,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                                     </select>
                                     <div class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">▼</div>
                                 </div>
-                                <button onclick="document.getElementById('file-texture').click()" data-i18n-title="titleImport" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg border border-blue-400 shadow transition flex-shrink-0" title="Import image">
+                                <button onclick="document.getElementById('file-texture').click()" data-i18n-title="titleImport" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg border border-blue-400 transition flex-shrink-0" title="Import image">
                                     <span class="ui-icon ui-icon-sm" aria-hidden="true">📄</span>
                                 </button>
                                 <input type="file" id="file-texture" accept="image/*" class="hidden" onchange="uiManager.importTexture(event)">
@@ -677,7 +667,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                                     <span>Normal Map (PBR)</span>
                                 </label>
                                 <div class="flex items-center gap-1.5">
-                                    <button onclick="uiManager.selectNormalMap()" class="flex-1 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white px-3 py-[5px] text-xs font-bold rounded-lg border border-purple-400/70 shadow transition flex items-center justify-center gap-1">
+                                    <button onclick="uiManager.selectNormalMap()" class="flex-1 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white px-3 py-[5px] text-xs font-bold rounded-lg border border-purple-400/70 transition flex items-center justify-center gap-1">
                                         <span>🗺️</span><span>Choose Normal Map</span>
                                     </button>
                                     <button onclick="uiManager.clearNormalMap()" class="px-2 py-[5px] text-xs bg-red-900/70 hover:bg-red-700 text-red-200 rounded border border-red-700 transition" title="Remove normal map">✕</button>
@@ -736,7 +726,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                         </div>
 
                         <!-- Manual Light Panel -->
-                        <div id="light-panel" class="hidden bg-[#151c27] rounded-lg border border-yellow-500/50 p-4 flex flex-col gap-3 text-xl shadow-lg transition-all hover:border-yellow-400/70">
+                        <div id="light-panel" class="hidden bg-[#151c27] rounded-lg border border-yellow-500/50 p-4 flex flex-col gap-3 text-xl transition-all hover:border-yellow-400/70">
                             <div class="flex items-center justify-between border-b border-yellow-500/20 pb-2 mb-1">
                                 <h3 class="text-yellow-300 font-bold uppercase tracking-wider flex items-center gap-2"><span>💡</span><span>Light Settings</span></h3>
                                 <span class="text-[10px] text-yellow-200/70 bg-yellow-500/10 border border-yellow-500/30 rounded px-2 py-1">NOT EXPORTED</span>
@@ -801,7 +791,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             </div>
 
             <!-- BOTTOM BAR -->
-            <div id="bottom-object-bar" class="ui-panel h-16 w-full flex pointer-events-auto border-t border-blue-900/30 divide-x divide-gray-800 z-40 relative shadow-[0_-5px_15px_rgba(0,0,0,0.3)] hidden">
+            <div id="bottom-object-bar" class="ui-panel h-16 w-full flex pointer-events-auto border-t border-blue-900/30 divide-x divide-gray-800 z-40 relative hidden">
                 <button onclick="engine.deselect()" class="btn-bottom flex-1 flex items-center justify-center gap-2 hover:bg-white/5 text-gray-400 hover:text-white">
                     <span class="ui-icon ui-icon-anim" aria-hidden="true">✕</span>
                     <span>Deselect</span>
@@ -822,8 +812,8 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
         </div>
 
         <!-- EXPORT MODAL -->
-        <div id="export-modal" class="ui-scale-layer hidden fixed inset-0 z-[60] flex items-center justify-center pointer-events-auto bg-black/70 backdrop-blur-sm transition-opacity">
-            <div class="w-[500px] bg-[#0b121c] border border-blue-500/30 rounded-xl flex flex-col relative shadow-[0_0_40px_rgba(0,0,0,0.8)] modal-enter overflow-hidden">
+        <div id="export-modal" class="ui-scale-layer hidden fixed inset-0 z-[60] flex items-center justify-center pointer-events-auto bg-black/70 transition-opacity">
+            <div class="w-[500px] bg-[#0b121c] border border-blue-500/30 rounded-xl flex flex-col relative modal-enter overflow-hidden">
                 <div class="text-center py-4 border-b border-gray-800 bg-black/40"><h2 id="export-map-name" class="text-3xl font-bold text-white tracking-widest">MAP NAME</h2></div>
                 <div class="p-8 bg-gradient-to-b from-blue-900/20 to-transparent flex flex-col items-center justify-center border-b border-gray-800 text-center">
                     <span class="ui-icon ui-icon-xl ui-icon-anim" aria-hidden="true">🧾</span>
@@ -839,12 +829,12 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
         </div>
 
         <!-- EXIT DIALOG MODAL (GOREBOX STYLE) -->
-        <div id="exit-dialog-modal" class="ui-scale-layer hidden fixed inset-0 z-[70] flex items-center justify-center pointer-events-auto bg-black/80 backdrop-blur-md transition-opacity">
-            <div class="w-[450px] bg-[#0c1420] border-2 border-yellow-500/40 rounded-xl flex flex-col relative shadow-[0_0_50px_rgba(234,179,8,0.3)] modal-enter overflow-hidden p-6 text-center">
+        <div id="exit-dialog-modal" class="ui-scale-layer hidden fixed inset-0 z-[70] flex items-center justify-center pointer-events-auto bg-black/80 transition-opacity">
+            <div class="w-[450px] bg-[#0c1420] border-2 border-yellow-500/40 rounded-xl flex flex-col relative modal-enter overflow-hidden p-6 text-center">
                 <div class="flex justify-center mb-4"><span class="ui-icon ui-icon-xl ui-icon-anim" aria-hidden="true">⚠</span></div>
                 <h3 class="text-3xl text-white font-bold mb-6 tracking-wider" data-i18n="exitHeading">Need to save a project?</h3>
                 <div class="flex flex-col gap-3">
-                    <button onclick="uiManager.exitSaveProject()" class="w-full py-4 text-center rounded-lg bg-green-600 hover:bg-green-500 transition text-white font-bold text-2xl uppercase tracking-widest shadow-lg shadow-green-950/50" data-i18n="saveProjectBtn">Save Project</button>
+                    <button onclick="uiManager.exitSaveProject()" class="w-full py-4 text-center rounded-lg bg-green-600 hover:bg-green-500 transition text-white font-bold text-2xl uppercase tracking-widest" data-i18n="saveProjectBtn">Save Project</button>
                     <button onclick="uiManager.exitDiscardProject()" class="w-full py-4 text-center rounded-lg bg-red-600/30 border border-red-500/40 hover:bg-red-600 transition text-red-200 font-bold text-2xl uppercase tracking-widest" data-i18n="signOut">Sign Out</button>
                     <button onclick="document.getElementById('exit-dialog-modal').classList.add('hidden')" class="w-full py-2 text-center text-gray-500 hover:text-white transition text-xl uppercase" data-i18n="cancel">Cancel</button>
                 </div>
@@ -852,8 +842,8 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
         </div>
 
         <!-- SETTINGS MODAL -->
-        <div id="settings-modal" class="ui-scale-layer hidden fixed inset-0 z-[60] flex justify-center items-center pointer-events-auto bg-black/70 backdrop-blur-sm transition-opacity">
-            <div class="w-[550px] bg-[#0b121c] border border-gray-700 p-6 rounded-xl shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar modal-enter">
+        <div id="settings-modal" class="ui-scale-layer hidden fixed inset-0 z-[60] flex justify-center items-center pointer-events-auto bg-black/70 transition-opacity">
+            <div class="w-[550px] bg-[#0b121c] border border-gray-700 p-6 rounded-xl max-h-[85vh] overflow-y-auto custom-scrollbar modal-enter">
                 <div class="flex justify-between items-center border-b border-gray-800 pb-4 mb-4">
                     <h2 class="text-3xl font-bold text-white flex items-center gap-2">
                         <span class="ui-icon ui-icon-lg ui-icon-anim" aria-hidden="true">⚙</span>
@@ -886,7 +876,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                         </select>
                         <label class="text-gray-400 block mt-4 mb-1">Custom skybox (jpg / png)</label>
                         <div class="flex items-center gap-2">
-                            <button onclick="document.getElementById('file-skybox').click()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg border border-blue-400 shadow transition flex-shrink-0">Choose</button>
+                            <button onclick="document.getElementById('file-skybox').click()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg border border-blue-400 transition flex-shrink-0">Choose</button>
                             <span id="skybox-file-name" class="text-gray-300 text-sm truncate flex-1">No file</span>
                         </div>
                         <input type="file" id="file-skybox" accept=".jpg,.jpeg,.png,image/jpeg,image/png" class="hidden" onchange="uiManager.importSkybox(event)">
@@ -1009,6 +999,24 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                             <input type="checkbox" id="setting-show-fps" onchange="engine.applyFpsCounterVisibility(this.checked);" class="w-6 h-6 accent-blue-500">
                             <span data-i18n="showFps" class="group-hover:text-white text-gray-300 transition">Show FPS</span>
                         </label>
+
+                        <div class="bg-black/30 p-2 rounded border border-gray-800 mb-3">
+                            <label class="text-gray-400 text-sm uppercase font-bold block mb-1">Cube Draw Distance Optimization</label>
+                            <div class="flex items-center gap-2">
+                                <input type="range" id="setting-draw-distance" min="40" max="1200" step="10" value="350" class="w-full accent-blue-500 cursor-pointer" oninput="document.getElementById('draw-distance-val').innerText = this.value + 'm'; engine.applyDrawDistance?.(parseFloat(this.value));" onchange="window.historyManager.takeSnapshot();">
+                                <span id="draw-distance-val" class="text-blue-300 text-sm w-16 text-right">350m</span>
+                            </div>
+                            <p class="text-[11px] text-gray-500 mt-1 leading-tight">Small cubes disappear earlier; large cubes stay visible farther. Selected cubes are always visible.</p>
+                        </div>
+
+                        <div class="bg-black/30 p-2 rounded border border-gray-800 mb-3">
+                            <label class="text-gray-400 text-sm uppercase font-bold block mb-1">Max Texture Quality</label>
+                            <div class="flex items-center gap-2">
+                                <input type="range" id="setting-texture-quality" min="0" max="4" step="1" value="3" class="w-full accent-blue-500 cursor-pointer" oninput="engine.previewTextureQualityLabel?.(parseInt(this.value,10));" onchange="engine.applyTextureQualitySetting?.(parseInt(this.value,10)); window.historyManager.takeSnapshot();">
+                                <span id="texture-quality-val" class="text-blue-300 text-sm w-16 text-right">1080p</span>
+                            </div>
+                            <p class="text-[11px] text-gray-500 mt-1 leading-tight">Loaded textures are downscaled in memory to this maximum size until you change the value.</p>
+                        </div>
 
                         <div class="bg-black/30 p-2 rounded border border-gray-800 mt-1">
                             <label class="text-gray-400 text-sm uppercase font-bold block mb-1">Render Resolution (Pixel Scale)</label>
@@ -1452,6 +1460,11 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             'plasma': createGridTexture('#00ffff', '#00ffff'),
             'GBWater': createWaterTexture()
         };
+        Object.values(baseTextures).forEach(tex => {
+            try {
+                if (tex?.image?.toDataURL) tex.userData = { ...(tex.userData || {}), sourceDataUrl: tex.image.toDataURL('image/png'), generatedBaseTexture: true };
+            } catch(e) {}
+        });
 
 
         // ─────────────────────────────────────────────────────────────
@@ -1560,16 +1573,101 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
         initBaseTextures();
 
 
-        function createTextureFromDataURL(dataUrl) {
-            const texture = new THREE.TextureLoader().load(dataUrl);
+        const TEXTURE_QUALITY_LEVELS = [144, 256, 564, 1080, 2048];
+        const TEXTURE_QUALITY_LABELS = ['144p', '256p', '564p', '1080p', '2K'];
+        let currentTextureQualityIndex = 3;
+        let currentTextureMaxResolution = TEXTURE_QUALITY_LEVELS[currentTextureQualityIndex];
+
+        function getTextureQualityIndexFromUI() {
+            const el = document.getElementById('setting-texture-quality');
+            const idx = parseInt(el?.value ?? String(currentTextureQualityIndex), 10);
+            return Math.max(0, Math.min(TEXTURE_QUALITY_LEVELS.length - 1, Number.isFinite(idx) ? idx : 3));
+        }
+
+        function optimizeCanvasToMaxSize(source, maxRes = currentTextureMaxResolution) {
+            const srcW = Math.max(1, source.naturalWidth || source.videoWidth || source.width || 1);
+            const srcH = Math.max(1, source.naturalHeight || source.videoHeight || source.height || 1);
+            const maxDim = Math.max(srcW, srcH);
+            const scale = maxDim > maxRes ? (maxRes / maxDim) : 1;
+            const w = Math.max(1, Math.round(srcW * scale));
+            const h = Math.max(1, Math.round(srcH * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d', { alpha: true });
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.clearRect(0, 0, w, h);
+            ctx.drawImage(source, 0, 0, w, h);
+            return canvas;
+        }
+
+        function getCanvasAlphaFlag(canvas) {
+            try {
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                const sample = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                for (let i = 3; i < sample.length; i += 32) if (sample[i] < 250) return true;
+            } catch(e) {}
+            return false;
+        }
+
+        function applyCanvasToExistingTexture(texture, canvas) {
+            if (!texture || !canvas) return texture;
+            // Dispose the old GPU upload first. This prevents old quality levels from staying in VRAM
+            // and avoids the visual bug where a tiny downscaled bitmap appears in a corner of each face.
+            try { texture.dispose(); } catch(e) {}
+            texture.image = canvas;
+            if (texture.source) texture.source.data = canvas;
+            texture.offset.set(0, 0);
+            texture.repeat.set(1, 1);
+            texture.center.set(0, 0);
+            texture.rotation = 0;
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.colorSpace = texture.userData?.isNormalMap ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace;
+            texture.flipY = true;
+            texture.needsUpdate = true;
+            return texture;
+        }
+
+        function applyGlobalTextureFiltering(texture) {
+            if (!texture) return;
+            const smooth = document.getElementById('setting-texture-smoothing')?.checked ?? false;
+            texture.magFilter = smooth ? THREE.LinearFilter : THREE.NearestFilter;
+            // LinearFilter gives real smoothing for every texture without creating mipmap chains.
+            // This avoids extra VRAM usage and prevents stacked/old-quality mip levels after downscaling.
+            texture.minFilter = smooth ? THREE.LinearFilter : THREE.NearestFilter;
+            texture.generateMipmaps = false;
+            texture.anisotropy = 1;
+            texture.needsUpdate = true;
+        }
+
+        function setupOptimizedTexture(texture, dataUrl, name = '') {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
             texture.colorSpace = THREE.SRGBColorSpace;
             texture.magFilter = THREE.NearestFilter;
             texture.minFilter = THREE.NearestFilter;
             texture.generateMipmaps = false;
+            texture.userData = { ...(texture.userData || {}), sourceDataUrl: dataUrl, originalName: name };
+            const img = new Image();
+            img.onload = () => {
+                const canvas = optimizeCanvasToMaxSize(img, currentTextureMaxResolution);
+                applyCanvasToExistingTexture(texture, canvas);
+                texture.userData.hasAlpha = getCanvasAlphaFlag(canvas);
+                texture.userData.originalWidth = img.naturalWidth || img.width;
+                texture.userData.originalHeight = img.naturalHeight || img.height;
+                texture.userData.optimizedWidth = canvas.width;
+                texture.userData.optimizedHeight = canvas.height;
+                applyGlobalTextureFiltering(texture);
+            };
+            img.src = dataUrl;
             texture.needsUpdate = true;
             return texture;
+        }
+
+        function createTextureFromDataURL(dataUrl) {
+            return setupOptimizedTexture(new THREE.Texture(), dataUrl);
         }
 
         const weatherUniforms = { uTime: { value: 0 }, uWeatherType: { value: 0 }, uWeatherIntensity: { value: 0 } };
@@ -1885,6 +1983,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             blocks: [], selectedBlocks: [], spawnPointObj: null, manualLights: [],
             gridHelper: null, dirLight: null, ambientLight: null, hemiLight: null, sky: null, sun: null,
             lightContourVisible: true, manualLightSpecularStrength: 0.45,
+            drawDistance: 350, distanceCullingEnabled: true, _cullingTimer: 0, _lastVisibleBlockCount: 0,
             outlines: [], clock: new THREE.Clock(),
             fpsCounterEnabled: false, fpsFrameCount: 0, fpsElapsed: 0,
             weatherParticles: null, weatherType: 'clear', targetWeatherIntensity: 0,
@@ -2873,7 +2972,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 });
                 // Visual feedback
                 const ind = document.createElement('div');
-                ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-green-600/90 backdrop-blur text-white px-8 py-3 rounded-full text-xl font-bold shadow-[0_5px_20px_rgba(34,197,94,0.6)] z-[100] modal-enter uppercase text-center';
+                ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-green-600/90 text-white px-8 py-3 rounded-full text-xl font-bold z-[100] modal-enter uppercase text-center';
                 ind.innerText = 'Group created (' + this.selectedBlocks.length + ' cubes)';
                 document.body.appendChild(ind);
                 setTimeout(() => { ind.style.opacity = '0'; ind.style.transition = 'opacity 0.3s'; setTimeout(() => ind.remove(), 300); }, 2000);
@@ -3129,7 +3228,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
                 // Notification
                 const ind = document.createElement('div');
-                ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-green-700/90 backdrop-blur text-white px-8 py-3 rounded-full text-xl font-bold shadow-[0_5px_20px_rgba(34,197,94,0.6)] z-[100] text-center uppercase tracking-wider';
+                ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-green-700/90 text-white px-8 py-3 rounded-full text-xl font-bold z-[100] text-center uppercase tracking-wider';
                 ind.innerText = '✦ ' + item.name + ' (' + created.length + ' cubes)';
                 document.body.appendChild(ind);
                 setTimeout(() => { ind.style.opacity = '0'; ind.style.transition = 'opacity 0.3s'; setTimeout(() => ind.remove(), 300); }, 2500);
@@ -3998,6 +4097,108 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
             },
 
+            applyDrawDistance: function(value = null) {
+                const raw = value !== null && value !== undefined ? parseFloat(value) : parseFloat(document.getElementById('setting-draw-distance')?.value || '350');
+                this.drawDistance = Math.max(40, Math.min(1200, Number.isFinite(raw) ? raw : 350));
+                const slider = document.getElementById('setting-draw-distance');
+                const label = document.getElementById('draw-distance-val');
+                if (slider) slider.value = String(this.drawDistance);
+                if (label) label.innerText = Math.round(this.drawDistance) + 'm';
+                this.updateDistanceCulling(true);
+                return this.drawDistance;
+            },
+
+            getBlockCullDistance: function(obj) {
+                const size = obj.getWorldScale(this._cullScaleVec || (this._cullScaleVec = new THREE.Vector3()));
+                const maxDim = Math.max(Math.abs(size.x), Math.abs(size.y), Math.abs(size.z), 0.05);
+                const sizeFactor = THREE.MathUtils.clamp(Math.sqrt(maxDim), 0.25, 5.0);
+                return Math.max(12, this.drawDistance * sizeFactor);
+            },
+
+            updateDistanceCulling: function(force = false, dt = 0) {
+                if (!this.camera || !this.blocks) return;
+                this._cullingTimer = (this._cullingTimer || 0) + (dt || 0);
+                if (!force && this._cullingTimer < 0.18) return;
+                this._cullingTimer = 0;
+                const camPos = this.camera.position;
+                let visibleCount = 0;
+                for (const obj of this.blocks) {
+                    if (!obj || obj.userData?.type !== 'cube') continue;
+                    const isSelected = this.selectedBlocks.includes(obj);
+                    if (isSelected || this.transformControl?.dragging) {
+                        obj.visible = true;
+                        obj.userData._distanceCulled = false;
+                        visibleCount++;
+                        continue;
+                    }
+                    const maxDist = this.getBlockCullDistance(obj);
+                    const worldPos = obj.getWorldPosition(this._cullTempVec || (this._cullTempVec = new THREE.Vector3()));
+                    const distSq = camPos.distanceToSquared(worldPos);
+                    const culled = distSq > maxDist * maxDist;
+                    obj.userData._distanceCulled = culled;
+                    obj.visible = !culled;
+                    if (!culled) visibleCount++;
+                }
+                this._lastVisibleBlockCount = visibleCount;
+            },
+
+            previewTextureQualityLabel: function(idx = null) {
+                const safeIdx = Math.max(0, Math.min(TEXTURE_QUALITY_LEVELS.length - 1, Number.isFinite(idx) ? idx : getTextureQualityIndexFromUI()));
+                const label = document.getElementById('texture-quality-val');
+                if (label) label.innerText = TEXTURE_QUALITY_LABELS[safeIdx];
+                return safeIdx;
+            },
+
+            optimizeTextureObjectFromDataUrl: function(tex, dataUrl) {
+                return new Promise((resolve) => {
+                    if (!tex || !dataUrl) return resolve(false);
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = optimizeCanvasToMaxSize(img, currentTextureMaxResolution);
+                        applyCanvasToExistingTexture(tex, canvas);
+                        tex.userData = {
+                            ...(tex.userData || {}),
+                            hasAlpha: getCanvasAlphaFlag(canvas),
+                            originalWidth: img.naturalWidth || img.width,
+                            originalHeight: img.naturalHeight || img.height,
+                            optimizedWidth: canvas.width,
+                            optimizedHeight: canvas.height
+                        };
+                        applyGlobalTextureFiltering(tex);
+                        resolve(true);
+                    };
+                    img.onerror = () => resolve(false);
+                    img.src = dataUrl;
+                });
+            },
+
+            applyTextureQualitySetting: async function(idx = null) {
+                const safeIdx = this.previewTextureQualityLabel(idx ?? getTextureQualityIndexFromUI());
+                currentTextureQualityIndex = safeIdx;
+                currentTextureMaxResolution = TEXTURE_QUALITY_LEVELS[safeIdx];
+                const slider = document.getElementById('setting-texture-quality');
+                if (slider) slider.value = String(safeIdx);
+
+                const jobs = [];
+                Object.values(activeProjectCustomTextures || {}).forEach(tex => {
+                    const src = tex?.userData?.originalDataUrl || tex?.userData?.sourceDataUrl;
+                    if (src) jobs.push(this.optimizeTextureObjectFromDataUrl(tex, src));
+                });
+                Object.values(baseTextures || {}).forEach(tex => {
+                    const src = tex?.userData?.sourceDataUrl;
+                    if (src) jobs.push(this.optimizeTextureObjectFromDataUrl(tex, src));
+                });
+                Object.values(activeProjectNormalMaps || {}).forEach(nm => {
+                    const src = nm?.dataUrl || nm?.texture?.userData?.sourceDataUrl;
+                    if (nm?.texture && src) jobs.push(this.optimizeTextureObjectFromDataUrl(nm.texture, src));
+                });
+                await Promise.all(jobs);
+                this.blocks.forEach(b => { if (b?.userData?.type === 'cube') this.updateCubeUVs(b); });
+                this.updateGraphics();
+                this.syncAllObjectMaterials(false);
+                return currentTextureMaxResolution;
+            },
+
             updateGraphics: function() {
                 const shadowsEnabled = document.getElementById('setting-shadows').checked;
                 this.renderer.shadowMap.enabled = shadowsEnabled;
@@ -4051,17 +4252,18 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
                 waterUniforms.uWavesEnabled.value = (document.getElementById('setting-water-waves')?.checked ?? true) ? 1.0 : 0.0;
 
-                const textureSmoothingEnabled = document.getElementById('setting-texture-smoothing')?.checked ?? false;
-                const newMagFilter = textureSmoothingEnabled ? THREE.LinearFilter : THREE.NearestFilter;
-                const newMinFilter = textureSmoothingEnabled ? THREE.LinearFilter : THREE.NearestFilter;
-                Object.values(baseTextures).forEach(tex => {
-                    if (!tex) return;
-                    const keepWaterSmooth = !!tex.userData?.isProceduralWater;
-                    tex.magFilter = keepWaterSmooth ? THREE.LinearFilter : newMagFilter;
-                    tex.minFilter = keepWaterSmooth ? THREE.LinearMipmapLinearFilter : newMinFilter;
-                    if (keepWaterSmooth) tex.generateMipmaps = true;
-                    tex.needsUpdate = true;
+                // Texture smoothing now applies to ABSOLUTELY ALL cube textures: GoreBox, custom,
+                // generated base textures and normal maps. No water/custom exception.
+                const allKnownTextures = new Set([
+                    ...Object.values(baseTextures || {}),
+                    ...Object.values(activeProjectCustomTextures || {}),
+                    ...Object.values(activeProjectNormalMaps || {}).map(n => n?.texture).filter(Boolean)
+                ]);
+                this.scene.traverse(child => {
+                    const mats = child?.material ? (Array.isArray(child.material) ? child.material : [child.material]) : [];
+                    mats.forEach(m => ['map','normalMap','roughnessMap','metalnessMap','alphaMap','emissiveMap','aoMap'].forEach(k => { if (m?.[k]) allKnownTextures.add(m[k]); }));
                 });
+                allKnownTextures.forEach(tex => applyGlobalTextureFiltering(tex));
 
                 this.applyCameraSensitivity(parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'));
                 this.syncAllObjectMaterials(false);
@@ -4076,7 +4278,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 this.updateSelectionPanels();
             },
 
-            getEnvState: function() { return { skybox: document.getElementById('setting-skybox').value, weather: document.getElementById('setting-weather').value, fogColor: document.getElementById('setting-fog-color').value, fogStart: parseFloat(document.getElementById('setting-fog-start').value) || 15, fogEnd: parseFloat(document.getElementById('setting-fog-end').value) || 250, sunAngle: parseFloat(document.getElementById('setting-sun-angle').value) || 180, shadows: document.getElementById('setting-shadows').checked, shadowQuality: parseInt(document.getElementById('setting-shadow-quality')?.value ?? '2', 10), bloom: document.getElementById('setting-bloom').checked, bloomStrength: parseFloat(document.getElementById('setting-bloom-strength')?.value || '1'), cameraSensitivity: parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'), aoIntensity: parseFloat(document.getElementById('setting-ao-intensity')?.value || '0.55'), ssao: document.getElementById('setting-ssao').checked, waterWaves: document.getElementById('setting-water-waves') ? document.getElementById('setting-water-waves').checked : true, textureSmoothing: document.getElementById('setting-texture-smoothing') ? document.getElementById('setting-texture-smoothing').checked : false, customSkyboxDataUrl: this.customSkyboxDataUrl || null, customSkyboxName: this.customSkyboxName || null, gridVisible: document.getElementById('setting-grid') ? document.getElementById('setting-grid').checked : true, lightContour: document.getElementById('setting-light-contour') ? document.getElementById('setting-light-contour').checked : true }; },
+            getEnvState: function() { return { skybox: document.getElementById('setting-skybox').value, weather: document.getElementById('setting-weather').value, fogColor: document.getElementById('setting-fog-color').value, fogStart: parseFloat(document.getElementById('setting-fog-start').value) || 15, fogEnd: parseFloat(document.getElementById('setting-fog-end').value) || 250, sunAngle: parseFloat(document.getElementById('setting-sun-angle').value) || 180, shadows: document.getElementById('setting-shadows').checked, shadowQuality: parseInt(document.getElementById('setting-shadow-quality')?.value ?? '2', 10), bloom: document.getElementById('setting-bloom').checked, bloomStrength: parseFloat(document.getElementById('setting-bloom-strength')?.value || '1'), cameraSensitivity: parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'), aoIntensity: parseFloat(document.getElementById('setting-ao-intensity')?.value || '0.55'), ssao: document.getElementById('setting-ssao').checked, waterWaves: document.getElementById('setting-water-waves') ? document.getElementById('setting-water-waves').checked : true, textureSmoothing: document.getElementById('setting-texture-smoothing') ? document.getElementById('setting-texture-smoothing').checked : false, drawDistance: this.drawDistance || 350, textureQuality: currentTextureQualityIndex, customSkyboxDataUrl: this.customSkyboxDataUrl || null, customSkyboxName: this.customSkyboxName || null, gridVisible: document.getElementById('setting-grid') ? document.getElementById('setting-grid').checked : true, lightContour: document.getElementById('setting-light-contour') ? document.getElementById('setting-light-contour').checked : true }; },
 
             setCustomSkybox: function(dataUrl, fileName = 'Custom Skybox') {
                 this.customSkyboxDataUrl = dataUrl;
@@ -4445,7 +4647,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 });
                 
                 if(wasGrouped) this.buildTransformGroup();
-                const ind = document.createElement('div'); ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-blue-600/90 backdrop-blur text-white px-8 py-3 rounded-full text-xl font-bold shadow-[0_5px_20px_rgba(59,130,246,0.6)] z-[100] modal-enter uppercase text-center'; ind.innerText = i18n.t('projectSaved'); document.body.appendChild(ind);
+                const ind = document.createElement('div'); ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-blue-600/90 text-white px-8 py-3 rounded-full text-xl font-bold z-[100] modal-enter uppercase text-center'; ind.innerText = i18n.t('projectSaved'); document.body.appendChild(ind);
                 setTimeout(() => { ind.style.opacity = '0'; ind.style.transition='opacity 0.3s'; setTimeout(() => ind.remove(), 300); }, 2000);
             },
 
@@ -4489,16 +4691,13 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                             try {
                                 const img = new Image();
                                 await new Promise(r => { img.onload = r; img.src = nmData.dataUrl; });
-                                const canvas = document.createElement("canvas");
-                                canvas.width = img.width; canvas.height = img.height;
-                                const ctx = canvas.getContext("2d");
-                                ctx.drawImage(img, 0, 0);
+                                const canvas = optimizeCanvasToMaxSize(img, currentTextureMaxResolution);
                                 const tex = new THREE.CanvasTexture(canvas);
                                 tex.wrapS = THREE.RepeatWrapping;
                                 tex.wrapT = THREE.RepeatWrapping;
                                 tex.colorSpace = THREE.LinearSRGBColorSpace;
-                                tex.minFilter = THREE.LinearMipmapLinearFilter;
-                                tex.magFilter = THREE.LinearFilter;
+                                tex.userData = { sourceDataUrl: nmData.dataUrl, originalName: nmData.name, optimizedWidth: canvas.width, optimizedHeight: canvas.height, isNormalMap: true };
+                                applyGlobalTextureFiltering(tex);
                                 activeProjectNormalMaps[key] = { texture: tex, name: nmData.name, dataUrl: nmData.dataUrl };
                             } catch(e) { console.warn("Failed to load normal map", key); }
                         })() );
@@ -4534,6 +4733,15 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     if (document.getElementById('setting-ao-intensity')) { document.getElementById('setting-ao-intensity').value = String(data.env.aoIntensity ?? 0.55); if (document.getElementById('ao-intensity-val')) document.getElementById('ao-intensity-val').innerText = Number(document.getElementById('setting-ao-intensity').value).toFixed(2); }
                     if (document.getElementById('setting-water-waves')) document.getElementById('setting-water-waves').checked = data.env.waterWaves !== false;
                     if (document.getElementById('setting-texture-smoothing')) document.getElementById('setting-texture-smoothing').checked = data.env.textureSmoothing === true;
+                    if (document.getElementById('setting-draw-distance')) {
+                        document.getElementById('setting-draw-distance').value = String(data.env.drawDistance ?? 350);
+                        this.applyDrawDistance(parseFloat(document.getElementById('setting-draw-distance').value));
+                    }
+                    if (document.getElementById('setting-texture-quality')) {
+                        const tq = Number.isInteger(data.env.textureQuality) ? data.env.textureQuality : 3;
+                        document.getElementById('setting-texture-quality').value = String(Math.max(0, Math.min(4, tq)));
+                        await this.applyTextureQualitySetting(Math.max(0, Math.min(4, tq)));
+                    }
                     if(document.getElementById('setting-grid')) {
                         document.getElementById('setting-grid').checked = data.env.gridVisible !== false;
                         this.toggleGridVisibility(data.env.gridVisible !== false);
@@ -4557,6 +4765,8 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     this.customSkyboxDataUrl = null; this.customSkyboxName = null;
                     if (this.customSkyboxTexture) { try { this.customSkyboxTexture.dispose(); } catch(e) {} this.customSkyboxTexture = null; }
                     if (this.customSkyboxEnvMap) { try { this.customSkyboxEnvMap.dispose(); } catch(e) {} this.customSkyboxEnvMap = null; }
+                    if (document.getElementById('setting-draw-distance')) this.applyDrawDistance(350);
+                    if (document.getElementById('setting-texture-quality')) await this.applyTextureQualitySetting(3);
                 }
                 this.applyCameraSensitivity(parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'));
                 this.recalculateManualLightSpecular();
@@ -4652,6 +4862,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
                 this.animateWeather(dt);
                 this.updateWaterContactFoam?.(dt);
+                this.updateDistanceCulling(false, dt);
                 this.manualLights.forEach(l => this.updateManualLightTarget(l));
                 while(this.outlines.length < this.selectedBlocks.length) { const line = new THREE.LineSegments(sharedEdgeGeo, outlineMat); this.scene.add(line); this.outlines.push(line); }
                 this.outlines.forEach((o, i) => { if (i < this.selectedBlocks.length) { const obj = this.selectedBlocks[i]; const showOutline = !(obj.userData?.type === 'light' && !this.lightContourVisible); o.visible = showOutline; obj.getWorldPosition(o.position); obj.getWorldQuaternion(o.quaternion); obj.getWorldScale(o.scale); o.scale.addScalar(0.04); } else { o.visible = false; } });
@@ -4922,7 +5133,7 @@ if (texSel) {
                 if (panel) { panel.classList.remove('open'); engine.shapesPanelOpen = false; const arrow = document.getElementById('btn-shapes-toggle'); if (arrow) arrow.classList.remove('open'); }
                 // Show a notification that the object is "loaded" on the panel
                 const ind = document.createElement('div');
-                ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-blue-700/90 backdrop-blur text-white px-8 py-3 rounded-full text-xl font-bold shadow-[0_5px_20px_rgba(59,130,246,0.6)] z-[100] text-center uppercase tracking-wider';
+                ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-blue-700/90 text-white px-8 py-3 rounded-full text-xl font-bold z-[100] text-center uppercase tracking-wider';
                 ind.innerText = '✦ ' + item.name + ' — selected';
                 document.body.appendChild(ind);
                 setTimeout(() => { ind.style.opacity = '0'; ind.style.transition = 'opacity 0.3s'; setTimeout(() => ind.remove(), 300); }, 2200);
@@ -5012,19 +5223,14 @@ if (texSel) {
                 return new Promise((resolve) => {
                     const img = new Image();
                     img.onload = () => {
-                        const canvas = document.createElement("canvas");
-                        canvas.width = img.width; canvas.height = img.height;
-                        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-                        ctx.drawImage(img, 0, 0);
+                        const canvas = optimizeCanvasToMaxSize(img, currentTextureMaxResolution);
                         
                         const tex = new THREE.CanvasTexture(canvas);
                         tex.wrapS = THREE.RepeatWrapping;
                         tex.wrapT = THREE.RepeatWrapping;
                         tex.colorSpace = THREE.LinearSRGBColorSpace; // Normal maps are linear
-                        tex.minFilter = THREE.LinearMipmapLinearFilter;
-                        tex.magFilter = THREE.LinearFilter;
-                        tex.generateMipmaps = true;
-                        tex.needsUpdate = true;
+                        tex.userData = { sourceDataUrl: dataUrl, originalName: normalName, optimizedWidth: canvas.width, optimizedHeight: canvas.height, isNormalMap: true };
+                        applyGlobalTextureFiltering(tex);
                         
                         activeProjectNormalMaps[textureKey] = {
                             texture: tex,
@@ -5120,15 +5326,23 @@ if (texSel) {
                 return new Promise((resolve, reject) => {
                     const img = new Image();
                     img.onload = () => {
-                        const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
-                        const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0);
-                        const tex = new THREE.CanvasTexture(canvas); tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace;
-                        const sample = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-                        let hasAlpha = false; for (let i = 3; i < sample.length; i += 32) { if (sample[i] < 250) { hasAlpha = true; break; } }
+                        const canvas = optimizeCanvasToMaxSize(img, currentTextureMaxResolution);
+                        const tex = new THREE.CanvasTexture(canvas);
+                        tex.wrapS = THREE.RepeatWrapping;
+                        tex.wrapT = THREE.RepeatWrapping;
+                        tex.colorSpace = THREE.SRGBColorSpace;
+                        applyCanvasToExistingTexture(tex, canvas);
+                        applyGlobalTextureFiltering(tex);
+                        const hasAlpha = getCanvasAlphaFlag(canvas);
                         tex.userData = { 
                             hasAlpha, 
                             originalDataUrl: dataUrl, 
-                            originalName: texName 
+                            sourceDataUrl: dataUrl,
+                            originalName: texName,
+                            originalWidth: img.naturalWidth || img.width,
+                            originalHeight: img.naturalHeight || img.height,
+                            optimizedWidth: canvas.width,
+                            optimizedHeight: canvas.height
                         };
                         
                         // Сохраняем локально в ОЗУ текущего проекта
@@ -5204,7 +5418,7 @@ if (texSel) {
                     const fileDate = formatFileDate(getProjectTimestamp(proj));
                     const fullPath = `${PROJECT_PATH_BASE}${proj.name || namePlaceholder}`;
                     return `
-                        <div class="gbox-project-card mb-4 rounded-xl overflow-hidden shadow-lg">
+                        <div class="gbox-project-card mb-4 rounded-xl overflow-hidden">
                             <div class="p-4 bg-black/30 flex flex-col gap-3">
                                 <div class="flex flex-col gap-3">
                                     <div class="flex-1 min-w-0 flex flex-col gap-2">
@@ -5331,6 +5545,10 @@ if (texSel) {
                 if (document.getElementById('setting-light-contour')) {
                     document.getElementById('setting-light-contour').checked = engine.lightContourVisible !== false;
                 }
+                const drawDistance = document.getElementById('setting-draw-distance');
+                if (drawDistance) { drawDistance.value = String(engine.drawDistance || 350); const lbl = document.getElementById('draw-distance-val'); if (lbl) lbl.innerText = drawDistance.value + 'm'; }
+                const texQuality = document.getElementById('setting-texture-quality');
+                if (texQuality) { texQuality.value = String(currentTextureQualityIndex); engine.previewTextureQualityLabel(currentTextureQualityIndex); }
                 if (document.getElementById('setting-bloom') && engine.bloomPass) document.getElementById('setting-bloom').checked = engine.bloomPass.enabled;
                 if (document.getElementById('setting-bloom-strength') && engine.bloomPass) document.getElementById('setting-bloom-strength').value = String(engine.bloomPass.strength ?? 1);
                 modal.classList.remove('hidden'); 
@@ -5354,7 +5572,7 @@ if (texSel) {
 
                     const content = await zip.generateAsync({type:"blob"}); const url = URL.createObjectURL(content); const a = document.createElement('a'); a.href = url; a.download = `${window.appState.currentProjectName.replace(/\s+/g, '_')}_GoreBoxMap.zip`; a.click(); URL.revokeObjectURL(url);
                     this.hideExportModal();
-                    const ind = document.createElement('div'); ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-green-600/90 backdrop-blur text-white px-8 py-3 rounded-full text-xl font-bold shadow-[0_5px_20px_rgba(34,197,94,0.6)] z-[100] modal-enter uppercase text-center'; ind.innerText = i18n.t('archiveSuccess'); document.body.appendChild(ind);
+                    const ind = document.createElement('div'); ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-green-600/90 text-white px-8 py-3 rounded-full text-xl font-bold z-[100] modal-enter uppercase text-center'; ind.innerText = i18n.t('archiveSuccess'); document.body.appendChild(ind);
                     setTimeout(() => { ind.style.opacity = '0'; ind.style.transition='opacity 0.3s'; setTimeout(() => ind.remove(), 300); }, 3000);
                 } catch (err) { console.error("Export Error:", err); alert(i18n.t('exportError')); }
             }
@@ -5386,12 +5604,12 @@ if (texSel) {
             </div>
         </div>
     <!-- TEXTURE FALLBACK BUTTON (показывается только если BaseTextures.zip нельзя загрузить автоматически) -->
-    <div id="tex-load-btn" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9999;background:#0b121c;border:2px solid #3b82f6;border-radius:12px;padding:12px 20px;gap:10px;align-items:center;box-shadow:0 6px 30px rgba(0,0,0,0.85);white-space:nowrap;pointer-events:auto;">
+    <div id="tex-load-btn" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9999;background:#0b121c;border:2px solid #3b82f6;border-radius:12px;padding:12px 20px;gap:10px;align-items:center;white-space:nowrap;pointer-events:auto;">
         <span id="tex-status-text" style="color:#93c5fd;font-weight:bold;font-size:15px;font-family:Teko,sans-serif;">&#128230; Select BaseTextures.zip</span>
         <button onclick="document.getElementById('tex-zip-input').click()" style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:14px;font-weight:bold;cursor:pointer;margin-left:6px;font-family:Teko,sans-serif;">&#128194; Load</button>
         <input type="file" id="tex-zip-input" accept=".zip" style="display:none" onchange="handleManualTexZip(event)">
         <button onclick="document.getElementById('tex-load-btn').style.display='none'" title="Закрыть" style="background:transparent;color:#94a3b8;border:none;border-radius:6px;width:26px;height:26px;font-size:18px;line-height:1;cursor:pointer;margin-left:4px;padding:0;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#94a3b8'">&#10005;</button>
     </div>
 
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a13b879d2ef7e40d',t:'MTc4MjgwNTI5OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
