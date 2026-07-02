@@ -838,14 +838,18 @@
                     <span class="ui-icon ui-icon-anim" aria-hidden="true">☀️</span>
                     <span>Export with Lighting</span>
                 </button>
+                <button onclick="uiManager.exportToGLBZIP()" data-i18n="saveGLB" class="w-full py-5 text-center text-2xl font-bold hover:bg-purple-500/20 transition text-purple-400 hover:text-purple-300 border-t border-gray-800 flex items-center justify-center gap-2">
+                    <span class="ui-icon ui-icon-anim" aria-hidden="true">📦</span>
+                    <span>Export to GLB</span>
+                </button>
             </div>
         </div>
 
-        <!-- LIGHT BAKE PROGRESS MODAL -->
+        <!-- LIGHT BAKE / GLB EXPORT PROGRESS MODAL -->
         <div id="bake-progress-modal" class="ui-scale-layer hidden fixed inset-0 z-[70] flex items-center justify-center pointer-events-auto bg-black/80 transition-opacity">
             <div class="w-[460px] bg-[#0b121c] border border-amber-500/30 rounded-xl flex flex-col relative modal-enter overflow-hidden p-8 text-center">
-                <span class="ui-icon ui-icon-xl ui-icon-anim" aria-hidden="true">☀️</span>
-                <h3 class="text-2xl text-gray-200 font-bold mt-2 mb-1">Baking Lighting…</h3>
+                <span id="bake-progress-icon" class="ui-icon ui-icon-xl ui-icon-anim" aria-hidden="true">☀️</span>
+                <h3 id="bake-progress-title" class="text-2xl text-gray-200 font-bold mt-2 mb-1">Baking Lighting…</h3>
                 <p id="bake-progress-text" class="text-lg text-gray-500 mb-4">Preparing…</p>
                 <div class="w-full h-3 bg-black/50 rounded-full overflow-hidden border border-gray-800">
                     <div id="bake-progress-bar" class="h-full bg-amber-500 transition-all" style="width:0%"></div>
@@ -1097,6 +1101,7 @@
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
         import { Sky } from 'three/addons/objects/Sky.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
         import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
         import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -1119,7 +1124,9 @@
                     ssao: "Corner Shadows", rayTracing: "Ray Tracing", waterWaves: "Water Waves", textureSmoothing: "Texture Smoothing", pixelSmoothing: "Pixel Smoothing", showFps: "Show FPS", fogHeader: "Fog", fogColorLabel: "Fog Color (if clear)",
                     fogStart: "Start", fogEnd: "End", exportTitle: "EXPORT TO GOREBOX",
                     exportDesc: "A ZIP archive with MapData.json (v4) and CustomTextures folder will be generated.",
-                    saveZip: "Save ZIP", saveZipLit: "Export with Lighting", bakePreparing: "Preparing…", bakingFace: "Baking face", bakeAssemblingZip: "Assembling ZIP…", optGrid: "Grid", optPlain: "Plain (White)",
+                    saveZip: "Save ZIP", saveZipLit: "Export with Lighting", saveGLB: "Export to GLB", bakePreparing: "Preparing…", bakingFace: "Baking face", bakeAssemblingZip: "Assembling ZIP…",
+                    glbBuildingTitle: "Building GLB…", glbBuildingScene: "Building 3D scene…", glbEncoding: "Encoding GLB model…", glbPackingTextures: "Packing textures…",
+                    optGrid: "Grid", optPlain: "Plain (White)",
                     optDark: "Dark", optGrass: "Grass (Texture)", optStretch: "Stretch",
                     optXY: "X Y Tiling (1x1 m)", optYX: "Y X Tiling (Inverse)", optConcrete: "Concrete",
                     optWood: "Wood", optMetal: "Metal", optCarpet: "Carpet (Fabric)",
@@ -6397,6 +6404,176 @@ if (texSel) {
                     if (progModal) progModal.classList.add('hidden');
                     const detail = (err && (err.message || err.toString())) || 'Unknown error';
                     alert((i18n.t('exportError') || 'Project export error.') + '\n\n' + detail);
+                }
+            },
+
+            // === EXPORT TO GLB (ZIP) ===
+            // Экспортирует всю карту (кубы + свет) в один самодостаточный .glb файл (бинарный glTF —
+            // все текстуры встроены прямо внутрь файла как есть, поэтому при импорте в Blender/Prisma 3D/
+            // любой другой 3D-редактор текстуры наложатся автоматически, без поиска внешних файлов).
+            // UV-развёртка берётся напрямую из geometry, которая уже отображается в редакторе — то есть
+            // растяг/тайлинг текстур (stretch/xy/yx) гарантированно совпадает с тем, что видно в вьюпорте.
+            // Свет (Point/Spot) экспортируется через стандартное расширение glTF KHR_lights_punctual —
+            // three.js пишет туда intensity и distance (range) как есть, один в один с настройками в редакторе.
+            // Дополнительно та же самая ZIP-архивация оборачивает .glb и папку CustomTextures со всеми
+            // текстурами, которые реально использованы на карте (как в обычном экспорте) — на случай,
+            // если текстуры понадобятся отдельно от модели.
+            exportToGLBZIP: async function() {
+                const progModal = document.getElementById('bake-progress-modal');
+                const progBar = document.getElementById('bake-progress-bar');
+                const progText = document.getElementById('bake-progress-text');
+                const progTitle = document.getElementById('bake-progress-title');
+                const progIcon = document.getElementById('bake-progress-icon');
+                const prevTitle = progTitle ? progTitle.innerText : '';
+                const prevIcon = progIcon ? progIcon.innerText : '';
+
+                const exportScene = new THREE.Scene();
+                const createdGeometries = [];
+                const createdMaterials = [];
+
+                try {
+                    this.hideExportModal();
+                    if (progTitle) progTitle.innerText = i18n.t('glbBuildingTitle') || 'Building GLB…';
+                    if (progIcon) progIcon.innerText = '📦';
+                    if (progModal) progModal.classList.remove('hidden');
+                    if (progBar) progBar.style.width = '8%';
+                    if (progText) progText.innerText = i18n.t('glbBuildingScene') || 'Building 3D scene…';
+                    await new Promise(r => setTimeout(r, 20));
+
+                    const projectFileName = (window.appState.currentProjectName || 'GoreBoxMap').replace(/\s+/g, '_');
+                    exportScene.name = projectFileName;
+
+                    // --- 1) Кубы карты: клонируем текущую (уже видимую в редакторе) geometry, чтобы UV,
+                    //     тайлинг и оптимизация скрытых граней 1-в-1 совпадали с тем, что видит игрок. ---
+                    const usedTextureKeys = new Set();
+                    let cubeIndex = 0;
+                    engine.blocks.forEach(block => {
+                        if (!block || block.userData?.type !== 'cube' || !block.geometry) return;
+                        const ud = block.userData;
+                        usedTextureKeys.add(ud.texture || 'grid');
+
+                        const geometry = block.geometry.clone();
+                        createdGeometries.push(geometry);
+
+                        const srcMat = block.material;
+                        const matProps = {
+                            map: (srcMat && srcMat.map) || null,
+                            color: (srcMat && srcMat.color) ? srcMat.color.clone() : new THREE.Color(0xffffff),
+                            roughness: srcMat ? THREE.MathUtils.clamp(srcMat.roughness ?? 0.9, 0.02, 1) : 0.9,
+                            metalness: srcMat ? THREE.MathUtils.clamp(srcMat.metalness ?? 0, 0, 1) : 0,
+                            side: THREE.FrontSide
+                        };
+                        if (srcMat && srcMat.normalMap) {
+                            matProps.normalMap = srcMat.normalMap;
+                            matProps.normalScale = srcMat.normalScale ? srcMat.normalScale.clone() : new THREE.Vector2(1, 1);
+                        }
+                        const isTransparent = !!(srcMat && (srcMat.transparent || (srcMat.opacity ?? 1) < 0.999));
+                        if (isTransparent) {
+                            matProps.transparent = true;
+                            matProps.opacity = srcMat.opacity ?? 1;
+                            matProps.alphaTest = srcMat.alphaTest || 0;
+                            matProps.depthWrite = (srcMat.opacity ?? 1) >= 0.98;
+                        }
+
+                        const material = new THREE.MeshStandardMaterial(matProps);
+                        material.name = ud.materialName || ud.texture || 'Material';
+                        createdMaterials.push(material);
+
+                        const mesh = new THREE.Mesh(geometry, material);
+                        mesh.name = `${ud.sourceName || 'MapCube'}_${cubeIndex++}`;
+                        mesh.position.copy(block.position);
+                        mesh.quaternion.copy(block.quaternion);
+                        mesh.scale.copy(block.scale);
+                        exportScene.add(mesh);
+                    });
+
+                    // --- 2) Свет: настоящие THREE.PointLight/SpotLight (а не полупрозрачный editor-гизмо-куб),
+                    //     с теми же самыми color/intensity/distance, что заданы в редакторе. ---
+                    let lightIndex = 0;
+                    engine.manualLights.forEach(lightMesh => {
+                        const ud = lightMesh.userData || {};
+                        const color = new THREE.Color(ud.colorHex || '#ffd83d');
+                        const intensity = Math.max(0, parseFloat(ud.intensity ?? 4));
+                        const distance = Math.max(0.1, parseFloat(ud.distance ?? 18));
+                        let light;
+                        if (ud.lightType === 'spot') {
+                            light = new THREE.SpotLight(color, intensity, distance, Math.PI / 5, 0.35, 2.0);
+                            const target = new THREE.Object3D();
+                            target.position.set(0, 0, -1);
+                            light.add(target);
+                            light.target = target;
+                            light.name = `SpotLight_${lightIndex++}`;
+                        } else {
+                            light = new THREE.PointLight(color, intensity, distance, 2.0);
+                            light.name = `PointLight_${lightIndex++}`;
+                        }
+                        light.position.copy(lightMesh.position);
+                        light.quaternion.copy(lightMesh.quaternion);
+                        exportScene.add(light);
+                    });
+
+                    if (progBar) progBar.style.width = '40%';
+                    if (progText) progText.innerText = i18n.t('glbEncoding') || 'Encoding GLB model…';
+                    await new Promise(r => setTimeout(r, 10));
+
+                    // --- 3) Кодируем сцену в бинарный .glb (текстуры встраиваются внутрь файла сами). ---
+                    const exporter = new GLTFExporter();
+                    const glbArrayBuffer = await exporter.parseAsync(exportScene, {
+                        binary: true,
+                        onlyVisible: false
+                    });
+
+                    if (progBar) progBar.style.width = '75%';
+                    if (progText) progText.innerText = i18n.t('glbPackingTextures') || 'Packing textures…';
+                    await new Promise(r => setTimeout(r, 10));
+
+                    // --- 4) ZIP: сам .glb + папка CustomTextures со всеми текстурами, реально использованными
+                    //     на карте (дублирует то, что уже встроено в .glb — на случай, если текстуры нужны отдельно). ---
+                    const zip = new JSZip();
+                    zip.file(`${projectFileName}.glb`, glbArrayBuffer);
+
+                    const customTexFolder = zip.folder("CustomTextures");
+                    usedTextureKeys.forEach(key => {
+                        const tex = getActiveTexture(key);
+                        if (!tex) return;
+                        let dataUrl = tex.userData?.originalDataUrl || tex.userData?.sourceDataUrl || null;
+                        if (!dataUrl && tex.image && tex.image.toDataURL) {
+                            try { dataUrl = tex.image.toDataURL('image/png'); } catch (e) {}
+                        }
+                        if (!dataUrl) return;
+                        const base64Data = dataUrl.split(',')[1];
+                        if (!base64Data) return;
+                        customTexFolder.file(`${normalizeTextureKey(key)}.png`, base64Data, { base64: true });
+                    });
+
+                    if (progBar) progBar.style.width = '95%';
+                    if (progText) progText.innerText = i18n.t('bakeAssemblingZip') || 'Assembling ZIP…';
+                    await new Promise(r => setTimeout(r, 10));
+
+                    const content = await zip.generateAsync({ type: "blob" });
+                    const url = URL.createObjectURL(content);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = `${projectFileName}_GLB.zip`; a.click();
+                    URL.revokeObjectURL(url);
+
+                    if (progBar) progBar.style.width = '100%';
+                    if (progModal) progModal.classList.add('hidden');
+                    const ind = document.createElement('div'); ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-purple-600/90 text-white px-8 py-3 rounded-full text-xl font-bold z-[100] modal-enter uppercase text-center'; ind.innerText = i18n.t('archiveSuccess'); document.body.appendChild(ind);
+                    setTimeout(() => { ind.style.opacity = '0'; ind.style.transition = 'opacity 0.3s'; setTimeout(() => ind.remove(), 300); }, 3000);
+                } catch (err) {
+                    console.error("GLB Export Error:", err);
+                    if (progModal) progModal.classList.add('hidden');
+                    const detail = (err && (err.message || err.toString())) || 'Unknown error';
+                    alert((i18n.t('exportError') || 'Project export error.') + '\n\n' + detail);
+                } finally {
+                    // Клонированные geometry/материалы созданы только для экспорта — текстуры при этом общие
+                    // (взяты из живой сцены редактора), поэтому диспоузим только то, что создали сами.
+                    createdGeometries.forEach(g => { try { g.dispose(); } catch (e) {} });
+                    createdMaterials.forEach(m => { try { m.dispose(); } catch (e) {} });
+                    exportScene.clear();
+                    if (progTitle) progTitle.innerText = prevTitle;
+                    if (progIcon) progIcon.innerText = prevIcon;
+                    if (progBar) progBar.style.width = '0%';
                 }
             }
         };
