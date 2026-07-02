@@ -217,6 +217,7 @@
 
         
         #glcanvas { position: absolute; inset: 0; z-index: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+        #glcanvas.pixel-smoothing-on { image-rendering: auto; }
         #ui-layer { position: fixed; inset: 0; z-index: 10; pointer-events: none; display: none; flex-direction: column; justify-content: space-between; }
         .pointer-events-auto { pointer-events: auto; }
         
@@ -476,6 +477,7 @@
 
         <div id="playtest-overlay">
             <div class="crosshair"></div>
+            <button id="playtest-exit-btn" onclick="gameplay.exitPlaytest()" title="Exit Playtest (Esc)" class="absolute top-3 left-1/2 -translate-x-1/2 z-30 bg-gray-500/40 hover:bg-gray-500/60 active:bg-gray-500/70 backdrop-blur-sm border border-white/20 rounded-lg px-5 py-2 text-white font-bold text-lg tracking-wide pointer-events-auto select-none transition">Esc</button>
             <div class="absolute top-6 left-6 bg-black/60 border border-white/10 p-4 text-xl text-gray-200 rounded-lg">
                 <div data-i18n="playtestControls" class="font-bold text-blue-400 mb-2 border-b border-white/20 pb-1">PLAYTEST CONTROLS</div>
                 <span data-i18n="ptEsc">[ESC] - Exit to Editor</span><br>
@@ -1061,6 +1063,11 @@
                                 <span id="pixel-ratio-val" class="text-blue-300 text-sm w-14 text-right">0.80x</span>
                             </div>
                         </div>
+
+                        <label class="flex items-center gap-3 mb-3 cursor-pointer group">
+                            <input type="checkbox" id="setting-pixel-smoothing" onchange="engine.applyPixelSmoothing(this.checked);" class="w-6 h-6 accent-blue-500">
+                            <span data-i18n="pixelSmoothing" class="group-hover:text-white text-gray-300 transition">Pixel Smoothing</span>
+                        </label>
                     </div>
 
                     <div id="settings-section-fog" class="bg-black/30 p-5 rounded-lg border border-gray-800">
@@ -1109,7 +1116,7 @@
                     skyWeather: "Sky & Weather", skyboxLabel: "Skybox (Time of Day)", sunAngleLabel: "Sun Angle (Rotation)",
                     weatherLabel: "Weather (Audio & Particles)", interfaceLabel: "Interface", uiScaleLabel: "UI Scale",
                     graphicsLabel: "Graphics (Optimization)", dynShadows: "Dynamic Shadows", bloom: "Bloom (Object/Lightning Glow)",
-                    ssao: "Corner Shadows", rayTracing: "Ray Tracing", waterWaves: "Water Waves", textureSmoothing: "Texture Smoothing", showFps: "Show FPS", fogHeader: "Fog", fogColorLabel: "Fog Color (if clear)",
+                    ssao: "Corner Shadows", rayTracing: "Ray Tracing", waterWaves: "Water Waves", textureSmoothing: "Texture Smoothing", pixelSmoothing: "Pixel Smoothing", showFps: "Show FPS", fogHeader: "Fog", fogColorLabel: "Fog Color (if clear)",
                     fogStart: "Start", fogEnd: "End", exportTitle: "EXPORT TO GOREBOX",
                     exportDesc: "A ZIP archive with MapData.json (v4) and CustomTextures folder will be generated.",
                     saveZip: "Save ZIP", saveZipLit: "Export with Lighting", bakePreparing: "Preparing…", bakingFace: "Baking face", bakeAssemblingZip: "Assembling ZIP…", optGrid: "Grid", optPlain: "Plain (White)",
@@ -2842,7 +2849,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 window.addEventListener('keydown', this.onKeyDown.bind(this));
                 window.addEventListener('keyup', this.onKeyUp.bind(this));
 
-                this.updateEnvironment(); this.applyCameraSensitivity(parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1')); this.applyCameraMoveSpeed(parseFloat(localStorage.getItem('mmcg_camera_move_55') || '1')); this.applyPixelRatio(parseFloat(localStorage.getItem('mmcg_pixel_ratio_55') || '0.8')); this.applyFpsCounterVisibility(localStorage.getItem('mmcg_show_fps_55') === '1'); this.updateSelectionPanels(); this.camera.far = 2000; this.camera.updateProjectionMatrix(); this.updateDepthEncodingUniforms(); this.animate();
+                this.updateEnvironment(); this.applyCameraSensitivity(parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1')); this.applyCameraMoveSpeed(parseFloat(localStorage.getItem('mmcg_camera_move_55') || '1')); this.applyPixelRatio(parseFloat(localStorage.getItem('mmcg_pixel_ratio_55') || '0.8')); this.applyFpsCounterVisibility(localStorage.getItem('mmcg_show_fps_55') === '1'); this.applyPixelSmoothing(localStorage.getItem('mmcg_pixel_smoothing_55') === '1'); this.updateSelectionPanels(); this.camera.far = 2000; this.camera.updateProjectionMatrix(); this.updateDepthEncodingUniforms(); this.animate();
             },
 
             initClouds: function() {
@@ -3003,6 +3010,22 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     el.classList.toggle('hidden', !enabled);
                     if (enabled) el.innerText = 'FPS: 0';
                 }
+                return enabled;
+            },
+
+            applyPixelSmoothing: function(value = null) {
+                // Выключено по умолчанию: канвас апскейлится/даунскейлится браузером без сглаживания
+                // (image-rendering: pixelated) — чёткие "чистые" пиксели, как раньше.
+                // Включено: браузер сглаживает канвас при масштабировании (image-rendering: auto),
+                // убирая блочность/пиксельность на нестандартном Render Resolution (например 1.05x).
+                const enabled = value !== null && value !== undefined ? !!value : (localStorage.getItem('mmcg_pixel_smoothing_55') === '1');
+                this.pixelSmoothingEnabled = enabled;
+                localStorage.setItem('mmcg_pixel_smoothing_55', enabled ? '1' : '0');
+                if (this.renderer && this.renderer.domElement) {
+                    this.renderer.domElement.classList.toggle('pixel-smoothing-on', enabled);
+                }
+                const el = document.getElementById('setting-pixel-smoothing');
+                if (el) el.checked = enabled;
                 return enabled;
             },
 
@@ -5654,7 +5677,8 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
             init: function() { this.controls = new PointerLockControls(engine.camera, document.body); this.controls.addEventListener('lock', () => { this.isPlaytest = true; }); this.controls.addEventListener('unlock', () => { this.stopPlaytest(); }); document.addEventListener('keydown', (e) => this.onKeyDown(e)); document.addEventListener('keyup', (e) => this.onKeyUp(e)); },
             startPlaytest: function() { engine.deselect(); document.getElementById('ui-layer').style.display = 'none'; document.getElementById('playtest-overlay').style.display = 'block'; if (engine.spawnPointObj) { engine.camera.position.copy(engine.spawnPointObj.position); engine.camera.position.y += 1; } else { engine.camera.position.set(0, 5, 0); } engine.spawnPointObj && (engine.spawnPointObj.visible = false); this.velocity.set(0,0,0); audioEngine.init(); this.controls.lock(); },
             stopPlaytest: function() { this.isPlaytest = false; document.getElementById('ui-layer').style.display = 'flex'; document.getElementById('playtest-overlay').style.display = 'none'; engine.spawnPointObj && (engine.spawnPointObj.visible = true); },
-            onKeyDown: function(e) { if(!this.isPlaytest) return; switch(e.code) { case 'KeyW': this.moveState.forward = true; break; case 'KeyS': this.moveState.backward = true; break; case 'KeyA': this.moveState.left = true; break; case 'KeyD': this.moveState.right = true; break; case 'Space': if(this.canJump) this.velocity.y += 12; this.canJump = false; break; case 'ShiftLeft': this.moveState.sprint = true; break; case 'ControlLeft': case 'KeyC': this.moveState.crouch = true; break; } },
+            exitPlaytest: function() { try { if (document.pointerLockElement) document.exitPointerLock(); } catch(e) {} this.stopPlaytest(); },
+            onKeyDown: function(e) { if(!this.isPlaytest) { return; } if (e.code === 'Escape') { this.exitPlaytest(); return; } switch(e.code) { case 'KeyW': this.moveState.forward = true; break; case 'KeyS': this.moveState.backward = true; break; case 'KeyA': this.moveState.left = true; break; case 'KeyD': this.moveState.right = true; break; case 'Space': if(this.canJump) this.velocity.y += 12; this.canJump = false; break; case 'ShiftLeft': this.moveState.sprint = true; break; case 'ControlLeft': case 'KeyC': this.moveState.crouch = true; break; } },
             onKeyUp: function(e) { if(!this.isPlaytest) return; switch(e.code) { case 'KeyW': this.moveState.forward = false; break; case 'KeyS': this.moveState.backward = false; break; case 'KeyA': this.moveState.left = false; break; case 'KeyD': this.moveState.right = false; break; case 'ShiftLeft': this.moveState.sprint = false; break; case 'ControlLeft': case 'KeyC': this.moveState.crouch = false; break; } },
             update: function(dt) {
                 const speed = this.moveState.sprint ? 15 : (this.moveState.crouch ? 3 : 7); const mass = 100.0; this.velocity.x -= this.velocity.x * 10.0 * dt; this.velocity.z -= this.velocity.z * 10.0 * dt; this.velocity.y -= 9.8 * mass * dt;
@@ -6268,6 +6292,8 @@ if (texSel) {
                 if (pixRatio) { pixRatio.value = localStorage.getItem('mmcg_pixel_ratio_55') || '1'; const lbl = document.getElementById('pixel-ratio-val'); if (lbl) lbl.innerText = Number(pixRatio.value).toFixed(2) + 'x'; }
                 const showFps = document.getElementById('setting-show-fps');
                 if (showFps) { showFps.checked = localStorage.getItem('mmcg_show_fps_55') === '1'; }
+                const pixSmooth = document.getElementById('setting-pixel-smoothing');
+                if (pixSmooth) { pixSmooth.checked = localStorage.getItem('mmcg_pixel_smoothing_55') === '1'; }
                 const bloom = document.getElementById('setting-bloom-strength');
                 if (bloom) { const lbl = document.getElementById('bloom-strength-val'); if (lbl) lbl.innerText = Number(bloom.value).toFixed(2); }
                 const refl = document.getElementById('setting-reflection-distance');
