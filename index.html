@@ -1001,11 +1001,18 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
 
 
 
-                        <label class="flex items-center gap-3 mb-1 cursor-pointer group">
-                            <input type="checkbox" id="setting-raytracing" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" class="w-6 h-6 accent-emerald-400">
-                            <span data-i18n="rayTracing" class="group-hover:text-white text-emerald-300 transition font-bold">Ray Tracing</span>
-                        </label>
-                        <p class="text-[11px] text-gray-500 mb-3 leading-tight pl-9">Ray-traced reflections on all surfaces, colored light bounce (Global Illumination) and cinematic ACES tone mapping. Stunningly realistic picture. Heavy on GPU!</p>
+                            <label class="flex items-center gap-3 mb-1 cursor-pointer group">
+                                <input type="checkbox" id="setting-reflections" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" class="w-6 h-6 accent-emerald-400">
+                                <span data-i18n="reflections" class="group-hover:text-white text-emerald-300 transition font-bold">Reflections</span>
+                            </label>
+                            <div class="pl-9 mb-3">
+                                <div class="flex items-center gap-3 mb-1">
+                                    <label class="text-gray-400 text-sm uppercase font-bold">Sharpness</label>
+                                    <input type="range" id="setting-reflection-sharpness" min="0" max="100" value="80" class="w-full accent-emerald-400 cursor-pointer" oninput="document.getElementById('reflection-sharpness-val').innerText = this.value" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();">
+                                    <span id="reflection-sharpness-val" class="text-emerald-300 text-sm w-10 text-right">80</span>
+                                </div>
+                                <p class="text-[11px] text-gray-500 leading-tight">Ray-traced reflections on all surfaces, colored light bounce (Global Illumination) and cinematic ACES tone mapping. Stunningly realistic picture. Heavy on GPU!</p>
+                            </div>
 
                         <label class="flex items-center gap-3 mb-3 cursor-pointer group">
                             <input type="checkbox" id="setting-water-waves" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked class="w-6 h-6 accent-blue-500">
@@ -1731,7 +1738,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
             Grass: { roughness: 1.0, metalness: 0.0, envMapIntensity: 0.08 },
             Dirt: { roughness: 1.0, metalness: 0.0, envMapIntensity: 0.04 },
             Sand: { roughness: 1.0, metalness: 0.0, envMapIntensity: 0.05 },
-            Metal: { roughness: 0.28, metalness: 0.85, envMapIntensity: 1.4 },
+            Metal: { roughness: 0.92, metalness: 0.02, envMapIntensity: 0.25 },
             Snow: { roughness: 0.82, metalness: 0.0, envMapIntensity: 0.35 },
             Wood: { roughness: 0.88, metalness: 0.0, envMapIntensity: 0.14 },
             Carpet: { roughness: 1.0, metalness: 0.0, envMapIntensity: 0.02 },
@@ -1847,7 +1854,7 @@ let activeProjectNormalMaps = {}; // textureKey -> { texture: THREE.Texture, nam
             }
             const pbrEnabled = true; // PBR теперь включен всегда для красоты
             const isWater = isWaterLike(textureId, matType);
-            const isMetal = matType === 'Metal' || textureId === 'metal';
+            const isMetal = textureId === 'metal';
             const isGlass = textureId === 'glass';
             const isPlasma = textureId === 'plasma';
 
@@ -2424,7 +2431,8 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         resolution:  { value: new THREE.Vector2(_cw, _ch) },
                         proj:        { value: new THREE.Matrix4() },
                         projInverse: { value: new THREE.Matrix4() },
-                        rtStrength:  { value: 0.85 }
+                        rtStrength:  { value: 0.85 },
+                        uSharpness:    { value: 0.8 }
                     },
                     vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
                     fragmentShader: `
@@ -2435,6 +2443,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         uniform mat4      proj;
                         uniform mat4      projInverse;
                         uniform float     rtStrength;
+                        uniform float     uSharpness;
                         varying vec2 vUv;
 
                         vec3 getViewPos(vec2 uv, float rawD) {
@@ -2477,7 +2486,9 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
                             /* ── Трассировка отражённого луча в view-space ── */
                             vec3  V = normalize(pos);           /* камера в (0,0,0) */
-                            vec3  R = normalize(reflect(V, N));
+                            float blur = 1.0 - uSharpness;
+                            vec3 randDir = vec3(IGN(vUv * resolution + 0.1) - 0.5, IGN(vUv * resolution + 0.2) - 0.5, IGN(vUv * resolution + 0.3) - 0.5);
+                            vec3  R = normalize(reflect(V, N) + randDir * blur * 0.1);
                             float jitter    = IGN(floor(vUv * resolution));
                             const int   STEPS   = 28;
                             const float MAXDIST = 60.0;
@@ -2720,6 +2731,8 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     this.rtPass.uniforms.tDepth.value = this._depthTarget.depthTexture;
                     this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
                     this.rtPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
+                    const sharpVal = parseFloat(document.getElementById("setting-reflection-sharpness")?.value || "80") / 100;
+                    this.rtPass.uniforms.uSharpness.value = sharpVal;
                 }
                 if (this._depthTarget) this._depthTarget.setSize(w, h);
                 if (window.uiManager && uiManager.applyResponsiveScale) uiManager.applyResponsiveScale(false);
@@ -2794,7 +2807,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 const preset = MATERIAL_PRESETS[type] || MATERIAL_PRESETS.Concrete;
                 const base = obj?.userData?.skyboxReflectivity ?? preset.envMapIntensity;
                 if (isWaterLike(textureKey, type)) return Math.min(3.4, Math.max(2.15, base));
-                if (type === 'Metal' || textureKey === 'metal' || textureKey === 'glass') return Math.min(2.5, Math.max(0.08, base));
+                if (textureKey === 'metal' || textureKey === 'glass') return Math.min(2.5, Math.max(0.08, base));
                 return Math.min(0.14, Math.max(0.02, base));
             },
 
@@ -2815,7 +2828,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 }
                 const preset = MATERIAL_PRESETS[matT] || MATERIAL_PRESETS.Concrete;
                 const isWater = isWaterLike(tex, matT);
-                const isMetal = matT === 'Metal' || tex === 'metal';
+                const isMetal = tex === 'metal';
                 const geometryChanged = ensureBlockGeometryMatchesMaterial(obj);
                 if (geometryChanged) this.updateCubeUVs(obj);
                 obj.renderOrder = isWater ? 3 : 0;
@@ -4447,7 +4460,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 }
 
                 // ── ✨ RAY TRACING ────────────────────────────────────────────────
-                const rtEnabled = document.getElementById('setting-raytracing')?.checked ?? false;
+                const rtEnabled = document.getElementById('setting-reflections')?.checked ?? false;
                 if (this.rtPass) {
                     this.rtPass.enabled = rtEnabled;
                     this.rtPass.uniforms.tDepth.value = this._depthTarget.depthTexture;
@@ -4458,6 +4471,8 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     this.camera.updateProjectionMatrix();
                     this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
                     this.rtPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
+                    const sharpVal = parseFloat(document.getElementById("setting-reflection-sharpness")?.value || "80") / 100;
+                    this.rtPass.uniforms.uSharpness.value = sharpVal;
                 }
                 // Кинематографичный ACES-тонмаппинг + повышенная точность теней в RT-режиме
                 this.renderer.toneMapping = rtEnabled ? THREE.ACESFilmicToneMapping : THREE.LinearToneMapping;
@@ -4491,7 +4506,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 this.updateSelectionPanels();
             },
 
-            getEnvState: function() { return { skybox: document.getElementById('setting-skybox').value, weather: document.getElementById('setting-weather').value, fogColor: document.getElementById('setting-fog-color').value, fogStart: parseFloat(document.getElementById('setting-fog-start').value) || 15, fogEnd: parseFloat(document.getElementById('setting-fog-end').value) || 250, sunAngle: parseFloat(document.getElementById('setting-sun-angle').value) || 180, shadows: document.getElementById('setting-shadows').checked, shadowQuality: parseInt(document.getElementById('setting-shadow-quality')?.value ?? '2', 10), bloom: document.getElementById('setting-bloom').checked, bloomStrength: parseFloat(document.getElementById('setting-bloom-strength')?.value || '1'), cameraSensitivity: parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'), aoIntensity: parseFloat(document.getElementById('setting-ao-intensity')?.value || '0.55'), ssao: document.getElementById('setting-ssao').checked, rayTracing: document.getElementById('setting-raytracing') ? document.getElementById('setting-raytracing').checked : false, waterWaves: document.getElementById('setting-water-waves') ? document.getElementById('setting-water-waves').checked : true, textureSmoothing: document.getElementById('setting-texture-smoothing') ? document.getElementById('setting-texture-smoothing').checked : false, drawDistance: this.drawDistance || 350, textureQuality: currentTextureQualityIndex, customSkyboxDataUrl: this.customSkyboxDataUrl || null, customSkyboxName: this.customSkyboxName || null, gridVisible: document.getElementById('setting-grid') ? document.getElementById('setting-grid').checked : true, lightContour: document.getElementById('setting-light-contour') ? document.getElementById('setting-light-contour').checked : true }; },
+            getEnvState: function() { return { skybox: document.getElementById('setting-skybox').value, weather: document.getElementById('setting-weather').value, fogColor: document.getElementById('setting-fog-color').value, fogStart: parseFloat(document.getElementById('setting-fog-start').value) || 15, fogEnd: parseFloat(document.getElementById('setting-fog-end').value) || 250, sunAngle: parseFloat(document.getElementById('setting-sun-angle').value) || 180, shadows: document.getElementById('setting-shadows').checked, shadowQuality: parseInt(document.getElementById('setting-shadow-quality')?.value ?? '2', 10), bloom: document.getElementById('setting-bloom').checked, bloomStrength: parseFloat(document.getElementById('setting-bloom-strength')?.value || '1'), cameraSensitivity: parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'), aoIntensity: parseFloat(document.getElementById('setting-ao-intensity')?.value || '0.55'), ssao: document.getElementById('setting-ssao').checked, rayTracing: document.getElementById('setting-reflections') ? document.getElementById('setting-reflections').checked : false, reflectionSharpness: parseFloat(document.getElementById('setting-reflection-sharpness')?.value || '80') / 100, waterWaves: document.getElementById('setting-water-waves') ? document.getElementById('setting-water-waves').checked : true, textureSmoothing: document.getElementById('setting-texture-smoothing') ? document.getElementById('setting-texture-smoothing').checked : false, drawDistance: this.drawDistance || 350, textureQuality: currentTextureQualityIndex, customSkyboxDataUrl: this.customSkyboxDataUrl || null, customSkyboxName: this.customSkyboxName || null, gridVisible: document.getElementById('setting-grid') ? document.getElementById('setting-grid').checked : true, lightContour: document.getElementById('setting-light-contour') ? document.getElementById('setting-light-contour').checked : true }; },
 
             setCustomSkybox: function(dataUrl, fileName = 'Custom Skybox') {
                 this.customSkyboxDataUrl = dataUrl;
@@ -5237,7 +5252,12 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     document.getElementById('setting-camera-sensitivity').value = String(data.env.cameraSensitivity ?? parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1'));
                     document.getElementById('camera-sensitivity-val').innerText = Number(document.getElementById('setting-camera-sensitivity').value).toFixed(2);
                     document.getElementById('setting-ssao').checked = data.env.ssao === true;
-                    if (document.getElementById('setting-raytracing')) document.getElementById('setting-raytracing').checked = data.env.rayTracing === true; // по умолчанию выключено
+                    if (document.getElementById('setting-reflections')) document.getElementById('setting-reflections').checked = data.env.rayTracing === true; // по умолчанию выключено
+                    if (document.getElementById('setting-reflection-sharpness')) {
+                        const val = Math.round((data.env.reflectionSharpness ?? 0.8) * 100);
+                        document.getElementById('setting-reflection-sharpness').value = String(val);
+                        document.getElementById('reflection-sharpness-val').innerText = String(val);
+                    }
                     if (document.getElementById('setting-ao-intensity')) { document.getElementById('setting-ao-intensity').value = String(data.env.aoIntensity ?? 0.55); if (document.getElementById('ao-intensity-val')) document.getElementById('ao-intensity-val').innerText = Number(document.getElementById('setting-ao-intensity').value).toFixed(2); }
                     if (document.getElementById('setting-water-waves')) document.getElementById('setting-water-waves').checked = data.env.waterWaves !== false;
                     if (document.getElementById('setting-texture-smoothing')) document.getElementById('setting-texture-smoothing').checked = data.env.textureSmoothing === true;
@@ -5275,7 +5295,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     if (this.customSkyboxEnvMap) { try { this.customSkyboxEnvMap.dispose(); } catch(e) {} this.customSkyboxEnvMap = null; }
                     if (document.getElementById('setting-draw-distance')) this.applyDrawDistance(350);
                     if (document.getElementById('setting-texture-quality')) await this.applyTextureQualitySetting(3);
-                    if (document.getElementById('setting-raytracing')) document.getElementById('setting-raytracing').checked = false; // Ray Tracing по умолчанию выключен
+                    if (document.getElementById('setting-reflections')) document.getElementById('setting-reflections').checked = false; // Ray Tracing по умолчанию выключен
                 }
                 this.applyCameraSensitivity(parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'));
                 this.recalculateManualLightSpecular();
@@ -5403,6 +5423,8 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         // Матрицы камеры меняются каждый кадр (орбита) — RT-шейдеру нужны свежие
                         this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
                         this.rtPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
+                    const sharpVal = parseFloat(document.getElementById("setting-reflection-sharpness")?.value || "80") / 100;
+                    this.rtPass.uniforms.uSharpness.value = sharpVal;
                     }
                     if (this.bloomPass.enabled || this.ssaoPass.enabled || this.rtPass?.enabled) this.composer.render(); else this.renderer.render(this.scene, this.camera);
                     this._renderSkipFrames = 0;
@@ -6064,7 +6086,7 @@ if (texSel) {
                 const texQuality = document.getElementById('setting-texture-quality');
                 if (texQuality) { texQuality.value = String(currentTextureQualityIndex); engine.previewTextureQualityLabel(currentTextureQualityIndex); }
                 if (document.getElementById('setting-bloom') && engine.bloomPass) document.getElementById('setting-bloom').checked = engine.bloomPass.enabled;
-                if (document.getElementById('setting-raytracing') && engine.rtPass) document.getElementById('setting-raytracing').checked = engine.rtPass.enabled;
+                if (document.getElementById('setting-reflections') && engine.rtPass) document.getElementById('setting-reflections').checked = engine.rtPass.enabled;
                 if (document.getElementById('setting-bloom-strength') && engine.bloomPass) document.getElementById('setting-bloom-strength').value = String(engine.bloomPass.strength ?? 1);
                 modal.classList.remove('hidden'); 
             },
@@ -6190,5 +6212,6 @@ if (texSel) {
     </div>
 
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a13bd3e70b4cc9cd',t:'MTc4MjgwODQyMw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
