@@ -1001,6 +1001,12 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
 
 
 
+                        <label class="flex items-center gap-3 mb-1 cursor-pointer group">
+                            <input type="checkbox" id="setting-raytracing" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" class="w-6 h-6 accent-emerald-400">
+                            <span data-i18n="rayTracing" class="group-hover:text-white text-emerald-300 transition font-bold">Ray Tracing</span>
+                        </label>
+                        <p class="text-[11px] text-gray-500 mb-3 leading-tight pl-9">Ray-traced reflections on all surfaces, colored light bounce (Global Illumination) and cinematic ACES tone mapping. Stunningly realistic picture. Heavy on GPU!</p>
+
                         <label class="flex items-center gap-3 mb-3 cursor-pointer group">
                             <input type="checkbox" id="setting-water-waves" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked class="w-6 h-6 accent-blue-500">
                             <span data-i18n="waterWaves" class="group-hover:text-white text-gray-300 transition">Water Waves (+ Skybox Reflections Only)</span>
@@ -1035,7 +1041,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                         </div>
 
                         <div class="bg-black/30 p-2 rounded border border-gray-800 mt-1">
-                            <label class="text-gray-400 text-sm uppercase font-bold block mb-1">Render Resolution (Pixel Scale)</label>
+                            <label class="text-gray-400 text-sm uppercase font-bold block mb-1">Render Resolution</label>
                             <div class="flex items-center gap-2">
                                 <input type="range" id="setting-pixel-ratio" min="0.2" max="2" step="0.05" value="0.8" class="w-full accent-blue-500 cursor-pointer" oninput="document.getElementById('pixel-ratio-val').innerText = Number(this.value).toFixed(2) + 'x'; engine.applyPixelRatio?.(parseFloat(this.value));">
                                 <span id="pixel-ratio-val" class="text-blue-300 text-sm w-14 text-right">0.80x</span>
@@ -1089,7 +1095,7 @@ var COL_RUBIKS_CUBE = "data:image/jpeg;base64,/9j/4QGqRXhpZgAATU0AKgAAAAgABAEAAA
                     skyWeather: "Sky & Weather", skyboxLabel: "Skybox (Time of Day)", sunAngleLabel: "Sun Angle (Rotation)",
                     weatherLabel: "Weather (Audio & Particles)", interfaceLabel: "Interface", uiScaleLabel: "UI Scale",
                     graphicsLabel: "Graphics (Optimization)", dynShadows: "Dynamic Shadows", bloom: "Bloom (Object/Lightning Glow)",
-                    ssao: "Corner Shadows", waterWaves: "Water Waves (+ Skybox Reflections Only)", textureSmoothing: "Texture Smoothing", showFps: "Show FPS", fogHeader: "Fog", fogColorLabel: "Fog Color (if clear)",
+                    ssao: "Corner Shadows", rayTracing: "Ray Tracing", waterWaves: "Water Waves", textureSmoothing: "Texture Smoothing", showFps: "Show FPS", fogHeader: "Fog", fogColorLabel: "Fog Color (if clear)",
                     fogStart: "Start", fogEnd: "End", exportTitle: "EXPORT TO GOREBOX",
                     exportDesc: "A ZIP archive with MapData.json (v4) and CustomTextures folder will be generated.",
                     saveZip: "Save ZIP", saveZipLit: "Export with Lighting", bakePreparing: "Preparing…", bakingFace: "Baking face", bakeAssemblingZip: "Assembling ZIP…", optGrid: "Grid", optPlain: "Plain (White)",
@@ -2032,7 +2038,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
         // --- ДВИЖОК ---
         const engine = {
-            scene: null, camera: null, renderer: null, pmremGenerator: null, composer: null, bloomPass: null, ssaoPass: null, _renderSkipFrames: 0,
+            scene: null, camera: null, renderer: null, pmremGenerator: null, composer: null, bloomPass: null, ssaoPass: null, rtPass: null, _renderSkipFrames: 0,
             orbit: null, transformControl: null, raycaster: null, mouse: null,
             blocks: [], selectedBlocks: [], spawnPointObj: null, manualLights: [],
             gridHelper: null, dirLight: null, ambientLight: null, hemiLight: null, sky: null, sun: null,
@@ -2408,6 +2414,138 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
                 this.bloomPass = new UnrealBloomPass(new THREE.Vector2(_cw, _ch), 0.65, 0.22, 0.92); this.bloomPass.enabled = false; this.composer.addPass(this.bloomPass);
 
+                // ── ✨ RAY TRACING PASS — screen-space ray-traced reflections + GI colour bounce ──
+                // Реальный ray marching в view-space по depth-буферу: для каждого пикселя пускается
+                // отражённый луч, шагает по сцене и при попадании берёт цвет отражённой поверхности.
+                const _rtShader = {
+                    uniforms: {
+                        tDiffuse:    { value: null },
+                        tDepth:      { value: null },
+                        resolution:  { value: new THREE.Vector2(_cw, _ch) },
+                        proj:        { value: new THREE.Matrix4() },
+                        projInverse: { value: new THREE.Matrix4() },
+                        rtStrength:  { value: 0.85 }
+                    },
+                    vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+                    fragmentShader: `
+                        precision highp float;
+                        uniform sampler2D tDiffuse;
+                        uniform sampler2D tDepth;
+                        uniform vec2      resolution;
+                        uniform mat4      proj;
+                        uniform mat4      projInverse;
+                        uniform float     rtStrength;
+                        varying vec2 vUv;
+
+                        vec3 getViewPos(vec2 uv, float rawD) {
+                            vec4 ndc = vec4(uv * 2.0 - 1.0, rawD * 2.0 - 1.0, 1.0);
+                            vec4 vp  = projInverse * ndc;
+                            return vp.xyz / vp.w;
+                        }
+
+                        vec2 viewToUv(vec3 p) {
+                            vec4 clip = proj * vec4(p, 1.0);
+                            return (clip.xy / clip.w) * 0.5 + 0.5;
+                        }
+
+                        float IGN(vec2 pix) {
+                            return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));
+                        }
+
+                        void main() {
+                            vec4  col  = texture2D(tDiffuse, vUv);
+                            float rawD = texture2D(tDepth, vUv).r;
+                            /* Небо — отражать нечего */
+                            if (rawD > 0.9999) { gl_FragColor = col; return; }
+
+                            vec2  texel = 1.0 / resolution;
+                            vec3  pos   = getViewPos(vUv, rawD);
+
+                            /* ── Реконструкция нормали (best-neighbour, без швов) ── */
+                            float rawR  = texture2D(tDepth, vUv + vec2( texel.x, 0.0)).r;
+                            float rawL  = texture2D(tDepth, vUv - vec2( texel.x, 0.0)).r;
+                            float rawU  = texture2D(tDepth, vUv + vec2(0.0,  texel.y)).r;
+                            float rawDn = texture2D(tDepth, vUv - vec2(0.0,  texel.y)).r;
+                            vec3 dX = abs(rawR - rawD) < abs(rawD - rawL)
+                                ? getViewPos(vUv + vec2( texel.x, 0.0), rawR) - pos
+                                : pos - getViewPos(vUv - vec2( texel.x, 0.0), rawL);
+                            vec3 dY = abs(rawU - rawD) < abs(rawD - rawDn)
+                                ? getViewPos(vUv + vec2(0.0,  texel.y), rawU) - pos
+                                : pos - getViewPos(vUv - vec2(0.0,  texel.y), rawDn);
+                            vec3 N = normalize(cross(dX, dY));
+                            if (N.z < 0.0) N = -N;
+
+                            /* ── Трассировка отражённого луча в view-space ── */
+                            vec3  V = normalize(pos);           /* камера в (0,0,0) */
+                            vec3  R = normalize(reflect(V, N));
+                            float jitter    = IGN(floor(vUv * resolution));
+                            const int   STEPS   = 28;
+                            const float MAXDIST = 60.0;
+                            float stepLen   = MAXDIST / float(STEPS);
+                            float thickness = 0.9;
+
+                            float hit = 0.0;
+                            vec2  hitUV = vUv;
+                            float t = stepLen * (0.35 + 0.65 * jitter);
+                            float prevT = 0.0;
+                            for (int i = 0; i < STEPS; i++) {
+                                vec3 p  = pos + R * t;
+                                if (p.z > -0.05) break;                 /* луч ушёл за камеру */
+                                vec2 uv2 = viewToUv(p);
+                                if (uv2.x < 0.0 || uv2.x > 1.0 || uv2.y < 0.0 || uv2.y > 1.0) break;
+                                float rawS = texture2D(tDepth, uv2).r;
+                                if (rawS < 0.9999) {
+                                    float sceneZ = getViewPos(uv2, rawS).z;
+                                    float diff   = sceneZ - p.z;        /* >0 когда луч зашёл за поверхность */
+                                    if (diff > 0.0 && diff < thickness + t * 0.06) {
+                                        /* Бинарное уточнение точки попадания */
+                                        float lo = prevT, hi = t;
+                                        for (int j = 0; j < 5; j++) {
+                                            float mid = (lo + hi) * 0.5;
+                                            vec3  pm  = pos + R * mid;
+                                            vec2  uvm = viewToUv(pm);
+                                            float rm  = texture2D(tDepth, uvm).r;
+                                            if (rm < 0.9999 && getViewPos(uvm, rm).z - pm.z > 0.0) { hi = mid; hitUV = uvm; }
+                                            else lo = mid;
+                                        }
+                                        hit = 1.0;
+                                        break;
+                                    }
+                                }
+                                prevT = t;
+                                t += stepLen * (1.0 + float(i) * 0.09);  /* ускоряющийся шаг */
+                            }
+
+                            vec3 outCol = col.rgb;
+
+                            if (hit > 0.5) {
+                                vec3 refCol = texture2D(tDiffuse, hitUV).rgb;
+                                /* Френель: под скользящим углом отражения сильнее — физически корректно */
+                                float fres = pow(1.0 - max(0.0, dot(-V, N)), 3.0);
+                                float refAmt = clamp(rtStrength * (0.10 + 0.85 * fres), 0.0, 0.75);
+                                /* Затухание у краёв экрана — убирает резкие обрывы отражений */
+                                vec2  edge = min(hitUV, 1.0 - hitUV);
+                                refAmt *= smoothstep(0.0, 0.08, min(edge.x, edge.y));
+                                outCol = mix(outCol, refCol, refAmt);
+                                /* GI: одноотскоковый перенос цвета (colour bleeding) от точки попадания */
+                                float lum = dot(refCol, vec3(0.299, 0.587, 0.114));
+                                outCol += refCol * lum * 0.06 * rtStrength;
+                            }
+
+                            /* Мягкий кинематографичный контраст в RT-режиме */
+                            outCol = mix(outCol, outCol * outCol * (3.0 - 2.0 * outCol), 0.18);
+                            gl_FragColor = vec4(outCol, col.a);
+                        }
+                    `
+                };
+                this.rtPass = new ShaderPass(_rtShader);
+                this.rtPass.material.depthTest = false;
+                this.rtPass.material.depthWrite = false;
+                this.rtPass.uniforms.tDepth.value = this._depthTarget.depthTexture;
+                this.rtPass.uniforms.resolution.value.set(_cw, _ch);
+                this.rtPass.enabled = false;
+                this.composer.insertPass(this.rtPass, 1); // сразу после RenderPass, до AO/Bloom
+
 
 
                 this.sky = new Sky(); this.sky.scale.setScalar(25000); this.sun = new THREE.Vector3();
@@ -2577,6 +2715,12 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     this.camera.updateProjectionMatrix();
                     this.ssaoPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
                 }
+                if (this.rtPass && this.rtPass.uniforms) {
+                    this.rtPass.uniforms.resolution.value.set(w, h);
+                    this.rtPass.uniforms.tDepth.value = this._depthTarget.depthTexture;
+                    this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
+                    this.rtPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
+                }
                 if (this._depthTarget) this._depthTarget.setSize(w, h);
                 if (window.uiManager && uiManager.applyResponsiveScale) uiManager.applyResponsiveScale(false);
             },
@@ -2618,6 +2762,9 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     this.renderer.setPixelRatio(1);
                     this.renderer.setSize(w, h, false); // false = не трогать CSS
                     if (this.composer) this.composer.setSize(w, h);
+                    if (this._depthTarget) this._depthTarget.setSize(w, h);
+                    if (this.ssaoPass?.uniforms) { this.ssaoPass.uniforms.resolution.value.set(w, h); this.ssaoPass.uniforms.tDepth.value = this._depthTarget.depthTexture; }
+                    if (this.rtPass?.uniforms) { this.rtPass.uniforms.resolution.value.set(w, h); this.rtPass.uniforms.tDepth.value = this._depthTarget.depthTexture; }
                 }
                 return safe;
             },
@@ -4299,6 +4446,23 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     this.ssaoPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
                 }
 
+                // ── ✨ RAY TRACING ────────────────────────────────────────────────
+                const rtEnabled = document.getElementById('setting-raytracing')?.checked ?? false;
+                if (this.rtPass) {
+                    this.rtPass.enabled = rtEnabled;
+                    this.rtPass.uniforms.tDepth.value = this._depthTarget.depthTexture;
+                    this.rtPass.uniforms.resolution.value.set(
+                        this.renderer.domElement.width,
+                        this.renderer.domElement.height
+                    );
+                    this.camera.updateProjectionMatrix();
+                    this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
+                    this.rtPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
+                }
+                // Кинематографичный ACES-тонмаппинг + повышенная точность теней в RT-режиме
+                this.renderer.toneMapping = rtEnabled ? THREE.ACESFilmicToneMapping : THREE.LinearToneMapping;
+                this.renderer.toneMappingExposure = rtEnabled ? 1.12 : 1.00;
+
                 waterUniforms.uWavesEnabled.value = (document.getElementById('setting-water-waves')?.checked ?? true) ? 1.0 : 0.0;
 
                 // Texture smoothing now applies to ABSOLUTELY ALL cube textures: GoreBox, custom,
@@ -4327,7 +4491,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 this.updateSelectionPanels();
             },
 
-            getEnvState: function() { return { skybox: document.getElementById('setting-skybox').value, weather: document.getElementById('setting-weather').value, fogColor: document.getElementById('setting-fog-color').value, fogStart: parseFloat(document.getElementById('setting-fog-start').value) || 15, fogEnd: parseFloat(document.getElementById('setting-fog-end').value) || 250, sunAngle: parseFloat(document.getElementById('setting-sun-angle').value) || 180, shadows: document.getElementById('setting-shadows').checked, shadowQuality: parseInt(document.getElementById('setting-shadow-quality')?.value ?? '2', 10), bloom: document.getElementById('setting-bloom').checked, bloomStrength: parseFloat(document.getElementById('setting-bloom-strength')?.value || '1'), cameraSensitivity: parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'), aoIntensity: parseFloat(document.getElementById('setting-ao-intensity')?.value || '0.55'), ssao: document.getElementById('setting-ssao').checked, waterWaves: document.getElementById('setting-water-waves') ? document.getElementById('setting-water-waves').checked : true, textureSmoothing: document.getElementById('setting-texture-smoothing') ? document.getElementById('setting-texture-smoothing').checked : false, drawDistance: this.drawDistance || 350, textureQuality: currentTextureQualityIndex, customSkyboxDataUrl: this.customSkyboxDataUrl || null, customSkyboxName: this.customSkyboxName || null, gridVisible: document.getElementById('setting-grid') ? document.getElementById('setting-grid').checked : true, lightContour: document.getElementById('setting-light-contour') ? document.getElementById('setting-light-contour').checked : true }; },
+            getEnvState: function() { return { skybox: document.getElementById('setting-skybox').value, weather: document.getElementById('setting-weather').value, fogColor: document.getElementById('setting-fog-color').value, fogStart: parseFloat(document.getElementById('setting-fog-start').value) || 15, fogEnd: parseFloat(document.getElementById('setting-fog-end').value) || 250, sunAngle: parseFloat(document.getElementById('setting-sun-angle').value) || 180, shadows: document.getElementById('setting-shadows').checked, shadowQuality: parseInt(document.getElementById('setting-shadow-quality')?.value ?? '2', 10), bloom: document.getElementById('setting-bloom').checked, bloomStrength: parseFloat(document.getElementById('setting-bloom-strength')?.value || '1'), cameraSensitivity: parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'), aoIntensity: parseFloat(document.getElementById('setting-ao-intensity')?.value || '0.55'), ssao: document.getElementById('setting-ssao').checked, rayTracing: document.getElementById('setting-raytracing') ? document.getElementById('setting-raytracing').checked : false, waterWaves: document.getElementById('setting-water-waves') ? document.getElementById('setting-water-waves').checked : true, textureSmoothing: document.getElementById('setting-texture-smoothing') ? document.getElementById('setting-texture-smoothing').checked : false, drawDistance: this.drawDistance || 350, textureQuality: currentTextureQualityIndex, customSkyboxDataUrl: this.customSkyboxDataUrl || null, customSkyboxName: this.customSkyboxName || null, gridVisible: document.getElementById('setting-grid') ? document.getElementById('setting-grid').checked : true, lightContour: document.getElementById('setting-light-contour') ? document.getElementById('setting-light-contour').checked : true }; },
 
             setCustomSkybox: function(dataUrl, fileName = 'Custom Skybox') {
                 this.customSkyboxDataUrl = dataUrl;
@@ -5073,6 +5237,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     document.getElementById('setting-camera-sensitivity').value = String(data.env.cameraSensitivity ?? parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1'));
                     document.getElementById('camera-sensitivity-val').innerText = Number(document.getElementById('setting-camera-sensitivity').value).toFixed(2);
                     document.getElementById('setting-ssao').checked = data.env.ssao === true;
+                    if (document.getElementById('setting-raytracing')) document.getElementById('setting-raytracing').checked = data.env.rayTracing === true; // по умолчанию выключено
                     if (document.getElementById('setting-ao-intensity')) { document.getElementById('setting-ao-intensity').value = String(data.env.aoIntensity ?? 0.55); if (document.getElementById('ao-intensity-val')) document.getElementById('ao-intensity-val').innerText = Number(document.getElementById('setting-ao-intensity').value).toFixed(2); }
                     if (document.getElementById('setting-water-waves')) document.getElementById('setting-water-waves').checked = data.env.waterWaves !== false;
                     if (document.getElementById('setting-texture-smoothing')) document.getElementById('setting-texture-smoothing').checked = data.env.textureSmoothing === true;
@@ -5110,6 +5275,7 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     if (this.customSkyboxEnvMap) { try { this.customSkyboxEnvMap.dispose(); } catch(e) {} this.customSkyboxEnvMap = null; }
                     if (document.getElementById('setting-draw-distance')) this.applyDrawDistance(350);
                     if (document.getElementById('setting-texture-quality')) await this.applyTextureQualitySetting(3);
+                    if (document.getElementById('setting-raytracing')) document.getElementById('setting-raytracing').checked = false; // Ray Tracing по умолчанию выключен
                 }
                 this.applyCameraSensitivity(parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'));
                 this.recalculateManualLightSpecular();
@@ -5223,8 +5389,8 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                             return;
                         }
                     }
-                    // ── Depth pre-pass for AO (separate target → no WebGL feedback loop) ──
-                    if (this.ssaoPass.enabled && this._depthTarget) {
+                    // ── Depth pre-pass for AO / Ray Tracing (separate target → no WebGL feedback loop) ──
+                    if ((this.ssaoPass.enabled || this.rtPass?.enabled) && this._depthTarget) {
                         const _prevOverride = this.scene.overrideMaterial;
                         this.scene.overrideMaterial = this._depthOnlyMat;
                         this.renderer.setRenderTarget(this._depthTarget);
@@ -5233,7 +5399,12 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         this.scene.overrideMaterial = _prevOverride;
                         this.renderer.setRenderTarget(null);
                     }
-                    if (this.bloomPass.enabled || this.ssaoPass.enabled) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+                    if (this.rtPass?.enabled) {
+                        // Матрицы камеры меняются каждый кадр (орбита) — RT-шейдеру нужны свежие
+                        this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
+                        this.rtPass.uniforms.projInverse.value.copy(this.camera.projectionMatrixInverse);
+                    }
+                    if (this.bloomPass.enabled || this.ssaoPass.enabled || this.rtPass?.enabled) this.composer.render(); else this.renderer.render(this.scene, this.camera);
                     this._renderSkipFrames = 0;
                 } catch (err) {
                     console.error('Scene render error:', err);
@@ -5893,6 +6064,7 @@ if (texSel) {
                 const texQuality = document.getElementById('setting-texture-quality');
                 if (texQuality) { texQuality.value = String(currentTextureQualityIndex); engine.previewTextureQualityLabel(currentTextureQualityIndex); }
                 if (document.getElementById('setting-bloom') && engine.bloomPass) document.getElementById('setting-bloom').checked = engine.bloomPass.enabled;
+                if (document.getElementById('setting-raytracing') && engine.rtPass) document.getElementById('setting-raytracing').checked = engine.rtPass.enabled;
                 if (document.getElementById('setting-bloom-strength') && engine.bloomPass) document.getElementById('setting-bloom-strength').value = String(engine.bloomPass.strength ?? 1);
                 modal.classList.remove('hidden'); 
             },
