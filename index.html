@@ -415,12 +415,18 @@
                 </button>
                 <input type="file" id="import-map-zip" accept=".zip" class="hidden" onchange="uiManager.importMapFromZip(event)">
 
-                <!-- IMPORT .GBMAP -->
-                <button onclick="uiManager.triggerGbmapImport()" class="gbox-sidebar-btn w-full text-left py-3 px-4 text-xl sm:text-2xl font-bold rounded flex items-center gap-3 min-w-0">
-                    <span class="ui-icon ui-icon-anim" aria-hidden="true">📦</span>
-                    <span data-i18n="importGbmap" class="min-w-0 leading-tight break-words">Import .gbmap</span>
-                </button>
-                <input type="file" id="import-map-gbmap" accept=".gbmap" class="hidden" onchange="uiManager.importMapFromGbmap(event)">
+                <!-- SOCIAL LINKS -->
+                <div class="flex gap-2 mt-2">
+                    <a href="https://t.me/mapcg42" target="_blank" rel="noopener" class="gbox-sidebar-btn flex-1 text-left py-2.5 px-3 text-lg font-bold rounded flex items-center justify-center gap-2 hover:brightness-125 transition" style="border-left-color:#2AABEE!important;border-right-color:#2AABEE!important;border-bottom-color:#2AABEE!important;">
+                        <svg viewBox="0 0 24 24" fill="#2AABEE" width="22" height="22"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.14-.26.26-.51.26l.188-2.65 4.82-4.36c.21-.188-.046-.293-.328-.107l-5.97 3.76-2.57-.806c-.558-.176-.57-.558.114-.828l10.05-3.88c.466-.176.894.105.746.827z"/></svg>
+                        <span class="text-[#2AABEE]">Telegram</span>
+                    </a>
+                    <a href="https://youtube.com/@sh1rka4?si=tljMECPALXcIvIrD" target="_blank" rel="noopener" class="gbox-sidebar-btn flex-1 text-left py-2.5 px-3 text-lg font-bold rounded flex items-center justify-center gap-2 hover:brightness-125 transition" style="border-left-color:#FF0000!important;border-right-color:#FF0000!important;border-bottom-color:#FF0000!important;">
+                        <svg viewBox="0 0 24 24" fill="#FF0000" width="22" height="22"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        <span class="text-[#FF4444]">YouTube</span>
+                    </a>
+                </div>
+
             </div>
 
             <!-- Нижние кнопки Sidebar (Help и Close Editor) -->
@@ -1138,7 +1144,6 @@
                     fogStart: "Start", fogEnd: "End", exportTitle: "EXPORT TO GOREBOX",
                     exportDesc: "A ZIP archive with MapData.json (v4) and CustomTextures folder will be generated.",
                     saveZip: "Save ZIP", saveZipLit: "Export with Lighting", saveGLB: "Export to GLB", bakePreparing: "Preparing…", bakingFace: "Baking face", bakeAssemblingZip: "Assembling ZIP…",
-                    importGbmap: "Import .gbmap",
                     glbBuildingTitle: "Building GLB…", glbBuildingScene: "Building 3D scene…", glbEncoding: "Encoding GLB model…", glbPackingTextures: "Packing textures…",
                     optGrid: "Grid", optPlain: "Plain (White)",
                     optDark: "Dark", optGrass: "Grass (Texture)", optStretch: "Stretch",
@@ -1995,54 +2000,6 @@
             return { blocks: data.cubes.map(mapGoreBoxCubeToProjectBlock), env: data.env || {} };
         }
 
-        // --- Импорт .gbmap (самодостаточный однофайловый проект: кубы + текстуры в base64 + небо + спавн) ---
-        // Схема кубов ('mapCubes') 1-в-1 совпадает с обычным GoreBox MapData.json ('cubes'), поэтому
-        // переиспользуем mapGoreBoxCubeToProjectBlock() без изменений — гарантия идентичного результата
-        // позициям/поворотам/материалам, что и у уже проверенного обычного импорта карт.
-        function mapGbmapFormatToProjectData(data) {
-            const blocks = Array.isArray(data.mapCubes) ? data.mapCubes.map(mapGoreBoxCubeToProjectBlock) : [];
-
-            // Точка спавна: та же система координат/поворотов, что и у кубов (инверсия Z + Unity->Three кватернион)
-            if (Array.isArray(data.spawnPoints) && data.spawnPoints[0]) {
-                const sp = data.spawnPoints[0];
-                const posX = parseFloat(sp.position?.x) || 0;
-                const posY = parseFloat(sp.position?.y) || 0;
-                const posZ = -(parseFloat(sp.position?.z) || 0);
-                const q = unityEulerDegToThreeQuaternion(sp.rotation || { x: 0, y: 0, z: 0 });
-                blocks.push({
-                    type: 'spawn',
-                    pos: { x: posX, y: posY, z: posZ },
-                    quat: { x: q.x, y: q.y, z: q.z, w: q.w },
-                    userData: { type: 'spawn', visible: true, collisions: false }
-                });
-            }
-
-            // Текстуры карты хранятся прямо внутри .gbmap как base64 PNG — раскладываем их в тот же
-            // формат {textureKey: {name, dataUrl}}, что использует обычный импорт из ZIP (CustomTextures/).
-            // Ключом обязательно берём "сырое" tex.name без нормализации — именно так (без изменений)
-            // на него ссылается cube.materialName внутри mapGoreBoxCubeToProjectBlock().
-            const projectCustomTextures = {};
-            if (Array.isArray(data.customTextures)) {
-                data.customTextures.forEach(tex => {
-                    if (!tex || !tex.name || !tex.base64Data) return;
-                    projectCustomTextures[tex.name] = { name: tex.name, dataUrl: `data:image/png;base64,${tex.base64Data}` };
-                });
-            }
-
-            // Небо/погода: переносим то, что однозначно совместимо (туман, угол света).
-            // skyboxIndex не переносим — это индекс из каталога скайбоксов GoreBox/Godot-проекта,
-            // не совпадающий со списком скайбоксов этого веб-редактора, так что оставляем небо по умолчанию.
-            const env = {};
-            if (data.skySettings) {
-                const sky = data.skySettings;
-                if (sky.fogColorHex) env.fogColor = '#' + String(sky.fogColorHex).replace('#', '');
-                if (Number.isFinite(sky.fogStart)) env.fogStart = sky.fogStart;
-                if (Number.isFinite(sky.fogEnd)) env.fogEnd = sky.fogEnd;
-                if (sky.lightRotation && Number.isFinite(sky.lightRotation.y)) env.sunAngle = Math.round(normalizeAngle360(sky.lightRotation.y));
-            }
-
-            return { blocks, env, projectCustomTextures };
-        }
 
         // Временное хранилище локальных текстур текущего проекта в оперативной памяти
         let activeProjectCustomTextures = {};
@@ -5896,7 +5853,6 @@ if (texSel) {
                 this.applyResponsiveScale(false);
             },
             triggerMapImport: function() { const input = document.getElementById('import-map-zip'); if (input) input.click(); },
-            triggerGbmapImport: function() { const input = document.getElementById('import-map-gbmap'); if (input) input.click(); },
             triggerGLBImport: function() { const input = document.getElementById('import-glb-model'); if (input) input.click(); },
 
             // ======== COLLECTION OF SUBJECTS ========
@@ -6239,32 +6195,6 @@ if (texSel) {
                 }
             },
 
-            // Импорт самодостаточного однофайлового проекта .gbmap (кубы + текстуры + небо + спавн в одном JSON)
-            importMapFromGbmap: async function(event) {
-                try {
-                    const file = event.target.files && event.target.files[0]; event.target.value = ''; if (!file) return;
-
-                    const text = await file.text();
-                    let rawMapData;
-                    try { rawMapData = JSON.parse(text); } catch (e) { throw new Error('Файл .gbmap повреждён или не является JSON'); }
-                    if (!rawMapData || !Array.isArray(rawMapData.mapCubes)) throw new Error('В файле .gbmap не найден mapCubes');
-
-                    const importedData = mapGbmapFormatToProjectData(rawMapData);
-
-                    const enteredName = (document.getElementById('new-map-name').value || '').trim();
-                    const gbmapBaseName = normalizeTextureKey(file.name);
-                    const projectName = enteredName || rawMapData.name || `${gbmapBaseName || 'Imported Map'} (Imported)`;
-
-                    const project = await storageManager.createProject(projectName, rawMapData.description || '');
-                    await storageManager.saveProjectData(project.id, importedData);
-
-                    document.getElementById('new-project-modal').classList.add('hidden');
-                    const nameInput = document.getElementById('new-map-name'); if (nameInput) nameInput.value = '';
-                    await this.loadProject(project.id, project.name);
-                } catch (err) {
-                    console.error('Import .gbmap Error:', err); alert(`Import failed: ${err.message || err}`);
-                }
-            },
 
             renderProjectList: async function() {
                 const container = document.getElementById('project-list-container'); const projects = await storageManager.getProjects();
@@ -6805,5 +6735,6 @@ if (texSel) {
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a13bd3e70b4cc9cd',t:'MTc4MjgwODQyMw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a157c7f55bcde4af',t:'MTc4MzEwMTUzNQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
