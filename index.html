@@ -832,6 +832,16 @@
                     <h3 data-i18n="exportTitle" class="text-3xl text-gray-200 font-bold mb-2">EXPORT TO GOREBOX</h3>
                     <p data-i18n="exportDesc" class="text-xl text-gray-500 leading-tight">A ZIP archive with MapData.json (v4) and a CustomTextures folder will be generated.</p>
                 </div>
+                <!-- Merge Objects Options -->
+                <div class="p-4 border-t border-gray-800 bg-black/20">
+                    <p class="text-sm text-gray-400 mb-2 font-bold tracking-wide">MERGE OBJECTS (GLB Export):</p>
+                    <div class="flex gap-2 text-sm">
+                        <button data-mode="none" onclick="uiManager.setMergeMode('none')" class="merge-mode-btn flex-1 py-2 px-3 rounded bg-blue-600 text-white border border-blue-400 font-bold">Keep Separate</button>
+                        <button data-mode="texture" onclick="uiManager.setMergeMode('texture')" class="merge-mode-btn flex-1 py-2 px-3 rounded bg-[#101826] text-gray-400 border border-gray-700 font-bold">By Texture</button>
+                        <button data-mode="all" onclick="uiManager.setMergeMode('all')" class="merge-mode-btn flex-1 py-2 px-3 rounded bg-[#101826] text-gray-400 border border-gray-700 font-bold">All Into One</button>
+                    </div>
+                    <p class="text-xs text-gray-600 mt-2 leading-tight">&#8226; <b>Keep Separate</b> — each cube = its own object (many objects, hard for Blender)<br>&#8226; <b>By Texture</b> — cubes sharing a texture are merged (10 textures = 10 objects)<br>&#8226; <b>All Into One</b> — every cube merged into 1 object (easiest for Blender, materials preserved)</p>
+                </div>
                 <div class="flex text-2xl font-bold bg-black/20">
                     <button onclick="uiManager.hideExportModal()" data-i18n="cancel" class="flex-1 py-5 text-center border-r border-gray-800 text-gray-400 hover:bg-white/5 hover:text-white transition">Cancel</button>
                     <button onclick="uiManager.exportToGoreBoxZIP()" data-i18n="saveZip" class="flex-1 py-5 text-center border-r border-gray-800 hover:bg-blue-600/20 transition text-blue-400 hover:text-blue-300">Save ZIP</button>
@@ -1105,6 +1115,7 @@
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
         import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+        import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
         import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -5753,6 +5764,8 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
         // --- UI MANAGER ---
         window.uiManager = {
+            mergeMode: "none", // "none", "texture", "all"
+            setMergeMode: function(mode) { this.mergeMode = mode; document.querySelectorAll(".merge-mode-btn").forEach(b => { const isActive = b.dataset.mode === mode; b.classList.toggle("bg-blue-600", isActive); b.classList.toggle("text-white", isActive); b.classList.toggle("border-blue-400", isActive); b.classList.toggle("bg-\[#101826\]", !isActive); b.classList.toggle("text-gray-400", !isActive); b.classList.toggle("border-gray-700", !isActive); }); },
             init: async function() {
                 await this.renderProjectList(); this.loadInterfaceScale();
                 ['pos', 'rot', 'sca'].forEach(type => { ['x', 'y', 'z'].forEach(axis => { document.getElementById(`inp-${type}-${axis}`).addEventListener('input', () => engine.updateObjectFromUI()); document.getElementById(`inp-${type}-${axis}`).addEventListener('change', () => { if(!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); }); });});
@@ -6366,7 +6379,7 @@ if (texSel) {
                 this.renderProjectList();
             },
 
-            showExportModal: () => document.getElementById('export-modal').classList.remove('hidden'), hideExportModal: () => document.getElementById('export-modal').classList.add('hidden'),
+            showExportModal: () => { document.getElementById('export-modal').classList.remove('hidden'); uiManager.setMergeMode(uiManager.mergeMode || 'none'); }, hideExportModal: () => document.getElementById('export-modal').classList.add('hidden'),
             showSettingsModal: () => { 
                 const modal = document.getElementById('settings-modal'); 
                 const sel = document.getElementById('setting-ui-scale'); 
@@ -6523,18 +6536,13 @@ if (texSel) {
                     const projectFileName = (window.appState.currentProjectName || 'GoreBoxMap').replace(/\s+/g, '_');
                     exportScene.name = projectFileName;
 
-                    // --- 1) Кубы карты: клонируем текущую (уже видимую в редакторе) geometry, чтобы UV,
-                    //     тайлинг и оптимизация скрытых граней 1-в-1 совпадали с тем, что видит игрок. ---
+                    // --- 1) Кубы карты: поддержка мёрджа объектов (по текстурам / все в один / без мёрджа) ---
                     const usedTextureKeys = new Set();
-                    let cubeIndex = 0;
-                    engine.blocks.forEach(block => {
-                        if (!block || block.userData?.type !== 'cube' || !block.geometry) return;
+                    const mergeMode = uiManager.mergeMode || 'none';
+
+                    // Вспомогательная функция: создать материал из block.material
+                    const _makeMaterialFromBlock = (block) => {
                         const ud = block.userData;
-                        usedTextureKeys.add(ud.texture || 'grid');
-
-                        const geometry = block.geometry.clone();
-                        createdGeometries.push(geometry);
-
                         const srcMat = block.material;
                         const matProps = {
                             map: (srcMat && srcMat.map) || null,
@@ -6554,18 +6562,115 @@ if (texSel) {
                             matProps.alphaTest = srcMat.alphaTest || 0;
                             matProps.depthWrite = (srcMat.opacity ?? 1) >= 0.98;
                         }
-
                         const material = new THREE.MeshStandardMaterial(matProps);
                         material.name = ud.materialName || ud.texture || 'Material';
                         createdMaterials.push(material);
+                        return material;
+                    };
 
-                        const mesh = new THREE.Mesh(geometry, material);
-                        mesh.name = `${ud.sourceName || 'MapCube'}_${cubeIndex++}`;
-                        mesh.position.copy(block.position);
-                        mesh.quaternion.copy(block.quaternion);
-                        mesh.scale.copy(block.scale);
-                        exportScene.add(mesh);
-                    });
+                    if (mergeMode === 'all') {
+                        // Все кубы в ОДИН объект
+                        const allGeos = [];
+                        const firstBlock = engine.blocks.find(b => b && b.userData?.type === 'cube' && b.geometry);
+                        let sharedMaterial = null;
+                        if (firstBlock) {
+                            sharedMaterial = _makeMaterialFromBlock(firstBlock);
+                            sharedMaterial.name = 'Merged_All';
+                        }
+                        engine.blocks.forEach(block => {
+                            if (!block || block.userData?.type !== 'cube' || !block.geometry) return;
+                            const ud = block.userData;
+                            usedTextureKeys.add(ud.texture || 'grid');
+                            const geo = block.geometry.clone();
+                            // Применяем мировую трансформацию куба к геометрии
+                            block.updateWorldMatrix(true, false);
+                            geo.applyMatrix4(block.matrixWorld);
+                            allGeos.push(geo);
+                            createdGeometries.push(geo);
+                        });
+                        if (allGeos.length > 0 && sharedMaterial) {
+                            try {
+                                const mergedGeo = mergeGeometries(allGeos, false);
+                                const mergedMesh = new THREE.Mesh(mergedGeo, sharedMaterial);
+                                mergedMesh.name = 'Map_Merged_All';
+                                exportScene.add(mergedMesh);
+                                createdGeometries.push(mergedGeo);
+                            } catch(e) {
+                                console.warn('Merge all failed, falling back to separate:', e);
+                                // Fallback: separate meshes
+                                allGeos.forEach((geo, i) => {
+                                    const mat = sharedMaterial.clone();
+                                    createdMaterials.push(mat);
+                                    const m = new THREE.Mesh(geo, mat);
+                                    m.name = `MapCube_Fallback_${i}`;
+                                    exportScene.add(m);
+                                });
+                            }
+                        }
+                    } else if (mergeMode === 'texture') {
+                        // Группируем по текстуре
+                        const texGroups = {};
+                        engine.blocks.forEach(block => {
+                            if (!block || block.userData?.type !== 'cube' || !block.geometry) return;
+                            const ud = block.userData;
+                            const texKey = ud.texture || 'grid';
+                            usedTextureKeys.add(texKey);
+                            if (!texGroups[texKey]) texGroups[texKey] = [];
+                            texGroups[texKey].push(block);
+                        });
+                        let groupIdx = 0;
+                        for (const [texKey, blocks] of Object.entries(texGroups)) {
+                            const geos = [];
+                            const refBlock = blocks[0];
+                            const material = _makeMaterialFromBlock(refBlock);
+                            material.name = 'Merged_' + (normalizeTextureKey(texKey) || 'texture');
+                            blocks.forEach(block => {
+                                const geo = block.geometry.clone();
+                                block.updateWorldMatrix(true, false);
+                                geo.applyMatrix4(block.matrixWorld);
+                                geos.push(geo);
+                                createdGeometries.push(geo);
+                            });
+                            if (geos.length > 0) {
+                                try {
+                                    const mergedGeo = mergeGeometries(geos, false);
+                                    const mergedMesh = new THREE.Mesh(mergedGeo, material);
+                                    mergedMesh.name = `Map_${normalizeTextureKey(texKey)}_${groupIdx++}`;
+                                    exportScene.add(mergedMesh);
+                                    createdGeometries.push(mergedGeo);
+                                } catch(e) {
+                                    console.warn('Merge texture group failed, falling back:', e);
+                                    geos.forEach((geo, i) => {
+                                        const mat = material.clone();
+                                        createdMaterials.push(mat);
+                                        const m = new THREE.Mesh(geo, mat);
+                                        m.name = `MapCube_${normalizeTextureKey(texKey)}_${i}`;
+                                        exportScene.add(m);
+                                    });
+                                }
+                            }
+                        }
+                    } else {
+                        // Режим "none" — каждый куб отдельно (как было раньше)
+                        let cubeIndex = 0;
+                        engine.blocks.forEach(block => {
+                            if (!block || block.userData?.type !== 'cube' || !block.geometry) return;
+                            const ud = block.userData;
+                            usedTextureKeys.add(ud.texture || 'grid');
+
+                            const geometry = block.geometry.clone();
+                            createdGeometries.push(geometry);
+
+                            const material = _makeMaterialFromBlock(block);
+
+                            const mesh = new THREE.Mesh(geometry, material);
+                            mesh.name = `${ud.sourceName || 'MapCube'}_${cubeIndex++}`;
+                            mesh.position.copy(block.position);
+                            mesh.quaternion.copy(block.quaternion);
+                            mesh.scale.copy(block.scale);
+                            exportScene.add(mesh);
+                        });
+                    }
 
                     // --- 2) Свет: настоящие THREE.PointLight/SpotLight (а не полупрозрачный editor-гизмо-куб),
                     //     с теми же самыми color/intensity/distance, что заданы в редакторе. ---
@@ -6698,6 +6803,7 @@ if (texSel) {
     </div>
 
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a13bd3e70b4cc9cd',t:'MTc4MjgwODQyMw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
