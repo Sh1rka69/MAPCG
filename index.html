@@ -415,10 +415,12 @@
                 </button>
                 <input type="file" id="import-map-zip" accept=".zip" class="hidden" onchange="uiManager.importMapFromZip(event)">
 
-                <!-- LANGUAGE SWITCHER -->
-                <div class="flex gap-2">
-                    <button id="btn-lang-en" onclick="i18n.setLang('en')" class="gbox-sidebar-btn flex-1 py-2 px-2 text-lg sm:text-xl font-bold rounded text-center">🇺🇸 EN</button>
-                </div>
+                <!-- IMPORT .GBMAP -->
+                <button onclick="uiManager.triggerGbmapImport()" class="gbox-sidebar-btn w-full text-left py-3 px-4 text-xl sm:text-2xl font-bold rounded flex items-center gap-3 min-w-0">
+                    <span class="ui-icon ui-icon-anim" aria-hidden="true">📦</span>
+                    <span data-i18n="importGbmap" class="min-w-0 leading-tight break-words">Import .gbmap</span>
+                </button>
+                <input type="file" id="import-map-gbmap" accept=".gbmap" class="hidden" onchange="uiManager.importMapFromGbmap(event)">
             </div>
 
             <!-- Нижние кнопки Sidebar (Help и Close Editor) -->
@@ -1125,6 +1127,7 @@
                     fogStart: "Start", fogEnd: "End", exportTitle: "EXPORT TO GOREBOX",
                     exportDesc: "A ZIP archive with MapData.json (v4) and CustomTextures folder will be generated.",
                     saveZip: "Save ZIP", saveZipLit: "Export with Lighting", saveGLB: "Export to GLB", bakePreparing: "Preparing…", bakingFace: "Baking face", bakeAssemblingZip: "Assembling ZIP…",
+                    importGbmap: "Import .gbmap",
                     glbBuildingTitle: "Building GLB…", glbBuildingScene: "Building 3D scene…", glbEncoding: "Encoding GLB model…", glbPackingTextures: "Packing textures…",
                     optGrid: "Grid", optPlain: "Plain (White)",
                     optDark: "Dark", optGrass: "Grass (Texture)", optStretch: "Stretch",
@@ -1979,6 +1982,55 @@
             if (data && Array.isArray(data.blocks)) return data;
             if (!data || !Array.isArray(data.cubes)) return { blocks: [], env: {} };
             return { blocks: data.cubes.map(mapGoreBoxCubeToProjectBlock), env: data.env || {} };
+        }
+
+        // --- Импорт .gbmap (самодостаточный однофайловый проект: кубы + текстуры в base64 + небо + спавн) ---
+        // Схема кубов ('mapCubes') 1-в-1 совпадает с обычным GoreBox MapData.json ('cubes'), поэтому
+        // переиспользуем mapGoreBoxCubeToProjectBlock() без изменений — гарантия идентичного результата
+        // позициям/поворотам/материалам, что и у уже проверенного обычного импорта карт.
+        function mapGbmapFormatToProjectData(data) {
+            const blocks = Array.isArray(data.mapCubes) ? data.mapCubes.map(mapGoreBoxCubeToProjectBlock) : [];
+
+            // Точка спавна: та же система координат/поворотов, что и у кубов (инверсия Z + Unity->Three кватернион)
+            if (Array.isArray(data.spawnPoints) && data.spawnPoints[0]) {
+                const sp = data.spawnPoints[0];
+                const posX = parseFloat(sp.position?.x) || 0;
+                const posY = parseFloat(sp.position?.y) || 0;
+                const posZ = -(parseFloat(sp.position?.z) || 0);
+                const q = unityEulerDegToThreeQuaternion(sp.rotation || { x: 0, y: 0, z: 0 });
+                blocks.push({
+                    type: 'spawn',
+                    pos: { x: posX, y: posY, z: posZ },
+                    quat: { x: q.x, y: q.y, z: q.z, w: q.w },
+                    userData: { type: 'spawn', visible: true, collisions: false }
+                });
+            }
+
+            // Текстуры карты хранятся прямо внутри .gbmap как base64 PNG — раскладываем их в тот же
+            // формат {textureKey: {name, dataUrl}}, что использует обычный импорт из ZIP (CustomTextures/).
+            // Ключом обязательно берём "сырое" tex.name без нормализации — именно так (без изменений)
+            // на него ссылается cube.materialName внутри mapGoreBoxCubeToProjectBlock().
+            const projectCustomTextures = {};
+            if (Array.isArray(data.customTextures)) {
+                data.customTextures.forEach(tex => {
+                    if (!tex || !tex.name || !tex.base64Data) return;
+                    projectCustomTextures[tex.name] = { name: tex.name, dataUrl: `data:image/png;base64,${tex.base64Data}` };
+                });
+            }
+
+            // Небо/погода: переносим то, что однозначно совместимо (туман, угол света).
+            // skyboxIndex не переносим — это индекс из каталога скайбоксов GoreBox/Godot-проекта,
+            // не совпадающий со списком скайбоксов этого веб-редактора, так что оставляем небо по умолчанию.
+            const env = {};
+            if (data.skySettings) {
+                const sky = data.skySettings;
+                if (sky.fogColorHex) env.fogColor = '#' + String(sky.fogColorHex).replace('#', '');
+                if (Number.isFinite(sky.fogStart)) env.fogStart = sky.fogStart;
+                if (Number.isFinite(sky.fogEnd)) env.fogEnd = sky.fogEnd;
+                if (sky.lightRotation && Number.isFinite(sky.lightRotation.y)) env.sunAngle = Math.round(normalizeAngle360(sky.lightRotation.y));
+            }
+
+            return { blocks, env, projectCustomTextures };
         }
 
         // Временное хранилище локальных текстур текущего проекта в оперативной памяти
@@ -5831,6 +5883,7 @@ if (texSel) {
                 this.applyResponsiveScale(false);
             },
             triggerMapImport: function() { const input = document.getElementById('import-map-zip'); if (input) input.click(); },
+            triggerGbmapImport: function() { const input = document.getElementById('import-map-gbmap'); if (input) input.click(); },
             triggerGLBImport: function() { const input = document.getElementById('import-glb-model'); if (input) input.click(); },
 
             // ======== COLLECTION OF SUBJECTS ========
@@ -6170,6 +6223,33 @@ if (texSel) {
                     await this.loadProject(project.id, project.name);
                 } catch (err) {
                     console.error('Import Map Error:', err); alert(`Import failed: ${err.message || err}`);
+                }
+            },
+
+            // Импорт самодостаточного однофайлового проекта .gbmap (кубы + текстуры + небо + спавн в одном JSON)
+            importMapFromGbmap: async function(event) {
+                try {
+                    const file = event.target.files && event.target.files[0]; event.target.value = ''; if (!file) return;
+
+                    const text = await file.text();
+                    let rawMapData;
+                    try { rawMapData = JSON.parse(text); } catch (e) { throw new Error('Файл .gbmap повреждён или не является JSON'); }
+                    if (!rawMapData || !Array.isArray(rawMapData.mapCubes)) throw new Error('В файле .gbmap не найден mapCubes');
+
+                    const importedData = mapGbmapFormatToProjectData(rawMapData);
+
+                    const enteredName = (document.getElementById('new-map-name').value || '').trim();
+                    const gbmapBaseName = normalizeTextureKey(file.name);
+                    const projectName = enteredName || rawMapData.name || `${gbmapBaseName || 'Imported Map'} (Imported)`;
+
+                    const project = await storageManager.createProject(projectName, rawMapData.description || '');
+                    await storageManager.saveProjectData(project.id, importedData);
+
+                    document.getElementById('new-project-modal').classList.add('hidden');
+                    const nameInput = document.getElementById('new-map-name'); if (nameInput) nameInput.value = '';
+                    await this.loadProject(project.id, project.name);
+                } catch (err) {
+                    console.error('Import .gbmap Error:', err); alert(`Import failed: ${err.message || err}`);
                 }
             },
 
