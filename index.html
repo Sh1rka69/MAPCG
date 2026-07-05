@@ -415,18 +415,12 @@
                 </button>
                 <input type="file" id="import-map-zip" accept=".zip" class="hidden" onchange="uiManager.importMapFromZip(event)">
 
-                <!-- SOCIAL LINKS -->
-                <div class="flex gap-2 mt-2">
-                    <a href="https://t.me/mapcg42" target="_blank" rel="noopener" class="gbox-sidebar-btn flex-1 text-left py-2.5 px-3 text-lg font-bold rounded flex items-center justify-center gap-2 hover:brightness-125 transition" style="border-left-color:#2AABEE!important;border-right-color:#2AABEE!important;border-bottom-color:#2AABEE!important;">
-                        <svg viewBox="0 0 24 24" fill="#2AABEE" width="22" height="22"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.14-.26.26-.51.26l.188-2.65 4.82-4.36c.21-.188-.046-.293-.328-.107l-5.97 3.76-2.57-.806c-.558-.176-.57-.558.114-.828l10.05-3.88c.466-.176.894.105.746.827z"/></svg>
-                        <span class="text-[#2AABEE]">Telegram</span>
-                    </a>
-                    <a href="https://youtube.com/@sh1rka4?si=tljMECPALXcIvIrD" target="_blank" rel="noopener" class="gbox-sidebar-btn flex-1 text-left py-2.5 px-3 text-lg font-bold rounded flex items-center justify-center gap-2 hover:brightness-125 transition" style="border-left-color:#FF0000!important;border-right-color:#FF0000!important;border-bottom-color:#FF0000!important;">
-                        <svg viewBox="0 0 24 24" fill="#FF0000" width="22" height="22"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                        <span class="text-[#FF4444]">YouTube</span>
-                    </a>
-                </div>
-
+                <!-- IMPORT .GBMAP -->
+                <button onclick="uiManager.triggerGbmapImport()" class="gbox-sidebar-btn w-full text-left py-3 px-4 text-xl sm:text-2xl font-bold rounded flex items-center gap-3 min-w-0">
+                    <span class="ui-icon ui-icon-anim" aria-hidden="true">📦</span>
+                    <span data-i18n="importGbmap" class="min-w-0 leading-tight break-words">Import .gbmap</span>
+                </button>
+                <input type="file" id="import-map-gbmap" accept=".gbmap" class="hidden" onchange="uiManager.importMapFromGbmap(event)">
             </div>
 
             <!-- Нижние кнопки Sidebar (Help и Close Editor) -->
@@ -1144,6 +1138,7 @@
                     fogStart: "Start", fogEnd: "End", exportTitle: "EXPORT TO GOREBOX",
                     exportDesc: "A ZIP archive with MapData.json (v4) and CustomTextures folder will be generated.",
                     saveZip: "Save ZIP", saveZipLit: "Export with Lighting", saveGLB: "Export to GLB", bakePreparing: "Preparing…", bakingFace: "Baking face", bakeAssemblingZip: "Assembling ZIP…",
+                    importGbmap: "Import .gbmap",
                     glbBuildingTitle: "Building GLB…", glbBuildingScene: "Building 3D scene…", glbEncoding: "Encoding GLB model…", glbPackingTextures: "Packing textures…",
                     optGrid: "Grid", optPlain: "Plain (White)",
                     optDark: "Dark", optGrass: "Grass (Texture)", optStretch: "Stretch",
@@ -2000,6 +1995,188 @@
             return { blocks: data.cubes.map(mapGoreBoxCubeToProjectBlock), env: data.env || {} };
         }
 
+        // --- Совместимость со СТАРЫМ текстовым .gbmap (GoreBox V15 и ранее, формат-маркер "V2") ---
+        // В отличие от V16+ (обычный JSON), файлы V15 — это построчный текст: заголовок, разделители "§",
+        // затем иконка/баннер/кастомные текстуры как PNG-байты (по одному decimal-числу на строку),
+        // и в конце список кубов (по 15 полей на куб). Ниже — разбор этого формата в тот же объект,
+        // что возвращает обычный V16 JSON.parse, чтобы дальше использовать единый mapGbmapFormatToProjectData().
+        function gbmapV15PngChunkEnd(lines, start) {
+            // Определяет конец PNG-изображения по структуре чанков (сигнатура + чанки до IEND),
+            // т.к. в файле нет явной длины блока — только последовательность байт-строк.
+            let i = start + 8; // пропускаем 8-байтную сигнатуру PNG
+            while (i < lines.length) {
+                const len = ((parseInt(lines[i], 10) << 24) | (parseInt(lines[i + 1], 10) << 16) | (parseInt(lines[i + 2], 10) << 8) | parseInt(lines[i + 3], 10)) >>> 0;
+                const typeStr = String.fromCharCode(parseInt(lines[i + 4], 10), parseInt(lines[i + 5], 10), parseInt(lines[i + 6], 10), parseInt(lines[i + 7], 10));
+                i += 8 + len + 4; // length(4) + type(4) + data(len) + crc(4)
+                if (typeStr === 'IEND') break;
+            }
+            return i; // индекс сразу после последнего байта изображения
+        }
+        function gbmapV15BytesToUint8Array(lines, start, end) {
+            const arr = new Uint8Array(Math.max(0, end - start));
+            for (let k = start; k < end; k++) arr[k - start] = parseInt(lines[k], 10) & 0xFF;
+            return arr;
+        }
+        function gbmapV15Uint8ArrayToBase64(bytes) {
+            let binary = '';
+            const chunkSize = 8192;
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+            }
+            return btoa(binary);
+        }
+        function parseGbmapLegacyTextFormat(text) {
+            const lines = text.split(/\r\n|\n/);
+            let idx = 0;
+            const next = () => { if (idx >= lines.length) throw new Error('Неожиданный конец файла .gbmap'); return lines[idx++]; };
+            const nextNum = () => { const v = parseFloat(next()); return Number.isFinite(v) ? v : 0; };
+            const nextInt = () => { const v = parseInt(next(), 10); return Number.isFinite(v) ? v : 0; };
+            const nextBool = () => next() === 'True';
+            const expectSep = () => { const v = next(); if (v !== '§') throw new Error('Файл .gbmap повреждён: ожидался разделитель "§"'); };
+
+            next(); // маркер формата, напр. 'V2' — версия самой схемы сериализации, не версия GoreBox
+            const name = next();
+            const description = next();
+            expectSep();
+
+            const objectCount = nextInt();
+            const textureCount = nextInt();
+            const exportDate = next();
+
+            // Количество точек спавна нигде явно не хранится — они просто идут подряд
+            // группами по 6 чисел (позиция xyz + поворот xyz) до разделителя. Карта может
+            // содержать как одну точку спавна, так и множество (например, для разных команд/режимов).
+            const spawnPoints = [];
+            while (idx < lines.length && lines[idx] !== '§') {
+                const position = { x: nextNum(), y: nextNum(), z: nextNum() };
+                const rotation = { x: nextNum(), y: nextNum(), z: nextNum() };
+                spawnPoints.push({ position, rotation });
+            }
+            expectSep();
+
+            const skyboxIndex = nextInt();
+            const lightRotation = { x: nextNum(), y: nextNum(), z: nextNum() };
+            const lightIntensity = nextNum();
+            const fogStart = nextNum();
+            const fogEnd = nextNum();
+            const fogColorHex = next();
+            expectSep();
+
+            // Иконка проекта: байты идут построчно вплоть до следующего разделителя
+            const iconStart = idx;
+            while (idx < lines.length && lines[idx] !== '§') idx++;
+            const iconBytes = gbmapV15BytesToUint8Array(lines, iconStart, idx);
+            expectSep();
+
+            // Баннер проекта: аналогично, до следующего разделителя
+            const bannerStart = idx;
+            while (idx < lines.length && lines[idx] !== '§') idx++;
+            const bannerBytes = gbmapV15BytesToUint8Array(lines, bannerStart, idx);
+            expectSep();
+
+            // Кастомные текстуры: `textureCount` записей вида [имя, PNG-байты, необязательный "~"]
+            const customTextures = [];
+            for (let t = 0; t < textureCount; t++) {
+                const texName = next();
+                const pngStart = idx;
+                const pngEnd = gbmapV15PngChunkEnd(lines, pngStart);
+                const bytes = gbmapV15BytesToUint8Array(lines, pngStart, pngEnd);
+                customTextures.push({ name: texName, base64Data: gbmapV15Uint8ArrayToBase64(bytes) });
+                idx = pngEnd;
+                if (lines[idx] === '~') idx++; // разделитель между текстурами, если присутствует
+            }
+            expectSep();
+
+            // Кубы карты: `objectCount` записей по 15 полей в фиксированном порядке
+            const mapCubes = [];
+            for (let c = 0; c < objectCount; c++) {
+                const tag = next();
+                const tileMode = nextInt();
+                const collisions = nextBool();
+                const visible = nextBool();
+                const physics = nextBool();
+                const materialName = next();
+                const position = { x: nextNum(), y: nextNum(), z: nextNum() };
+                const rotation = { x: nextNum(), y: nextNum(), z: nextNum() };
+                const scale = { x: nextNum(), y: nextNum(), z: nextNum() };
+                mapCubes.push({ name: 'MapCube', tag, tileMode, collisions, visible, physics, materialName, position, rotation, scale });
+            }
+            expectSep();
+
+            return {
+                version: 4, name, description, exportDate, selectedAmbience: 0,
+                objectCount, textureCount,
+                spawnPoints,
+                skySettings: { skyboxIndex, lightRotation, lightIntensity, fogStart, fogEnd, fogColorHex },
+                iconBase64: gbmapV15Uint8ArrayToBase64(iconBytes),
+                bannerBase64: gbmapV15Uint8ArrayToBase64(bannerBytes),
+                customTextures, mapCubes
+            };
+        }
+        // Определяет формат .gbmap по содержимому и возвращает разобранный объект в едином виде (как из JSON.parse)
+        function parseGbmapFile(text) {
+            const trimmed = text.replace(/^\uFEFF/, '').trimStart();
+            if (trimmed.startsWith('{')) {
+                let data;
+                try { data = JSON.parse(trimmed); } catch (e) { throw new Error('Файл .gbmap повреждён или не является корректным JSON'); }
+                return data;
+            }
+            // Не JSON — пробуем старый построчный текстовый формат (GoreBox V15 и ранее)
+            try {
+                return parseGbmapLegacyTextFormat(trimmed);
+            } catch (e) {
+                throw new Error('Не удалось распознать формат .gbmap: ' + (e.message || e));
+            }
+        }
+
+        // --- Импорт .gbmap (самодостаточный однофайловый проект: кубы + текстуры в base64 + небо + спавн) ---
+        // Схема кубов ('mapCubes') 1-в-1 совпадает с обычным GoreBox MapData.json ('cubes'), поэтому
+        // переиспользуем mapGoreBoxCubeToProjectBlock() без изменений — гарантия идентичного результата
+        // позициям/поворотам/материалам, что и у уже проверенного обычного импорта карт.
+        function mapGbmapFormatToProjectData(data) {
+            const blocks = Array.isArray(data.mapCubes) ? data.mapCubes.map(mapGoreBoxCubeToProjectBlock) : [];
+
+            // Точка спавна: та же система координат/поворотов, что и у кубов (инверсия Z + Unity->Three кватернион)
+            if (Array.isArray(data.spawnPoints) && data.spawnPoints[0]) {
+                const sp = data.spawnPoints[0];
+                const posX = parseFloat(sp.position?.x) || 0;
+                const posY = parseFloat(sp.position?.y) || 0;
+                const posZ = -(parseFloat(sp.position?.z) || 0);
+                const q = unityEulerDegToThreeQuaternion(sp.rotation || { x: 0, y: 0, z: 0 });
+                blocks.push({
+                    type: 'spawn',
+                    pos: { x: posX, y: posY, z: posZ },
+                    quat: { x: q.x, y: q.y, z: q.z, w: q.w },
+                    userData: { type: 'spawn', visible: true, collisions: false }
+                });
+            }
+
+            // Текстуры карты хранятся прямо внутри .gbmap как base64 PNG — раскладываем их в тот же
+            // формат {textureKey: {name, dataUrl}}, что использует обычный импорт из ZIP (CustomTextures/).
+            // Ключом обязательно берём "сырое" tex.name без нормализации — именно так (без изменений)
+            // на него ссылается cube.materialName внутри mapGoreBoxCubeToProjectBlock().
+            const projectCustomTextures = {};
+            if (Array.isArray(data.customTextures)) {
+                data.customTextures.forEach(tex => {
+                    if (!tex || !tex.name || !tex.base64Data) return;
+                    projectCustomTextures[tex.name] = { name: tex.name, dataUrl: `data:image/png;base64,${tex.base64Data}` };
+                });
+            }
+
+            // Небо/погода: переносим то, что однозначно совместимо (туман, угол света).
+            // skyboxIndex не переносим — это индекс из каталога скайбоксов GoreBox/Godot-проекта,
+            // не совпадающий со списком скайбоксов этого веб-редактора, так что оставляем небо по умолчанию.
+            const env = {};
+            if (data.skySettings) {
+                const sky = data.skySettings;
+                if (sky.fogColorHex) env.fogColor = '#' + String(sky.fogColorHex).replace('#', '');
+                if (Number.isFinite(sky.fogStart)) env.fogStart = sky.fogStart;
+                if (Number.isFinite(sky.fogEnd)) env.fogEnd = sky.fogEnd;
+                if (sky.lightRotation && Number.isFinite(sky.lightRotation.y)) env.sunAngle = Math.round(normalizeAngle360(sky.lightRotation.y));
+            }
+
+            return { blocks, env, projectCustomTextures };
+        }
 
         // Временное хранилище локальных текстур текущего проекта в оперативной памяти
         let activeProjectCustomTextures = {};
@@ -5853,6 +6030,7 @@ if (texSel) {
                 this.applyResponsiveScale(false);
             },
             triggerMapImport: function() { const input = document.getElementById('import-map-zip'); if (input) input.click(); },
+            triggerGbmapImport: function() { const input = document.getElementById('import-map-gbmap'); if (input) input.click(); },
             triggerGLBImport: function() { const input = document.getElementById('import-glb-model'); if (input) input.click(); },
 
             // ======== COLLECTION OF SUBJECTS ========
@@ -6195,6 +6373,31 @@ if (texSel) {
                 }
             },
 
+            // Импорт самодостаточного однофайлового проекта .gbmap (кубы + текстуры + небо + спавн в одном JSON)
+            importMapFromGbmap: async function(event) {
+                try {
+                    const file = event.target.files && event.target.files[0]; event.target.value = ''; if (!file) return;
+
+                    const text = await file.text();
+                    const rawMapData = parseGbmapFile(text);
+                    if (!rawMapData || !Array.isArray(rawMapData.mapCubes)) throw new Error('В файле .gbmap не найден mapCubes');
+
+                    const importedData = mapGbmapFormatToProjectData(rawMapData);
+
+                    const enteredName = (document.getElementById('new-map-name').value || '').trim();
+                    const gbmapBaseName = normalizeTextureKey(file.name);
+                    const projectName = enteredName || rawMapData.name || `${gbmapBaseName || 'Imported Map'} (Imported)`;
+
+                    const project = await storageManager.createProject(projectName, rawMapData.description || '');
+                    await storageManager.saveProjectData(project.id, importedData);
+
+                    document.getElementById('new-project-modal').classList.add('hidden');
+                    const nameInput = document.getElementById('new-map-name'); if (nameInput) nameInput.value = '';
+                    await this.loadProject(project.id, project.name);
+                } catch (err) {
+                    console.error('Import .gbmap Error:', err); alert(`Import failed: ${err.message || err}`);
+                }
+            },
 
             renderProjectList: async function() {
                 const container = document.getElementById('project-list-container'); const projects = await storageManager.getProjects();
@@ -6735,6 +6938,5 @@ if (texSel) {
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a13bd3e70b4cc9cd',t:'MTc4MjgwODQyMw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a157c7f55bcde4af',t:'MTc4MzEwMTUzNQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
