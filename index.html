@@ -6057,6 +6057,89 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 return { position, quaternion, scale };
             },
 
+            // ── Greedy merge коллизионных AABB-боксов ──────────────────────────────────────────
+            // Для набора { min:{x,y,z}, max:{x,y,z}, key } боксов, выстроенных на общей решётке
+            // (без зазоров, без перекрытий, ось-выровненных), строит минимальный набор больших
+            // боксов, покрывающих ровно тот же объём. Это чисто геометрическая операция: итоговый
+            // набор боксов занимает идентичное пространство, поэтому физика/коллизия не меняется —
+            // меняется только количество кубов, которые нужно создать в GoreBox.
+            // Алгоритм: 3D occupancy grid по координатной решётке (coordinate compression) →
+            // 3 прохода жадного слияния (X → Y → Z), как в voxel-мешинге (стандартный подход
+            // для объединения вокселей terrain/world-редакторов).
+            greedyMergeBoxes: function(boxes) {
+                if (boxes.length === 0) return [];
+                if (boxes.length === 1) return boxes.slice();
+
+                // Координатная компрессия: собираем уникальные границы по каждой оси с округлением
+                // (защита от чисел с плавающей точкой типа 0.9999999997), затем строим occupancy grid.
+                const EPS = 1e-4;
+                const roundC = v => Math.round(v / EPS) * EPS;
+                const xsSet = new Set(), ysSet = new Set(), zsSet = new Set();
+                boxes.forEach(b => {
+                    xsSet.add(roundC(b.min.x)); xsSet.add(roundC(b.max.x));
+                    ysSet.add(roundC(b.min.y)); ysSet.add(roundC(b.max.y));
+                    zsSet.add(roundC(b.min.z)); zsSet.add(roundC(b.max.z));
+                });
+                const xs = [...xsSet].sort((a, b) => a - b);
+                const ys = [...ysSet].sort((a, b) => a - b);
+                const zs = [...zsSet].sort((a, b) => a - b);
+                const xi = new Map(xs.map((v, i) => [v, i]));
+                const yi = new Map(ys.map((v, i) => [v, i]));
+                const zi = new Map(zs.map((v, i) => [v, i]));
+                const nx = xs.length - 1, ny = ys.length - 1, nz = zs.length - 1;
+                if (nx <= 0 || ny <= 0 || nz <= 0) return boxes.slice();
+
+                // occupancy[x][y][z] = true, если эта элементарная ячейка решётки занята каким-либо боксом.
+                // Используем плоский Uint8Array вместо вложенных массивов — компактнее и быстрее на больших картах.
+                const occ = new Uint8Array(nx * ny * nz);
+                const idx = (x, y, z) => (x * ny + y) * nz + z;
+                boxes.forEach(b => {
+                    const x0 = xi.get(roundC(b.min.x)), x1 = xi.get(roundC(b.max.x));
+                    const y0 = yi.get(roundC(b.min.y)), y1 = yi.get(roundC(b.max.y));
+                    const z0 = zi.get(roundC(b.min.z)), z1 = zi.get(roundC(b.max.z));
+                    for (let x = x0; x < x1; x++) for (let y = y0; y < y1; y++) for (let z = z0; z < z1; z++) occ[idx(x, y, z)] = 1;
+                });
+
+                const merged = [];
+                // Проход 1: для каждой (y,z)-строки жадно склеиваем последовательные занятые ячейки по X.
+                // Проход 2: одинаковые X-протяжённости жадно склеиваем по Y.
+                // Проход 3: одинаковые (X,Y)-протяжённости жадно склеиваем по Z.
+                // Итог — минимальный набор прямоугольных параллелепипедов, точно покрывающих тот же объём.
+                const visited = new Uint8Array(nx * ny * nz);
+                for (let z = 0; z < nz; z++) {
+                    for (let y = 0; y < ny; y++) {
+                        for (let x = 0; x < nx; x++) {
+                            const i0 = idx(x, y, z);
+                            if (!occ[i0] || visited[i0]) continue;
+                            // Растим по X, пока ячейки заняты и не посещены.
+                            let ex = x;
+                            while (ex + 1 < nx && occ[idx(ex + 1, y, z)] && !visited[idx(ex + 1, y, z)]) ex++;
+                            // Растим по Y, пока весь X-диапазон [x..ex] на этой Y-строке свободен и занят.
+                            let ey = y;
+                            const rowFree = (yy) => {
+                                for (let xx = x; xx <= ex; xx++) { const ii = idx(xx, yy, z); if (!occ[ii] || visited[ii]) return false; }
+                                return true;
+                            };
+                            while (ey + 1 < ny && rowFree(ey + 1)) ey++;
+                            // Растим по Z, пока весь (X,Y)-прямоугольник на этом Z-слое свободен и занят.
+                            let ez = z;
+                            const sliceFree = (zz) => {
+                                for (let yy = y; yy <= ey; yy++) for (let xx = x; xx <= ex; xx++) { const ii = idx(xx, yy, zz); if (!occ[ii] || visited[ii]) return false; }
+                                return true;
+                            };
+                            while (ez + 1 < nz && sliceFree(ez + 1)) ez++;
+                            // Помечаем весь объединённый блок как посещённый, чтобы не обработать повторно.
+                            for (let zz = z; zz <= ez; zz++) for (let yy = y; yy <= ey; yy++) for (let xx = x; xx <= ex; xx++) visited[idx(xx, yy, zz)] = 1;
+                            merged.push({
+                                min: { x: xs[x], y: ys[y], z: zs[z] },
+                                max: { x: xs[ex + 1], y: ys[ey + 1], z: zs[ez + 1] }
+                            });
+                        }
+                    }
+                }
+                return merged;
+            },
+
             // Строит MapData.json для lit-экспорта: каждый куб с освещением заменяется на скрытый
             // коллизионный куб (физика/геометрия сохраняется) + 6 видимых тонких декаль-кубов с запечёнными текстурами.
             // Кубы, для которых bake не делался (вода и т.п.) экспортируются как обычно.
@@ -6066,24 +6149,66 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 const mapData = { version: 4, cubes: [] };
                 const bakedCubeIds = new Set(bakeResult.litCubes.map(c => c.uuid));
 
-                this.blocks.forEach(b => {
-                    const gbTag = b.userData.sourceTag || getFallbackGoreBoxTag(b.userData.materialType || 'Concrete');
+                // ── Оптимизация: объединяем скрытые коллизионные кубы, стоящие вплотную друг к другу
+                // в правильную решётку (квадрат/куб/стену), в минимально возможное число больших боксов.
+                // Объединяются ТОЛЬКО кубы без поворота (иначе объединённый AABB физически не эквивалентен
+                // исходным повёрнутым коробкам) и только внутри группы с одинаковыми collisions/tag/materialType,
+                // чтобы скрытые метаданные объединённого куба не потерялись и физика не изменилась ни на йоту.
+                const AXIS_EPS = 0.001;
+                const isAxisAligned = (q) => {
+                    const e = new THREE.Euler().setFromQuaternion(q, 'YXZ');
+                    return Math.abs(e.x) < AXIS_EPS && Math.abs(e.y) < AXIS_EPS && Math.abs(e.z) < AXIS_EPS;
+                };
+                const mergeGroups = new Map(); // groupKey -> [{ box, srcCube }]
+                const nonMergeableBaked = []; // повёрнутые baked-кубы — экспортируются как раньше, один-в-один
+                const tmpP = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3();
 
-                    if (bakedCubeIds.has(b.uuid)) {
-                        // Исходный куб — оставляем НЕВИДИМЫМ, но с коллизией, чтобы физика/геометрия уровня не изменилась.
-                        let pos = new THREE.Vector3(), rot = new THREE.Quaternion(), scl = new THREE.Vector3();
-                        b.getWorldPosition(pos); b.getWorldQuaternion(rot); b.getWorldScale(scl);
-                        const gbEuler = threeQuaternionToUnityEulerDeg(rot);
+                bakeResult.litCubes.forEach(b => {
+                    b.getWorldPosition(tmpP); b.getWorldQuaternion(tmpQ); b.getWorldScale(tmpS);
+                    if (!isAxisAligned(tmpQ)) { nonMergeableBaked.push(b); return; }
+                    const hx = Math.abs(tmpS.x) / 2, hy = Math.abs(tmpS.y) / 2, hz = Math.abs(tmpS.z) / 2;
+                    const box = { min: { x: tmpP.x - hx, y: tmpP.y - hy, z: tmpP.z - hz }, max: { x: tmpP.x + hx, y: tmpP.y + hy, z: tmpP.z + hz } };
+                    const groupKey = (b.userData.collisions !== false) + '|' + (b.userData.materialType || 'Concrete') + '|' + (b.userData.sourceTag || '');
+                    if (!mergeGroups.has(groupKey)) mergeGroups.set(groupKey, []);
+                    mergeGroups.get(groupKey).push({ box, srcCube: b });
+                });
+
+                mergeGroups.forEach((entries, groupKey) => {
+                    const [collisionsStr, materialType, sourceTag] = groupKey.split('|');
+                    const mergedBoxes = this.greedyMergeBoxes(entries.map(e => e.box));
+                    const gbTag = sourceTag || getFallbackGoreBoxTag(materialType || 'Concrete');
+                    mergedBoxes.forEach(box => {
+                        const cx = (box.min.x + box.max.x) / 2, cy = (box.min.y + box.max.y) / 2, cz = (box.min.z + box.max.z) / 2;
+                        const sx = box.max.x - box.min.x, sy = box.max.y - box.min.y, sz = box.max.z - box.min.z;
                         mapData.cubes.push({
                             name: "MapCube", tag: gbTag, tileMode: 2, visible: false,
-                            collisions: b.userData.collisions !== false, physics: false,
-                            materialName: getFallbackGoreBoxMaterialName(b.userData.materialType || 'Concrete'),
-                            position: { x: pos.x, y: pos.y, z: -pos.z },
-                            rotation: { x: gbEuler.x, y: gbEuler.y, z: gbEuler.z },
-                            scale: { x: scl.x, y: scl.y, z: scl.z }
+                            collisions: collisionsStr === 'true', physics: false,
+                            materialName: getFallbackGoreBoxMaterialName(materialType || 'Concrete'),
+                            position: { x: cx, y: cy, z: -cz },
+                            rotation: { x: 0, y: 0, z: 0 },
+                            scale: { x: sx, y: sy, z: sz }
                         });
-                        return;
-                    }
+                    });
+                });
+
+                nonMergeableBaked.forEach(b => {
+                    const gbTag = b.userData.sourceTag || getFallbackGoreBoxTag(b.userData.materialType || 'Concrete');
+                    let pos = new THREE.Vector3(), rot = new THREE.Quaternion(), scl = new THREE.Vector3();
+                    b.getWorldPosition(pos); b.getWorldQuaternion(rot); b.getWorldScale(scl);
+                    const gbEuler = threeQuaternionToUnityEulerDeg(rot);
+                    mapData.cubes.push({
+                        name: "MapCube", tag: gbTag, tileMode: 2, visible: false,
+                        collisions: b.userData.collisions !== false, physics: false,
+                        materialName: getFallbackGoreBoxMaterialName(b.userData.materialType || 'Concrete'),
+                        position: { x: pos.x, y: pos.y, z: -pos.z },
+                        rotation: { x: gbEuler.x, y: gbEuler.y, z: gbEuler.z },
+                        scale: { x: scl.x, y: scl.y, z: scl.z }
+                    });
+                });
+
+                this.blocks.forEach(b => {
+                    if (bakedCubeIds.has(b.uuid)) return; // уже обработаны выше (merge или non-mergeable)
+                    const gbTag = b.userData.sourceTag || getFallbackGoreBoxTag(b.userData.materialType || 'Concrete');
 
                     // Кубы без bake (вода и т.п.) — обычная сериализация, как в стандартном экспорте.
                     const gbMatName = b.userData.materialName || (BUILTIN_TEXTURE_KEYS.has(b.userData.texture) ? getFallbackGoreBoxMaterialName(b.userData.materialType || 'Concrete') : (b.userData.texture || getFallbackGoreBoxMaterialName(b.userData.materialType || 'Concrete')));
