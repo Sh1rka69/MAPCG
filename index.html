@@ -3094,54 +3094,77 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                             /* ── Per-pixel rotation — IGN gives stable, uncorrelated noise ── */
                             float rotA = IGN(floor(vUv * resolution)) * 6.28318530;
 
-                            /* ── Depth-adaptive screen radius (geometrically correct) ──────── */
-                            const float WRAD   = 1.35; /* light contact AO radius (units) */
-                            float screenRY = clamp(WRAD / (depth * uTanHalfFovY * 2.0), 0.004, 0.10);
-                            float screenRX = screenRY / aspect;
+                            /* ── RTX-style two-scale AO: tight contact pass (crisp corner darkening)
+                               + wide bounce pass (soft broad-range falloff, like GI occlusion in
+                               ray-traced renders). Combining a small tight radius with a larger soft
+                               radius makes corners read as dense, dark creases instead of a uniform
+                               grey haze — the hallmark of screen-space GI/AO in modern engines. */
+                            const float WRAD_TIGHT = 0.55;  /* crisp contact radius (units) — corners, seams */
+                            const float WRAD_WIDE  = 2.6;   /* broad soft radius (units) — room-scale occlusion */
 
-                            /* ── 24-sample golden-angle hemisphere AO ────────────────────── */
+                            float screenRY_T = clamp(WRAD_TIGHT / (depth * uTanHalfFovY * 2.0), 0.003, 0.09);
+                            float screenRX_T = screenRY_T / aspect;
+                            float screenRY_W = clamp(WRAD_WIDE  / (depth * uTanHalfFovY * 2.0), 0.006, 0.16);
+                            float screenRX_W = screenRY_W / aspect;
+
+                            /* ── golden-angle hemisphere sampling, evaluated at two radii per ring ── */
                             const int   S  = 16;
                             const float GA = 2.39996322972865332;
-                            float ao     = 0.0;
-                            float totalW = 0.0;
+                            float aoTight = 0.0, aoWide = 0.0;
+                            float wTight  = 0.0, wWide  = 0.0;
 
                             for (int i = 0; i < S; i++) {
                                 float fi    = float(i) + 0.5;
                                 float r     = sqrt(fi / float(S));
                                 float angle = rotA + fi * GA;
-                                vec2  off   = vec2(cos(angle) * r * screenRX, sin(angle) * r * screenRY);
-                                vec2  uv2   = clamp(vUv + off, vec2(0.001), vec2(0.999));
+                                vec2  dirT  = vec2(cos(angle) * r, sin(angle) * r);
 
-                                vec2 sD = readDepth(uv2);
+                                vec2 uvT = clamp(vUv + vec2(dirT.x * screenRX_T, dirT.y * screenRY_T), vec2(0.001), vec2(0.999));
+                                vec2 sDT = readDepth(uvT);
+                                if (sDT.y > 0.5) { wTight += 1.0; } else {
+                                    vec3  sPosT = getViewPos(uvT, sDT.x);
+                                    vec3  sVecT = sPosT - pos;
+                                    float sLenT = length(sVecT);
+                                    if (sLenT < 0.001) { wTight += 1.0; }
+                                    else {
+                                        float nDotT  = dot(N, sVecT / sLenT);
+                                        float rCheckT = 1.0 - smoothstep(0.0, WRAD_TIGHT, sLenT);
+                                        aoTight += max(0.0, nDotT - bias) * rCheckT;
+                                        wTight  += 1.0;
+                                    }
+                                }
 
-                                /* Sky samples → no occlusion; still counted to avoid bias */
-                                if (sD.y > 0.5) { totalW += 1.0; continue; }
-
-                                vec3  sPos = getViewPos(uv2, sD.x);
-                                vec3  sVec = sPos - pos;
-                                float sLen = length(sVec);
-                                if (sLen < 0.001) { totalW += 1.0; continue; }
-
-                                /* Normal-weighted: only hemisphere above surface contributes */
-                                float nDotS = dot(N, sVec / sLen);
-
-                                /* Distance falloff — prevents halos from distant occluders */
-                                float rCheck = 1.0 - smoothstep(0.0, WRAD, sLen);
-
-                                ao     += max(0.0, nDotS - bias) * rCheck;
-                                totalW += 1.0;
+                                vec2 uvW = clamp(vUv + vec2(dirT.x * screenRX_W, dirT.y * screenRY_W), vec2(0.001), vec2(0.999));
+                                vec2 sDW = readDepth(uvW);
+                                if (sDW.y > 0.5) { wWide += 1.0; } else {
+                                    vec3  sPosW = getViewPos(uvW, sDW.x);
+                                    vec3  sVecW = sPosW - pos;
+                                    float sLenW = length(sVecW);
+                                    if (sLenW < 0.001) { wWide += 1.0; }
+                                    else {
+                                        float nDotW  = dot(N, sVecW / sLenW);
+                                        float rCheckW = 1.0 - smoothstep(0.0, WRAD_WIDE, sLenW);
+                                        aoWide += max(0.0, nDotW - bias * 0.5) * rCheckW;
+                                        wWide  += 1.0;
+                                    }
+                                }
                             }
 
-                            if (totalW > 0.0) ao /= totalW;
+                            if (wTight > 0.0) aoTight /= wTight;
+                            if (wWide  > 0.0) aoWide  /= wWide;
 
-                            /* ×4 because per-sample nDotS averages ~0.25 for hemisphere */
-                            ao = clamp(ao * intensity * 3.0, 0.0, 0.45);
-                            ao = ao * ao * (3.0 - 2.0 * ao);
+                            aoTight = clamp(aoTight * intensity * 3.6, 0.0, 0.75);
+                            aoWide  = clamp(aoWide  * intensity * 2.0, 0.0, 0.55);
+                            aoTight = aoTight * aoTight * (3.0 - 2.0 * aoTight);
+                            aoWide  = aoWide  * aoWide  * (3.0 - 2.0 * aoWide);
 
-                            /* Cap final darkening to 55% — no global scene darkening */
-                            // Only apply AO to crevices, do NOT darken the whole scene
-float aoFactor = 1.0 - (ao * 0.20);
-gl_FragColor = vec4(col.rgb * aoFactor, col.a);
+                            /* Combine: tight dominates in creases, wide fills in the rest. */
+                            float ao = 1.0 - (1.0 - aoTight) * (1.0 - aoWide * 0.6);
+                            ao = clamp(ao, 0.0, 0.88);
+
+                            /* Deep, punchy corner shadows (RTX-like) while still protecting midtones. */
+                            float aoFactor = 1.0 - ao * mix(0.35, 0.62, aoTight);
+                            gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                         }
                     `
                 };
@@ -5608,6 +5631,117 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
 
                 const orthoCam = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, -10, 10);
 
+                // ── Bake-time AO: даём каждой запечённой грани собственный проход контактных теней ──
+                // Обычный AO из composer'а привязан к перспективной камере сцены и не участвует в этом
+                // рендере (мы рисуем orthoCam напрямую в bakeTarget), поэтому здесь — отдельный, лёгкий
+                // ortho-AO: свой depth pre-pass (тот же packDepth-приём, что и в живом AO) + двухслойный
+                // (tight+wide) окклюзионный шейдер, который делает угловые/стыковые тени такими же
+                // плотными и «RTX-like», как в реальном времени, и встраивает их прямо в PNG-текстуру.
+                const bakeAoEnabled = !!(this.ssaoPass && this.ssaoPass.enabled);
+                const bakeAoIntensity = this.ssaoPass?.uniforms?.intensity?.value ?? 0.55;
+                let bakeDepthTarget = null, bakeAoTarget = null, bakeAoQuadScene = null, bakeAoQuadCam = null, bakeAoMesh = null;
+                if (bakeAoEnabled) {
+                    bakeDepthTarget = new THREE.WebGLRenderTarget(BAKE_SIZE, BAKE_SIZE, {
+                        type: THREE.UnsignedByteType, format: THREE.RGBAFormat, depthBuffer: true
+                    });
+                    bakeAoTarget = new THREE.WebGLRenderTarget(BAKE_SIZE, BAKE_SIZE, {
+                        type: THREE.UnsignedByteType, format: THREE.RGBAFormat, colorSpace: THREE.SRGBColorSpace, depthBuffer: false
+                    });
+                    bakeAoQuadScene = new THREE.Scene();
+                    bakeAoQuadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+                    const bakeAoShader = {
+                        uniforms: {
+                            tDiffuse:   { value: null },
+                            tDepth:     { value: null },
+                            resolution: { value: new THREE.Vector2(BAKE_SIZE, BAKE_SIZE) },
+                            intensity:  { value: bakeAoIntensity },
+                            uFar:       { value: 1.0 },
+                            uHalfW:     { value: 0.5 },
+                            uHalfH:     { value: 0.5 }
+                        },
+                        vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`,
+                        fragmentShader: `
+                            precision highp float;
+                            uniform sampler2D tDiffuse, tDepth;
+                            uniform vec2 resolution;
+                            uniform float intensity, uFar, uHalfW, uHalfH;
+                            varying vec2 vUv;
+                            float unpackDepth(vec4 rgba){ const vec4 s=vec4(1.0/16777216.0,1.0/65536.0,1.0/256.0,1.0); return dot(rgba,s); }
+                            vec2 readDepth(vec2 uv){
+                                vec4 raw = texture2D(tDepth, uv);
+                                if (raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);
+                                return vec2(unpackDepth(raw) * uFar, 0.0);
+                            }
+                            /* Orthographic reconstruction: XY scales linearly with UV (no perspective divide),
+                               Z is the linear view-space depth we stored ourselves. */
+                            vec3 getViewPos(vec2 uv, float linZ){
+                                vec2 ndc = uv * 2.0 - 1.0;
+                                return vec3(ndc.x * uHalfW, ndc.y * uHalfH, -linZ);
+                            }
+                            void main(){
+                                vec4 col = texture2D(tDiffuse, vUv);
+                                vec2 centerD = readDepth(vUv);
+                                if (centerD.y > 0.5 || intensity < 0.15) { gl_FragColor = col; return; }
+                                vec2 texel = 1.0 / resolution;
+                                vec3 pos = getViewPos(vUv, centerD.x);
+                                vec2 dR = readDepth(vUv + vec2(texel.x, 0.0));
+                                vec2 dL = readDepth(vUv - vec2(texel.x, 0.0));
+                                vec2 dU = readDepth(vUv + vec2(0.0, texel.y));
+                                vec2 dDn= readDepth(vUv - vec2(0.0, texel.y));
+                                vec3 dX = abs(dR.x-centerD.x) < abs(centerD.x-dL.x)
+                                    ? getViewPos(vUv+vec2(texel.x,0.0), dR.x) - pos
+                                    : pos - getViewPos(vUv-vec2(texel.x,0.0), dL.x);
+                                vec3 dY = abs(dU.x-centerD.x) < abs(centerD.x-dDn.x)
+                                    ? getViewPos(vUv+vec2(0.0,texel.y), dU.x) - pos
+                                    : pos - getViewPos(vUv-vec2(0.0,texel.y), dDn.x);
+                                vec3 N = normalize(cross(dX, dY));
+                                if (N.z < 0.0) N = -N;
+                                float rotA = fract(52.9829189 * fract(0.06711056*floor(vUv*resolution).x + 0.00583715*floor(vUv*resolution).y)) * 6.28318530;
+                                const float WRAD_TIGHT = 0.5, WRAD_WIDE = 2.4;
+                                float sRT = clamp(WRAD_TIGHT / max(uHalfW,uHalfH), 0.003, 0.35);
+                                float sRW = clamp(WRAD_WIDE  / max(uHalfW,uHalfH), 0.006, 0.6);
+                                const int S = 16; const float GA = 2.39996322972865332;
+                                float aoTight=0.0, aoWide=0.0, wTight=0.0, wWide=0.0;
+                                for (int i=0; i<S; i++){
+                                    float fi = float(i)+0.5; float r = sqrt(fi/float(S)); float ang = rotA + fi*GA;
+                                    vec2 dir = vec2(cos(ang)*r, sin(ang)*r);
+                                    vec2 uvT = clamp(vUv + dir*sRT, vec2(0.001), vec2(0.999));
+                                    vec2 sDT = readDepth(uvT);
+                                    if (sDT.y > 0.5) { wTight += 1.0; } else {
+                                        vec3 sPos = getViewPos(uvT, sDT.x); vec3 sVec = sPos - pos; float sLen = length(sVec);
+                                        if (sLen < 0.001) { wTight += 1.0; } else {
+                                            float nDotS = dot(N, sVec/sLen);
+                                            float rCheck = 1.0 - smoothstep(0.0, WRAD_TIGHT, sLen);
+                                            aoTight += max(0.0, nDotS - 0.02) * rCheck; wTight += 1.0;
+                                        }
+                                    }
+                                    vec2 uvW = clamp(vUv + dir*sRW, vec2(0.001), vec2(0.999));
+                                    vec2 sDW = readDepth(uvW);
+                                    if (sDW.y > 0.5) { wWide += 1.0; } else {
+                                        vec3 sPos = getViewPos(uvW, sDW.x); vec3 sVec = sPos - pos; float sLen = length(sVec);
+                                        if (sLen < 0.001) { wWide += 1.0; } else {
+                                            float nDotS = dot(N, sVec/sLen);
+                                            float rCheck = 1.0 - smoothstep(0.0, WRAD_WIDE, sLen);
+                                            aoWide += max(0.0, nDotS - 0.01) * rCheck; wWide += 1.0;
+                                        }
+                                    }
+                                }
+                                if (wTight>0.0) aoTight/=wTight; if (wWide>0.0) aoWide/=wWide;
+                                aoTight = clamp(aoTight*intensity*3.6, 0.0, 0.75);
+                                aoWide  = clamp(aoWide*intensity*2.0, 0.0, 0.55);
+                                aoTight = aoTight*aoTight*(3.0-2.0*aoTight);
+                                aoWide  = aoWide*aoWide*(3.0-2.0*aoWide);
+                                float ao = 1.0 - (1.0-aoTight) * (1.0 - aoWide*0.6);
+                                ao = clamp(ao, 0.0, 0.88);
+                                float aoFactor = 1.0 - ao * mix(0.35, 0.62, aoTight);
+                                gl_FragColor = vec4(col.rgb * aoFactor, col.a);
+                            }
+                        `
+                    };
+                    bakeAoMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial(bakeAoShader));
+                    bakeAoQuadScene.add(bakeAoMesh);
+                }
+
                 // --- Временно скрываем редакторские служебные объекты (но НЕ кубы — они должны отбрасывать тени друг на друга) ---
                 const hidden = [];
                 const hide = (obj) => { if (obj && obj.visible) { hidden.push(obj); obj.visible = false; } };
@@ -5680,17 +5814,105 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                 const imageData = pngCtx.createImageData(BAKE_SIZE, BAKE_SIZE);
 
                 const litCubes = this.blocks.filter(b => b.userData?.type === 'cube' && b.userData.visible !== false && !isWaterLike(b.userData.texture, b.userData.materialType));
-                // Предварительно считаем, сколько граней реально будут запечены (грани меньше 0.50 по стороне пропускаются).
-                const totalFaces = litCubes.reduce((sum, cube) => {
-                    const s = new THREE.Vector3();
-                    cube.getWorldScale(s);
-                    const sx = Math.abs(s.x), sy = Math.abs(s.y), sz = Math.abs(s.z);
-                    let count = 0;
-                    if (sz >= 0.50 && sy >= 0.50) count += 2; // px, nx
-                    if (sx >= 0.50 && sz >= 0.50) count += 2; // py, ny
-                    if (sx >= 0.50 && sy >= 0.50) count += 2; // pz, nz
-                    return sum + count;
-                }, 0);
+
+                // ── Оптимизация: не запекаем грани, полностью зажатые впритык другим кубом ──
+                // Если у грани куба A есть "противолежащая" грань куба B (нормали противоположны,
+                // накрывает A по площади), и расстояние между их плоскостями < CONTACT_EPS, то эта
+                // грань всё равно никогда не будет видна в готовой карте (она замурована изнутри),
+                // поэтому её рендер, запекание и сам декаль-куб можно безопасно пропустить — экономит
+                // ощутимую долю кадров/текстур/декалей на плотно застроенных картах без потери качества.
+                const CONTACT_EPS = 0.01;
+                // Все кубы сцены (включая воду и прочее) — сосед может быть любым непрозрачным блоком.
+                const allCubesForContact = this.blocks.filter(b => b.userData?.type === 'cube' && b.userData.visible !== false);
+                // Грубый spatial hash по позиции (шаг чуть больше типичного куба), чтобы не сравнивать каждый с каждым O(n²).
+                const HASH_CELL = 2.0;
+                const contactHash = new Map();
+                const hashKey = (x, y, z) => Math.round(x / HASH_CELL) + '_' + Math.round(y / HASH_CELL) + '_' + Math.round(z / HASH_CELL);
+                const cubeAabbCache = new Map(); // cube -> {pos, quat, scale, isAxisAligned}
+                allCubesForContact.forEach(c => {
+                    const pos = new THREE.Vector3(), quat = new THREE.Quaternion(), scale = new THREE.Vector3();
+                    c.getWorldPosition(pos); c.getWorldQuaternion(quat); c.getWorldScale(scale);
+                    cubeAabbCache.set(c, { pos, quat, scale });
+                    // Регистрируем во всех 27 соседних ячейках, на случай что куб лежит на границе ячейки.
+                    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+                        const k = hashKey(pos.x + dx * HASH_CELL, pos.y + dy * HASH_CELL, pos.z + dz * HASH_CELL);
+                        if (!contactHash.has(k)) contactHash.set(k, []);
+                        contactHash.get(k).push(c);
+                    }
+                });
+                // Проверяет, закрыта ли грань (center/normal/tangent/bitangent/W/H) вплотную другим кубом.
+                const isFaceHiddenByNeighbor = (ownerCube, faceCenter, worldNormal, worldTangent, worldBitangent, faceW, faceH) => {
+                    const key = hashKey(faceCenter.x, faceCenter.y, faceCenter.z);
+                    const candidates = contactHash.get(key);
+                    if (!candidates) return false;
+                    const seen = new Set();
+                    for (const other of candidates) {
+                        if (other === ownerCube || seen.has(other)) continue;
+                        seen.add(other);
+                        const info = cubeAabbCache.get(other);
+                        if (!info) continue;
+                        // Быстрый тест только для куб-подобных (не skewed) трансформаций — общий случай
+                        // произвольного поворота геометрически возможен, но избыточен для реальных карт.
+                        const OFACES = [
+                            { n: new THREE.Vector3( 1, 0, 0), t: new THREE.Vector3(0, 0, -1), b: new THREE.Vector3(0, 1, 0), axis: 'x' },
+                            { n: new THREE.Vector3(-1, 0, 0), t: new THREE.Vector3(0, 0,  1), b: new THREE.Vector3(0, 1, 0), axis: 'x' },
+                            { n: new THREE.Vector3( 0, 1, 0), t: new THREE.Vector3(1, 0, 0),  b: new THREE.Vector3(0, 0, -1), axis: 'y' },
+                            { n: new THREE.Vector3( 0,-1, 0), t: new THREE.Vector3(1, 0, 0),  b: new THREE.Vector3(0, 0, 1), axis: 'y' },
+                            { n: new THREE.Vector3( 0, 0, 1), t: new THREE.Vector3(1, 0, 0),  b: new THREE.Vector3(0, 1, 0), axis: 'z' },
+                            { n: new THREE.Vector3( 0, 0,-1), t: new THREE.Vector3(-1, 0, 0), b: new THREE.Vector3(0, 1, 0), axis: 'z' }
+                        ];
+                        const sx = Math.abs(info.scale.x), sy = Math.abs(info.scale.y), sz = Math.abs(info.scale.z);
+                        for (const of_ of OFACES) {
+                            const oN = of_.n.clone().applyQuaternion(info.quat).normalize();
+                            // Нормали должны смотреть строго навстречу друг другу (это одна и та же межблочная грань).
+                            if (oN.dot(worldNormal) > -0.999) continue;
+                            const oHalf = of_.axis === 'x' ? sx * 0.5 : (of_.axis === 'y' ? sy * 0.5 : sz * 0.5);
+                            const oCenter = info.pos.clone().addScaledVector(oN, oHalf);
+                            // Расстояние между плоскостями граней вдоль нормали — контакт, если почти нулевое.
+                            const dist = Math.abs(oCenter.clone().sub(faceCenter).dot(worldNormal));
+                            if (dist > CONTACT_EPS) continue;
+                            // Проверяем, что грань соседа накрывает грань владельца по площади (в его локальных tangent/bitangent).
+                            let oW, oH;
+                            if (of_.axis === 'x') { oW = sz; oH = sy; }
+                            else if (of_.axis === 'y') { oW = sx; oH = sz; }
+                            else { oW = sx; oH = sy; }
+                            const toOther = oCenter.clone().sub(faceCenter);
+                            const dTang = Math.abs(toOther.dot(worldTangent));
+                            const dBitang = Math.abs(toOther.dot(worldBitangent));
+                            // Сосед должен и накрывать грань владельца (запас по половинам сторон), и не выступать
+                            // мимо неё в стороны настолько, что оставит открытый зазор — тут допускаем небольшой
+                            // допуск CONTACT_EPS, т.к. нас интересует именно герметичный, невидимый снаружи стык.
+                            if (dTang + faceW / 2 <= oW / 2 + CONTACT_EPS && dBitang + faceH / 2 <= oH / 2 + CONTACT_EPS) {
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                };
+
+                // Предварительно считаем, сколько граней реально будут запечены (грани меньше 0.50 по стороне
+                // и грани, наглухо зажатые соседним кубом впритык, пропускаются и не входят в счётчик).
+                let totalFaces = 0;
+                const _tPos = new THREE.Vector3(), _tQuat = new THREE.Quaternion(), _tScale = new THREE.Vector3();
+                const _tNormal = new THREE.Vector3(), _tTangent = new THREE.Vector3(), _tBitangent = new THREE.Vector3(), _tCenter = new THREE.Vector3();
+                for (const cube of litCubes) {
+                    cube.getWorldPosition(_tPos); cube.getWorldQuaternion(_tQuat); cube.getWorldScale(_tScale);
+                    const sx = Math.abs(_tScale.x), sy = Math.abs(_tScale.y), sz = Math.abs(_tScale.z);
+                    for (const face of FACES) {
+                        let fW, fH;
+                        if (face.id === 'px' || face.id === 'nx') { fW = sz; fH = sy; }
+                        else if (face.id === 'py' || face.id === 'ny') { fW = sx; fH = sz; }
+                        else { fW = sx; fH = sy; }
+                        if (fW < 0.50 || fH < 0.50) continue;
+                        _tNormal.copy(face.normal).applyQuaternion(_tQuat).normalize();
+                        _tTangent.copy(face.tangent).applyQuaternion(_tQuat).normalize();
+                        _tBitangent.copy(face.bitangent).applyQuaternion(_tQuat).normalize();
+                        const hAxis = face.id === 'px' || face.id === 'nx' ? sx * 0.5 : (face.id === 'py' || face.id === 'ny' ? sy * 0.5 : sz * 0.5);
+                        _tCenter.copy(_tPos).addScaledVector(_tNormal, hAxis);
+                        if (isFaceHiddenByNeighbor(cube, _tCenter, _tNormal, _tTangent, _tBitangent, fW, fH)) continue;
+                        totalFaces++;
+                    }
+                }
                 let doneFaces = 0;
 
                 const newDecalDefs = []; // { cubeRef, faceId, materialName, ... }
@@ -5724,6 +5946,10 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                             const halfAxis = face.id === 'px' || face.id === 'nx' ? sx * 0.5 : (face.id === 'py' || face.id === 'ny' ? sy * 0.5 : sz * 0.5);
                             faceCenter.copy(tmpPos).addScaledVector(worldNormal, halfAxis);
 
+                            // Грань наглухо зажата соседним кубом впритык (< 1 см) — снаружи она никогда
+                            // не видна, поэтому рендер/AO/PNG/декаль для неё полностью пропускаются.
+                            if (isFaceHiddenByNeighbor(cube, faceCenter, worldNormal, worldTangent, worldBitangent, faceW, faceH)) continue;
+
                             // Камера строго по периметру грани: ortho-bounds равны фактическому размеру грани
                             orthoCam.left = -faceW / 2; orthoCam.right = faceW / 2;
                             orthoCam.top = faceH / 2; orthoCam.bottom = -faceH / 2;
@@ -5743,7 +5969,32 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                             renderer.setRenderTarget(bakeTarget);
                             renderer.clear(true, true, false);
                             renderer.render(this.scene, orthoCam);
-                            renderer.readRenderTargetPixels(bakeTarget, 0, 0, BAKE_SIZE, BAKE_SIZE, pixelBuffer);
+
+                            // ── Запекаем угловые тени (AO) прямо в грань, если AO включён в настройках ──
+                            if (bakeAoEnabled) {
+                                // 1) Линейная глубина этой же грани этой же ortho-камерой (тот же приём packDepth, что и в живом AO)
+                                const prevSceneOverride = this.scene.overrideMaterial;
+                                this.scene.overrideMaterial = this._depthPackMat;
+                                this._depthPackMat.uniforms.uFar.value = orthoCam.far;
+                                renderer.setRenderTarget(bakeDepthTarget);
+                                renderer.clear(true, true, false);
+                                renderer.render(this.scene, orthoCam);
+                                this.scene.overrideMaterial = prevSceneOverride;
+
+                                // 2) Композитим AO-шейдер: цвет грани + её depth → результат с запечёнными угловыми тенями
+                                bakeAoMesh.material.uniforms.tDiffuse.value = bakeTarget.texture;
+                                bakeAoMesh.material.uniforms.tDepth.value = bakeDepthTarget.texture;
+                                bakeAoMesh.material.uniforms.uFar.value = orthoCam.far;
+                                bakeAoMesh.material.uniforms.uHalfW.value = faceW / 2;
+                                bakeAoMesh.material.uniforms.uHalfH.value = faceH / 2;
+                                bakeAoMesh.material.uniforms.intensity.value = bakeAoIntensity;
+                                renderer.setRenderTarget(bakeAoTarget);
+                                renderer.clear(true, true, false);
+                                renderer.render(bakeAoQuadScene, bakeAoQuadCam);
+                                renderer.readRenderTargetPixels(bakeAoTarget, 0, 0, BAKE_SIZE, BAKE_SIZE, pixelBuffer);
+                            } else {
+                                renderer.readRenderTargetPixels(bakeTarget, 0, 0, BAKE_SIZE, BAKE_SIZE, pixelBuffer);
+                            }
 
                             // readRenderTargetPixels возвращает строки снизу вверх (OpenGL), а Canvas ImageData
                             // ожидает строки сверху вниз — переворачиваем по вертикали при копировании.
@@ -5775,6 +6026,9 @@ gl_FragColor = vec4(col.rgb * aoFactor, col.a);
                     renderer.toneMapping = prevToneMapping;
                     if (renderer.xr && prevXrEnabled !== undefined) renderer.xr.enabled = prevXrEnabled;
                     bakeTarget.dispose();
+                    if (bakeDepthTarget) bakeDepthTarget.dispose();
+                    if (bakeAoTarget) bakeAoTarget.dispose();
+                    if (bakeAoMesh) { bakeAoMesh.material.dispose(); bakeAoMesh.geometry.dispose(); }
                     hidden.forEach(o => o.visible = true);
                     lightIconStates.forEach(([mat, vis]) => mat.visible = vis);
                     restoreOtherBlocks();
