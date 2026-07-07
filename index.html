@@ -1099,7 +1099,7 @@
                                 <div class="flex-1 relative" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                                     <select id="sel-texture" class="bg-transparent text-[var(--td-text)] p-2 outline-none w-full pr-6 cursor-pointer text-sm" style="background-color: var(--td-bg-2);">
                                         <option value="grid">Grid</option>
-                                        <option value="glass">Glass</option>
+                                        <option value="Glass">Glass</option>
                                         <option value="plasma">Plasma</option>
                                         <option value="GBWater">GBWater</option>
                                     </select>
@@ -2043,7 +2043,7 @@
         // --- Глобальная база базовых встроенных текстур ---
         const baseTextures = { 
             'grid': createGridTexture('#dddddd', '#ffffff'), 
-            'glass': createGridTexture('#ffffff', '#ffffff'),
+            'Glass': createGridTexture('#ffffff', '#ffffff'),
             'plasma': createGridTexture('#00ffff', '#00ffff'),
             'GBWater': createWaterTexture()
         };
@@ -2065,8 +2065,8 @@
         function populateTextureSelect(names) {
             const sel = document.getElementById('sel-texture');
             if (!sel) return;
-            const existing = new Set(Array.from(sel.options).map(o => o.value));
-            [...names].sort().forEach(name => {
+            const existing = new Set(Array.from(sel.options).map(o => canonicalTextureKey(o.value)));
+            [...new Set([...names].map(name => canonicalTextureKey(name)))].sort().forEach(name => {
                 if (!existing.has(name)) {
                     const opt = document.createElement('option');
                     opt.value = name; opt.textContent = name;
@@ -2076,8 +2076,10 @@
         }
 
         function applyTextureData(data) {
-            const names = Object.keys(data);
-            for (const [name, dataUrl] of Object.entries(data)) {
+            const names = [];
+            for (const [rawName, dataUrl] of Object.entries(data)) {
+                const name = canonicalTextureKey(rawName);
+                names.push(name);
                 if (!baseTextures[name]) baseTextures[name] = createTextureFromDataURL(dataUrl);
                 BUILTIN_TEXTURE_KEYS.add(name);
             }
@@ -2414,10 +2416,10 @@
             return true;
         }
 
-        const BUILTIN_TEXTURE_KEYS = new Set(['grid', 'plain', 'dark', 'grass', 'dirt', 'sand', 'snow', 'wood', 'metal', 'carpet', 'GBWater']);
+        const BUILTIN_TEXTURE_KEYS = new Set(['grid', 'plain', 'dark', 'grass', 'dirt', 'sand', 'snow', 'wood', 'metal', 'carpet', 'Glass', 'GBWater']);
 
         const ALL_DEFAULT_TEXTURE_KEYS = [
-            'grid'
+            'grid', 'Glass', 'plasma', 'GBWater'
         ];
 
         const MATERIAL_PRESETS = {
@@ -2435,6 +2437,25 @@
         const GOREBOX_FALLBACK_TAGS = { Concrete: 'Concrete', Wood: 'Wood', Metal: 'Metal', Grass: 'Grass', Carpet: 'Carpet', Dirt: 'Grass', Sand: 'Grass', Snow: 'Grass', Water: 'Water' };
 
         function normalizeTextureKey(name) { return String(name || 'texture').replace(/\\/g, '/').split('/').pop().replace(/\.[^.]+$/, '').trim() || 'texture'; }
+        function canonicalTextureKey(name) {
+            const raw = String(name || 'grid').trim() || 'grid';
+            const lower = raw.toLowerCase();
+            if (lower === 'glass') return 'Glass';
+            if (lower === 'gbwater') return 'GBWater';
+            return raw;
+        }
+        function getDefaultReflectivityForTexture(textureId, materialType) {
+            const key = canonicalTextureKey(textureId);
+            if (key === 'Glass') return 2.35;
+            const preset = MATERIAL_PRESETS[materialType] || MATERIAL_PRESETS.Concrete;
+            return preset.envMapIntensity;
+        }
+        function getDefaultReflectBlurForTexture(textureId, materialType) {
+            const key = canonicalTextureKey(textureId);
+            if (key === 'Glass') return 0.035;
+            const preset = MATERIAL_PRESETS[materialType] || MATERIAL_PRESETS.Concrete;
+            return preset.roughness;
+        }
         function getFallbackGoreBoxMaterialName(materialType) { return GOREBOX_FALLBACK_MATERIAL_NAMES[materialType] || GOREBOX_FALLBACK_MATERIAL_NAMES.Concrete; }
         function getFallbackGoreBoxTag(materialType) { return GOREBOX_FALLBACK_TAGS[materialType] || GOREBOX_FALLBACK_TAGS.Concrete; }
         function mapGoreBoxTagToMaterialType(tag) { if (tag === 'Water' || tag === 'GBWater') return 'Water'; if (tag === 'Wood') return 'Wood'; if (tag === 'Metal') return 'Metal'; if (tag === 'Grass' || tag === 'Dirt' || tag === 'Sand') return 'Grass'; if (tag === 'Carpet') return 'Carpet'; return 'Concrete'; }
@@ -2486,10 +2507,10 @@
             if (data.scl) obj.scale.set(data.scl.x || 1, data.scl.y || 1, data.scl.z || 1);
         }
         function mapGoreBoxCubeToProjectBlock(cube) {
-            const materialName = cube.materialName || normalizeTextureKey(cube.name || 'texture');
+            const materialName = canonicalTextureKey(cube.materialName || normalizeTextureKey(cube.name || 'texture'));
             const materialType = mapGoreBoxTagToMaterialType(cube.tag);
             const tilingMode = mapTileModeToTiling(cube.tileMode);
-            const textureKey = materialName;
+            const textureKey = canonicalTextureKey(materialName);
 
             // Фикс отзеркаливания: инвертируем координату Z для правой системы координат Three.js
             const posX = parseFloat(cube.position?.x) || 0;
@@ -2707,12 +2728,16 @@ let activeProjectNormalMaps = {}; // textureKey -> { texture: THREE.Texture, nam
         let activeProjectTextureKeys = new Set();
 
         function getActiveTexture(textureId) {
+            const key = canonicalTextureKey(textureId);
+            if (activeProjectCustomTextures[key]) return activeProjectCustomTextures[key];
             if (activeProjectCustomTextures[textureId]) return activeProjectCustomTextures[textureId];
+            if (baseTextures[key]) return baseTextures[key];
             if (baseTextures[textureId]) return baseTextures[textureId];
             return baseTextures['grid'];
         }
 
         function createMaterial(textureId, matType, colorHex, extra = {}) {
+            textureId = canonicalTextureKey(textureId);
             const texture = getActiveTexture(textureId);
             const preset = MATERIAL_PRESETS[matType] || MATERIAL_PRESETS.Concrete;
 
@@ -2725,24 +2750,24 @@ let activeProjectNormalMaps = {}; // textureKey -> { texture: THREE.Texture, nam
             const pbrEnabled = true; // PBR теперь включен всегда для красоты
             const isWater = isWaterLike(textureId, matType);
             const isMetal = textureId === 'metal';
-            const isGlass = textureId === 'glass';
+            const isGlass = textureId === 'Glass';
             const isPlasma = textureId === 'plasma';
 
-            const reflectivity = extra.reflectivity !== undefined ? extra.reflectivity : (isGlass ? 2.0 : (isMetal || isWater ? preset.envMapIntensity : Math.min(preset.envMapIntensity, 0.12)));
-            const reflectBlur = extra.reflectBlur !== undefined ? extra.reflectBlur : (isGlass ? 0.05 : preset.roughness);
+            const reflectivity = extra.reflectivity !== undefined ? extra.reflectivity : (isGlass ? 2.35 : (isMetal || isWater ? preset.envMapIntensity : Math.min(preset.envMapIntensity, 0.12)));
+            const reflectBlur = extra.reflectBlur !== undefined ? extra.reflectBlur : (isGlass ? 0.035 : preset.roughness);
             const hasAlpha = !!(texture && texture.userData && texture.userData.hasAlpha) || isGlass;
             const baseColor = new THREE.Color(colorHex || 0xffffff);
             const manualLightSpec = Math.max(0, Math.min(1, window.engine?.manualLightSpecularStrength ?? 0.35));
 
             const props = {
-                map: texture,
+                map: isGlass ? null : texture,
                 color: baseColor,
                 roughness: Math.min(1, Math.max(0.02, reflectBlur)),
                 metalness: isMetal ? 0.85 : (isWater || isGlass ? 0.0 : preset.metalness || 0.0),
                 envMapIntensity: reflectivity,
                 envMap: window.engine?.getActiveEnvironmentMap?.() || null,
-                normalMap: normalMapTex,
-                normalScale: normalMapTex ? new THREE.Vector2(1.0, 1.0) : undefined,
+                normalMap: isGlass ? null : normalMapTex,
+                normalScale: (normalMapTex && !isGlass) ? new THREE.Vector2(1.0, 1.0) : undefined,
                 specularIntensity: manualLightSpec,
                 clearcoat: manualLightSpec * 0.25,
                 clearcoatRoughness: Math.max(0.08, 0.45 - manualLightSpec * 0.30)
@@ -2755,7 +2780,7 @@ let activeProjectNormalMaps = {}; // textureKey -> { texture: THREE.Texture, nam
 
             if (hasAlpha || isWater || preset.transparent || isGlass) {
                 props.transparent = true;
-                props.opacity = isGlass ? 0.5 : (isWater ? (preset.opacity ?? 0.7) : 1.0);
+                props.opacity = isGlass ? 0.30 : (isWater ? (preset.opacity ?? 0.7) : 1.0);
                 props.alphaTest = hasAlpha && !isGlass && !isWater ? 0.02 : 0.0;
                 props.depthWrite = false;
             }
@@ -2781,6 +2806,24 @@ let activeProjectNormalMaps = {}; // textureKey -> { texture: THREE.Texture, nam
                     props.envMapIntensity = Math.max(2.35, reflectivity || 0);
                     props.depthWrite = false;
                     props.premultipliedAlpha = false;
+                } else if (isGlass) {
+                    // Glass must react only to the active skybox/environment and scene lighting.
+                    // No texture map, no normal map, no watery transmission/refraction setup.
+                    props.roughness = Math.min(0.055, Math.max(0.01, reflectBlur));
+                    props.metalness = 0.0;
+                    props.transmission = 0.0;
+                    props.thickness = 0.0;
+                    props.ior = 1.45;
+                    props.clearcoat = 1.0;
+                    props.clearcoatRoughness = 0.015;
+                    props.specularIntensity = 1.0;
+                    props.specularColor = new THREE.Color(0xffffff);
+                    props.reflectivity = 0.92;
+                    props.envMapIntensity = Math.max(2.35, reflectivity || 0);
+                    props.opacity = 0.30;
+                    props.depthWrite = false;
+                    props.attenuationDistance = undefined;
+                    props.attenuationColor = undefined;
                 } else {
                     props.clearcoat = isMetal ? 0.2 : 0.05;
                     props.clearcoatRoughness = isMetal ? 0.16 : 0.35;
@@ -4036,11 +4079,11 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
             getMaterialEnvIntensity: function(obj) {
                 const type = obj?.userData?.materialType || 'Concrete';
-                const textureKey = obj?.userData?.texture;
+                const textureKey = canonicalTextureKey(obj?.userData?.texture);
                 const preset = MATERIAL_PRESETS[type] || MATERIAL_PRESETS.Concrete;
                 const base = obj?.userData?.skyboxReflectivity ?? preset.envMapIntensity;
                 if (isWaterLike(textureKey, type)) return Math.min(3.4, Math.max(2.15, base));
-                if (textureKey === 'metal' || textureKey === 'glass') return Math.min(2.5, Math.max(0.08, base));
+                if (textureKey === 'metal' || textureKey === 'Glass') return Math.min(2.8, Math.max(1.25, base));
                 return Math.min(0.14, Math.max(0.02, base));
             },
 
@@ -4437,7 +4480,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 const reflectInp = document.getElementById('inp-reflect');
                 const blurInp = document.getElementById('inp-reflect-blur');
                 return {
-                    tex: textureSel ? textureSel.value : 'grid',
+                    tex: canonicalTextureKey(textureSel ? textureSel.value : 'grid'),
                     matT: matSel ? matSel.value : 'Concrete',
                     col: colorInp ? colorInp.value : '#ffffff',
                     tMode: tilingSel ? tilingSel.value : 'stretch',
@@ -4511,9 +4554,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
             createShapeCube: function(origin, basis, localPos, scale, groupId, shapeType) {
                 const { tex, matT, col, tMode, reflectivity, reflectBlur } = this.getCurrentBrushSettings();
-                const preset = MATERIAL_PRESETS[matT] || MATERIAL_PRESETS.Concrete;
-                const initialReflect = reflectivity !== null && reflectivity !== undefined ? reflectivity : preset.envMapIntensity;
-                const initialBlur = reflectBlur !== null && reflectBlur !== undefined ? reflectBlur : preset.roughness;
+                const initialReflect = reflectivity !== null && reflectivity !== undefined ? reflectivity : getDefaultReflectivityForTexture(tex, matT);
+                const initialBlur = reflectBlur !== null && reflectBlur !== undefined ? reflectBlur : getDefaultReflectBlurForTexture(tex, matT);
                 const mesh = new THREE.Mesh(createBlockGeometry(tex, matT), createMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur }));
                 mesh.castShadow = !isWaterLike(tex, matT);
                 mesh.receiveShadow = true;
@@ -4546,9 +4588,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
             createShapeCubeTransformed: function(origin, basis, localPos, localRotDeg, localScale, groupId, shapeType) {
                 const { tex, matT, col, tMode, reflectivity, reflectBlur } = this.getCurrentBrushSettings();
-                const preset = MATERIAL_PRESETS[matT] || MATERIAL_PRESETS.Concrete;
-                const initialReflect = reflectivity !== null && reflectivity !== undefined ? reflectivity : preset.envMapIntensity;
-                const initialBlur = reflectBlur !== null && reflectBlur !== undefined ? reflectBlur : preset.roughness;
+                const initialReflect = reflectivity !== null && reflectivity !== undefined ? reflectivity : getDefaultReflectivityForTexture(tex, matT);
+                const initialBlur = reflectBlur !== null && reflectBlur !== undefined ? reflectBlur : getDefaultReflectBlurForTexture(tex, matT);
                 const mesh = new THREE.Mesh(createBlockGeometry(tex, matT), createMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur }));
                 mesh.castShadow = !isWaterLike(tex, matT);
                 mesh.receiveShadow = true;
@@ -4832,9 +4873,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
                 const groupId = this.makeShapeGroupId('glbImport');
                 const { tex, matT, col, tMode, reflectivity, reflectBlur } = this.getCurrentBrushSettings();
-                const preset = MATERIAL_PRESETS[matT] || MATERIAL_PRESETS.Concrete;
-                const initialReflect = reflectivity !== null && reflectivity !== undefined ? reflectivity : preset.envMapIntensity;
-                const initialBlur = reflectBlur !== null && reflectBlur !== undefined ? reflectBlur : preset.roughness;
+                const initialReflect = reflectivity !== null && reflectivity !== undefined ? reflectivity : getDefaultReflectivityForTexture(tex, matT);
+                const initialBlur = reflectBlur !== null && reflectBlur !== undefined ? reflectBlur : getDefaultReflectBlurForTexture(tex, matT);
                 const created = [];
 
                 // --- ОПТИМИЗАЦИЯ: один общий материал на весь импорт вместо N отдельных ---
@@ -5075,19 +5115,18 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             addCube: function(data = null) {
                 let tex = 'grid', matT = 'Concrete', col = '#ffffff', tMode = 'stretch', matName = null, sourceTag = null, reflectivity = null, reflectBlur = null;
                 if (data) {
-                    tex = data.userData.texture || data.userData.materialName || tex;
+                    tex = canonicalTextureKey(data.userData.texture || data.userData.materialName || tex);
                     matT = data.userData.materialType || data.userData.sourceTag || matT;
                     col = data.userData.colorHex || col;
                     tMode = data.userData.tilingMode || tMode;
-                    matName = data.userData.materialName || null;
+                    matName = data.userData.materialName ? canonicalTextureKey(data.userData.materialName) : null;
                     sourceTag = data.userData.sourceTag || null;
                     reflectivity = data.userData.skyboxReflectivity;
                     reflectBlur = data.userData.skyboxBlur;
                 }
-                const preset = MATERIAL_PRESETS[matT] || MATERIAL_PRESETS.Concrete;
-                const initialReflect = reflectivity !== null && reflectivity !== undefined ? reflectivity : preset.envMapIntensity;
-                const initialBlur = reflectBlur !== null && reflectBlur !== undefined ? reflectBlur : preset.roughness;
-                
+                const initialReflect = reflectivity !== null && reflectivity !== undefined ? reflectivity : getDefaultReflectivityForTexture(tex, matT);
+                const initialBlur = reflectBlur !== null && reflectBlur !== undefined ? reflectBlur : getDefaultReflectBlurForTexture(tex, matT);
+
                 const geometry = createBlockGeometry(tex, matT); 
                 const mesh = new THREE.Mesh(geometry, createMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur })); 
                 mesh.castShadow = !isWaterLike(tex, matT); 
@@ -5445,7 +5484,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 }
 
                 if (obj.userData.type !== 'spawn') {
-                    let texVal = obj.userData.texture;
+                    let texVal = canonicalTextureKey(obj.userData.texture);
+                    obj.userData.texture = texVal;
                     if (!document.querySelector(`#sel-texture option[value="${texVal}"]`)) {
                         // Если в общем селекторе нет текстуры, а она локальная - временно добавим
                         const sel = document.getElementById('sel-texture');
@@ -5482,7 +5522,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             updateObjectFromUI: function() {
                 if (this.selectedBlocks.length === 0) return;
                 if (this.selectedBlocks[0]?.userData?.type === 'light') { this.updateLightFromUI(true); return; }
-                const tex = document.getElementById('sel-texture').value; const matT = document.getElementById('sel-material').value; const col = document.getElementById('inp-color').value; const tMode = document.getElementById('sel-tiling').value;
+                const tex = canonicalTextureKey(document.getElementById('sel-texture').value); const matT = document.getElementById('sel-material').value; const col = document.getElementById('inp-color').value; const tMode = document.getElementById('sel-tiling').value;
                 const reflect = (parseFloat(document.getElementById('inp-reflect').value) || 0) / 50; const blur = (parseFloat(document.getElementById('inp-reflect-blur').value) || 0) / 100;
                 const resolvedMaterialName = BUILTIN_TEXTURE_KEYS.has(tex) ? getFallbackGoreBoxMaterialName(matT) : tex;
                 const isMulti = this.selectedBlocks.length > 1;
@@ -7143,10 +7183,10 @@ if (texSel) {
             refreshTextureOptions: function(selectedValue = null) {
                 const sel = document.getElementById('sel-texture');
                 if (!sel) return;
-                const current = selectedValue || sel.value || 'grid';
-                const projectKeys = Object.keys(activeProjectCustomTextures || {});
+                const current = canonicalTextureKey(selectedValue || sel.value || 'grid');
+                const projectKeys = [...new Set(Object.keys(activeProjectCustomTextures || {}).map(k => canonicalTextureKey(k)))];
                 const baseKeys = ALL_DEFAULT_TEXTURE_KEYS.filter(k => baseTextures[k]);
-                const zipKeys = Object.keys(baseTextures).filter(k => !baseKeys.includes(k)).sort((a, b) => a.localeCompare(b, 'ru'));
+                const zipKeys = [...new Set(Object.keys(baseTextures).map(k => canonicalTextureKey(k)))].filter(k => !baseKeys.includes(k)).sort((a, b) => a.localeCompare(b, 'ru'));
                 const projectOnlyKeys = projectKeys.filter(k => !baseKeys.includes(k) && !zipKeys.includes(k)).sort((a, b) => a.localeCompare(b, 'ru'));
                 const label = (key) => key;
                 sel.innerHTML = '';
@@ -8112,6 +8152,5 @@ if (texSel) {
 
 
 
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a17839eb7fede4b0',t:'MTc4MzQ0MTc0Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a17876021818ca21',t:'MTc4MzQ0NDIwOA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
