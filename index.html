@@ -2504,6 +2504,14 @@
         }
         function getFallbackGoreBoxMaterialName(materialType) { return GOREBOX_FALLBACK_MATERIAL_NAMES[materialType] || GOREBOX_FALLBACK_MATERIAL_NAMES.Concrete; }
         function getFallbackGoreBoxTag(materialType) { return GOREBOX_FALLBACK_TAGS[materialType] || GOREBOX_FALLBACK_TAGS.Concrete; }
+        // FIX: Процедурные текстуры, которых нет в GoreBox как файл — для них нужен фоллбэк materialName.
+        // Все остальные текстуры (загруженные из BaseTextures.zip или кастомные) используют своё имя
+        // как materialName, потому что GoreBox ищет текстуру по этому имени (либо в своей базе, либо в CustomTextures).
+        const PROCEDURAL_TEXTURE_KEYS = new Set(['grid', 'plain', 'dark', 'Glass', 'plasma', 'GBWater']);
+        function resolveGoreBoxMaterialName(textureKey, materialType) {
+            const tex = canonicalTextureKey(textureKey);
+            return PROCEDURAL_TEXTURE_KEYS.has(tex) ? getFallbackGoreBoxMaterialName(materialType || 'Concrete') : tex;
+        }
         function mapGoreBoxTagToMaterialType(tag) { if (tag === 'Water' || tag === 'GBWater') return 'Water'; if (tag === 'Wood') return 'Wood'; if (tag === 'Metal') return 'Metal'; if (tag === 'Grass' || tag === 'Dirt' || tag === 'Sand') return 'Grass'; if (tag === 'Carpet') return 'Carpet'; return 'Concrete'; }
         function mapTileModeToTiling(tileMode) { return tileMode === 0 ? 'xy' : tileMode === 1 ? 'yx' : 'stretch'; }
         function blobToDataURL(blob) {
@@ -4766,7 +4774,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     materialType: matT,
                     colorHex: col,
                     tilingMode: tMode,
-                    materialName: BUILTIN_TEXTURE_KEYS.has(tex) ? getFallbackGoreBoxMaterialName(matT) : tex,
+                    materialName: resolveGoreBoxMaterialName(tex, matT),
                     sourceTag: matT,
                     skyboxReflectivity: initialReflect,
                     skyboxBlur: initialBlur,
@@ -4808,7 +4816,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     materialType: matT,
                     colorHex: col,
                     tilingMode: tMode,
-                    materialName: BUILTIN_TEXTURE_KEYS.has(tex) ? getFallbackGoreBoxMaterialName(matT) : tex,
+                    materialName: resolveGoreBoxMaterialName(tex, matT),
                     sourceTag: matT,
                     skyboxReflectivity: initialReflect,
                     skyboxBlur: initialBlur,
@@ -5150,7 +5158,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     mesh.scale.set(sizeX, sizeY, thickness);
                     mesh.userData = {
                         type: 'cube', visible: true, collisions: true, texture: tex, materialType: matT, colorHex: col, tilingMode: tMode,
-                        materialName: BUILTIN_TEXTURE_KEYS.has(tex) ? getFallbackGoreBoxMaterialName(matT) : tex,
+                        materialName: resolveGoreBoxMaterialName(tex, matT),
                         sourceTag: matT, skyboxReflectivity: initialReflect, skyboxBlur: initialBlur,
                         groupId, shapeType: 'glbImport', shapePart: true
                     };
@@ -5326,7 +5334,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 mesh.castShadow = !isWaterLike(tex, matT); 
                 mesh.receiveShadow = true;
                 
-                const resolvedMaterialName = matName || (BUILTIN_TEXTURE_KEYS.has(tex) ? getFallbackGoreBoxMaterialName(matT) : tex); 
+                const resolvedMaterialName = matName || (resolveGoreBoxMaterialName(tex, matT)); 
                 const resolvedSourceTag = sourceTag || matT;
 
                 if (data) { 
@@ -5721,7 +5729,12 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 if (this.selectedBlocks[0]?.userData?.type === 'light') { this.updateLightFromUI(true); return; }
                 const tex = canonicalTextureKey(document.getElementById('sel-texture').value); const matT = document.getElementById('sel-material').value; const col = document.getElementById('inp-color').value; const tMode = document.getElementById('sel-tiling').value;
                 const reflect = (parseFloat(document.getElementById('inp-reflect').value) || 0) / 50; const blur = (parseFloat(document.getElementById('inp-reflect-blur').value) || 0) / 100;
-                const resolvedMaterialName = BUILTIN_TEXTURE_KEYS.has(tex) ? getFallbackGoreBoxMaterialName(matT) : tex;
+                // FIX: Для текстур из BaseTextures.zip (GoreBox-совместимых) используем само имя текстуры
+                // как materialName, потому что GoreBox ищет текстуру именно по этому имени.
+                // Фоллбэк на generic имя (Wall, Dirt и т.п.) применяется только для процедурных текстур
+                // (grid, Glass, plasma, GBWater), у которых нет файла в CustomTextures и нет точного
+                // совпадения в базе GoreBox.
+                const resolvedMaterialName = resolveGoreBoxMaterialName(tex, matT);
                 const isMulti = this.selectedBlocks.length > 1;
 
                 this.selectedBlocks.forEach((obj, idx) => {
@@ -6303,7 +6316,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     delete ud.lightSource; delete ud.lightTarget;
                     return { type: 'light', pos: {x: pos.x, y: pos.y, z: pos.z}, rot: {x: euler.x, y: euler.y, z: euler.z}, rotOrder: 'YXZ', quat: qData, scl: {x: scl.x, y: scl.y, z: scl.z}, userData: ud };
                 }
-                const materialType = obj.userData.materialType || 'Concrete'; const textureKey = obj.userData.texture || 'grid'; const resolvedMaterialName = obj.userData.materialName || (BUILTIN_TEXTURE_KEYS.has(textureKey) ? getFallbackGoreBoxMaterialName(materialType) : textureKey);
+                const materialType = obj.userData.materialType || 'Concrete'; const textureKey = obj.userData.texture || 'grid'; const resolvedMaterialName = obj.userData.materialName || resolveGoreBoxMaterialName(textureKey, materialType);
                 return { type: obj.userData.type, pos: {x: pos.x, y: pos.y, z: pos.z}, rot: {x: euler.x, y: euler.y, z: euler.z}, rotOrder: 'YXZ', quat: qData, scl: {x: scl.x, y: scl.y, z: scl.z}, userData: {...obj.userData, tilingMode: obj.userData.tilingMode || 'stretch', materialName: resolvedMaterialName, sourceTag: obj.userData.sourceTag || materialType} }; 
             },
 
@@ -6881,15 +6894,18 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     if (!isAxisAligned(tmpQ)) { nonMergeableBaked.push(b); return; }
                     const hx = Math.abs(tmpS.x) / 2, hy = Math.abs(tmpS.y) / 2, hz = Math.abs(tmpS.z) / 2;
                     const box = { min: { x: tmpP.x - hx, y: tmpP.y - hy, z: tmpP.z - hz }, max: { x: tmpP.x + hx, y: tmpP.y + hy, z: tmpP.z + hz } };
-                    const groupKey = (b.userData.collisions !== false) + '|' + (b.userData.materialType || 'Concrete') + '|' + (b.userData.sourceTag || '');
+                    // FIX: Используем стандартный GoreBox-тег (по materialType), а не кастомный sourceTag,
+                    // чтобы скрытые коллизионные кубы корректно группировались и не ломали физику.
+                    // Разделитель '\x00' гарантированно не встречается в пользовательских данных.
+                    const stdTag = getFallbackGoreBoxTag(b.userData.materialType || 'Concrete');
+                    const groupKey = (b.userData.collisions !== false) + '\x00' + (b.userData.materialType || 'Concrete') + '\x00' + stdTag;
                     if (!mergeGroups.has(groupKey)) mergeGroups.set(groupKey, []);
                     mergeGroups.get(groupKey).push({ box, srcCube: b });
                 });
 
                 mergeGroups.forEach((entries, groupKey) => {
-                    const [collisionsStr, materialType, sourceTag] = groupKey.split('|');
+                    const [collisionsStr, materialType, gbTag] = groupKey.split('\x00');
                     const mergedBoxes = this.greedyMergeBoxes(entries.map(e => e.box));
-                    const gbTag = sourceTag || getFallbackGoreBoxTag(materialType || 'Concrete');
                     mergedBoxes.forEach(box => {
                         const cx = (box.min.x + box.max.x) / 2, cy = (box.min.y + box.max.y) / 2, cz = (box.min.z + box.max.z) / 2;
                         const sx = box.max.x - box.min.x, sy = box.max.y - box.min.y, sz = box.max.z - box.min.z;
@@ -6905,7 +6921,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 });
 
                 nonMergeableBaked.forEach(b => {
-                    const gbTag = b.userData.sourceTag || getFallbackGoreBoxTag(b.userData.materialType || 'Concrete');
+                    // FIX: Для скрытых коллизионных кубов используем стандартный тег по materialType
+                    const gbTag = getFallbackGoreBoxTag(b.userData.materialType || 'Concrete');
                     let pos = new THREE.Vector3(), rot = new THREE.Quaternion(), scl = new THREE.Vector3();
                     b.getWorldPosition(pos); b.getWorldQuaternion(rot); b.getWorldScale(scl);
                     const gbEuler = threeQuaternionToUnityEulerDeg(rot);
@@ -6924,7 +6941,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     const gbTag = b.userData.sourceTag || getFallbackGoreBoxTag(b.userData.materialType || 'Concrete');
 
                     // Кубы без bake (вода и т.п.) — обычная сериализация, как в стандартном экспорте.
-                    const gbMatName = b.userData.materialName || (BUILTIN_TEXTURE_KEYS.has(b.userData.texture) ? getFallbackGoreBoxMaterialName(b.userData.materialType || 'Concrete') : (b.userData.texture || getFallbackGoreBoxMaterialName(b.userData.materialType || 'Concrete')));
+                    const gbMatName = b.userData.materialName || resolveGoreBoxMaterialName(b.userData.texture, b.userData.materialType);
                     let pos = new THREE.Vector3(), rot = new THREE.Quaternion(), scl = new THREE.Vector3();
                     b.getWorldPosition(pos); b.getWorldQuaternion(rot); b.getWorldScale(scl);
                     const gbEuler = threeQuaternionToUnityEulerDeg(rot);
@@ -6942,21 +6959,25 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 // Декаль-кубы — по одному на грань, с запечёнными текстурами, режим Stretch (tileMode: 2).
                 bakeResult.newDecalDefs.forEach(decal => {
                     const t = this.buildDecalTransform(decal, SKIN_THICKNESS, SKIN_OFFSET);
-                    const gbEuler = threeQuaternionToUnityEulerDeg(t.quaternion);
-                    const gbTag = decal.cubeRef.userData.sourceTag || getFallbackGoreBoxTag(decal.cubeRef.userData.materialType || 'Concrete');
+                    // FIX: Вместо отрицательного scale (который GoreBox/Unity обрабатывает непредсказуемо —
+                    // backface culling выворачивает полигоны, текстуры зеркалятся или куб вообще невидим),
+                    // компенсируем смену хиральности (Three.js right-handed → GoreBox/Unity left-handed)
+                    // через поворот quaternion'а на 180° вокруг локальной оси нормали (Z декаля).
+                    // Поворот на π вокруг Z одновременно зеркалит X и Y, что даёт тот же визуальный
+                    // результат, что и отрицательный scale по X и Y, но без проблем с backface culling.
+                    const flipQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI);
+                    const correctedQ = t.quaternion.clone().multiply(flipQ);
+                    const gbEuler = threeQuaternionToUnityEulerDeg(correctedQ);
+                    // FIX: tag для декаль-кубов должен быть стандартным GoreBox-тегом, соответствующим
+                    // физическому материалу оригинального куба. Кастомные теги (вроде "Sand Pebbles")
+                    // заставляют GoreBox искать встроенную текстуру по тегу и перебивать materialName.
+                    const gbTag = getFallbackGoreBoxTag(decal.cubeRef.userData.materialType || 'Concrete');
                     mapData.cubes.push({
                         name: "MapCube", tag: gbTag, tileMode: 2, visible: true, collisions: false, physics: false,
                         materialName: decal.materialName,
                         position: { x: t.position.x, y: t.position.y, z: -t.position.z },
                         rotation: { x: gbEuler.x, y: gbEuler.y, z: gbEuler.z },
-                        // ВАЖНО: декаль-кубы строятся вручную через собственный базис (xAxis/yAxis/zAxis из
-                        // buildDecalTransform), а не через обычный mesh.quaternion/scale. Из-за смены хиральности
-                        // (right-handed Three.js -> left-handed GoreBox/Unity) при таком ручном построении базиса
-                        // результирующий куб в GoreBox оказывается зеркально вывернут по своим локальным осям
-                        // X и Y (ширина/высота грани), поэтому их знак нужно инвертировать перед экспортом.
-                        // Z (толщина декали, вдоль нормали грани) остаётся положительным — экспериментально
-                        // подтверждено на реальных кубах в GoreBox.
-                        scale: { x: -t.scale.x, y: -t.scale.y, z: t.scale.z }
+                        scale: { x: t.scale.x, y: t.scale.y, z: t.scale.z }
                     });
                 });
 
@@ -6967,7 +6988,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 const mapData = { version: 4, cubes: [] };
                 this.blocks.forEach(b => {
                     const gbTag = b.userData.sourceTag || getFallbackGoreBoxTag(b.userData.materialType || 'Concrete');
-                    const gbMatName = b.userData.materialName || (BUILTIN_TEXTURE_KEYS.has(b.userData.texture) ? getFallbackGoreBoxMaterialName(b.userData.materialType || 'Concrete') : (b.userData.texture || getFallbackGoreBoxMaterialName(b.userData.materialType || 'Concrete')));
+                    const gbMatName = b.userData.materialName || resolveGoreBoxMaterialName(b.userData.texture, b.userData.materialType);
                     
                     let pos = new THREE.Vector3(), rot = new THREE.Quaternion(), scl = new THREE.Vector3(); 
                     b.getWorldPosition(pos); 
@@ -8374,5 +8395,5 @@ if (texSel) {
 
 
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a17fdd008881e4b5',t:'MTc4MzUyMTgyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a181076ec96ac9d1',t:'MTc4MzUzNDA1MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a17fdd008881e4b5',t:'MTc4MzUyMTgyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a181076ec96ac9d1',t:'MTc4MzUzNDA1MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a189a75a0fe0ca29',t:'MTc4MzYyNDQ4OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
