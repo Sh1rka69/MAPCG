@@ -6597,18 +6597,32 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                             // Расстояние между плоскостями граней вдоль нормали — контакт, если почти нулевое.
                             const dist = Math.abs(oCenter.clone().sub(faceCenter).dot(worldNormal));
                             if (dist > CONTACT_EPS) continue;
-                            // Проверяем, что грань соседа накрывает грань владельца по площади (в его локальных tangent/bitangent).
-                            let oW, oH;
-                            if (of_.axis === 'x') { oW = sz; oH = sy; }
-                            else if (of_.axis === 'y') { oW = sx; oH = sz; }
-                            else { oW = sx; oH = sy; }
+                            // FIX: Вычисляем МИРОВЫЕ tangent/bitangent грани соседа (с учётом quaternion поворота),
+                            // затем проецируем их на tangent/bitangent владельца для корректной проверки покрытия.
+                            // Старый код использовал локальные размеры (oW = sx/sy/sz), что для повёрнутых соседей
+                            // давало перепутанные размеры: например, для rotation(0,0,90) scale(0.736, 0.6, 0.05)
+                            // мировые размеры X=0.6 Y=0.736, но код считал oW=0.736 oH=0.6 — из-за этого сосед
+                            // казался шире реального и ложно «покрывал» грань владельца (false positive),
+                            // из-за чего декаль-куб не создавался и в GoreBox была видна голая Tiled-текстура.
+                            const worldOTangent = of_.t.clone().applyQuaternion(info.quat).normalize();
+                            const worldOBitangent = of_.b.clone().applyQuaternion(info.quat).normalize();
+                            let localHalfW, localHalfH;
+                            if (of_.axis === 'x') { localHalfW = sz * 0.5; localHalfH = sy * 0.5; }
+                            else if (of_.axis === 'y') { localHalfW = sx * 0.5; localHalfH = sz * 0.5; }
+                            else { localHalfW = sx * 0.5; localHalfH = sy * 0.5; }
+                            // Проекция мировых полуосей грани соседа на tangent/bitangent владельца:
+                            // правильно учитывает любой поворот соседа (а не только axis-aligned).
+                            const halfOAlongTangent = Math.abs(worldOTangent.dot(worldTangent)) * localHalfW +
+                                                      Math.abs(worldOBitangent.dot(worldTangent)) * localHalfH;
+                            const halfOAlongBitangent = Math.abs(worldOTangent.dot(worldBitangent)) * localHalfW +
+                                                        Math.abs(worldOBitangent.dot(worldBitangent)) * localHalfH;
                             const toOther = oCenter.clone().sub(faceCenter);
                             const dTang = Math.abs(toOther.dot(worldTangent));
                             const dBitang = Math.abs(toOther.dot(worldBitangent));
                             // Сосед должен и накрывать грань владельца (запас по половинам сторон), и не выступать
                             // мимо неё в стороны настолько, что оставит открытый зазор — тут допускаем небольшой
                             // допуск CONTACT_EPS, т.к. нас интересует именно герметичный, невидимый снаружи стык.
-                            if (dTang + faceW / 2 <= oW / 2 + CONTACT_EPS && dBitang + faceH / 2 <= oH / 2 + CONTACT_EPS) {
+                            if (dTang + faceW / 2 <= halfOAlongTangent + CONTACT_EPS && dBitang + faceH / 2 <= halfOAlongBitangent + CONTACT_EPS) {
                                 return true;
                             }
                         }
@@ -6875,10 +6889,21 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             // коллизионный куб (физика/геометрия сохраняется) + 6 видимых тонких декаль-кубов с запечёнными текстурами.
             // Кубы, для которых bake не делался (вода и т.п.) экспортируются как обычно.
             serializeToGoreBoxFormatLit: function(bakeResult) {
-                const SKIN_THICKNESS = 0.004;
-                const SKIN_OFFSET = 0.003;
+                // FIX: Увеличены с 0.004/0.003 до 0.008/0.005. На мобильных устройствах GoreBox (Unity)
+                // depth buffer имеет ограниченную точность, и слишком тонкие декаль-кубы (z=0.004) на
+                // расстоянии 0.003 от поверхности могли вызывать z-fighting или вообще не рендериться.
+                // Новые значения гарантированно видимы на любом устройстве, при этом 0.005+0.008=0.013м
+                // визуально неотличимо от нулевого смещения (меньше 1.5 см).
+                const SKIN_THICKNESS = 0.008;
+                const SKIN_OFFSET = 0.005;
                 const mapData = { version: 4, cubes: [] };
-                const bakedCubeIds = new Set(bakeResult.litCubes.map(c => c.uuid));
+                // FIX: Определяем, какие кубы из litCubes РЕАЛЬНО получили хотя бы один декаль-куб.
+                // Кубы, для которых isFaceHiddenByNeighbor определила ВСЕ 6 граней как скрытые,
+                // не имеют декаль-кубов. Раньше они всё равно становились visible: false (как коллизионные),
+                // но без декаль-обёртки — и в GoreBox полностью пропадали. Теперь такие кубы экспортируются
+                // как обычные видимые (visible: true) с их оригинальной текстурой, чтобы не терять геометрию.
+                const cubesWithDecals = new Set(bakeResult.newDecalDefs.map(d => d.cubeRef.uuid));
+                const bakedCubeIds = new Set(bakeResult.litCubes.filter(c => cubesWithDecals.has(c.uuid)).map(c => c.uuid));
 
                 // ── Оптимизация: объединяем скрытые коллизионные кубы, стоящие вплотную друг к другу
                 // в правильную решётку (квадрат/куб/стену), в минимально возможное число больших боксов.
@@ -6895,6 +6920,10 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 const tmpP = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3();
 
                 bakeResult.litCubes.forEach(b => {
+                    // FIX: Кубы без декаль-кубов (все грани "скрыты" по isFaceHiddenByNeighbor) пропускаем здесь —
+                    // они попадут в this.blocks.forEach ниже и будут экспортированы как обычные видимые кубы
+                    // с оригинальной текстурой, чтобы не пропадать в GoreBox.
+                    if (!cubesWithDecals.has(b.uuid)) return;
                     b.getWorldPosition(tmpP); b.getWorldQuaternion(tmpQ); b.getWorldScale(tmpS);
                     if (!isAxisAligned(tmpQ)) { nonMergeableBaked.push(b); return; }
                     const hx = Math.abs(tmpS.x) / 2, hy = Math.abs(tmpS.y) / 2, hz = Math.abs(tmpS.z) / 2;
