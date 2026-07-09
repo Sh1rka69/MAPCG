@@ -6616,8 +6616,13 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     return false;
                 };
 
-                // Предварительно считаем, сколько граней реально будут запечены (грани меньше 0.50 по стороне
+                // Предварительно считаем, сколько граней реально будут запечены (грани меньше MIN_FACE_SIZE по стороне
                 // и грани, наглухо зажатые соседним кубом впритык, пропускаются и не входят в счётчик).
+                // FIX: Порог снижен с 0.50 до 0.01 (1 см). Старый порог 0.50 пропускал грани тонких кубов
+                // (стрелки часов, столбики, рамки — всё, что тоньше 50 см по любому измерению),
+                // из-за чего у них не создавались декаль-кубы и в GoreBox был виден голый коллизионный куб
+                // с дефолтным "Tiled" материалом вместо запечённой текстуры.
+                const MIN_FACE_SIZE = 0.01;
                 let totalFaces = 0;
                 const _tPos = new THREE.Vector3(), _tQuat = new THREE.Quaternion(), _tScale = new THREE.Vector3();
                 const _tNormal = new THREE.Vector3(), _tTangent = new THREE.Vector3(), _tBitangent = new THREE.Vector3(), _tCenter = new THREE.Vector3();
@@ -6629,7 +6634,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                         if (face.id === 'px' || face.id === 'nx') { fW = sz; fH = sy; }
                         else if (face.id === 'py' || face.id === 'ny') { fW = sx; fH = sz; }
                         else { fW = sx; fH = sy; }
-                        if (fW < 0.50 || fH < 0.50) continue;
+                        if (fW < MIN_FACE_SIZE || fH < MIN_FACE_SIZE) continue;
                         _tNormal.copy(face.normal).applyQuaternion(_tQuat).normalize();
                         _tTangent.copy(face.tangent).applyQuaternion(_tQuat).normalize();
                         _tBitangent.copy(face.bitangent).applyQuaternion(_tQuat).normalize();
@@ -6661,8 +6666,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                             else if (face.id === 'py' || face.id === 'ny') { faceW = sx; faceH = sz; }
                             else { faceW = sx; faceH = sy; }
                             faceW = Math.max(faceW, 0.001); faceH = Math.max(faceH, 0.001);
-                            // Если грань слишком узкая (одна из сторон < 0.50), не фотографируем её — экономим текстуры и декаль-кубы.
-                            if (faceW < 0.50 || faceH < 0.50) continue;
+                            // Если грань слишком узкая (одна из сторон < MIN_FACE_SIZE), не фотографируем её — экономим текстуры и декаль-кубы.
+                            if (faceW < MIN_FACE_SIZE || faceH < MIN_FACE_SIZE) continue;
 
                             worldNormal.copy(face.normal).applyQuaternion(tmpQuat).normalize();
                             worldTangent.copy(face.tangent).applyQuaternion(tmpQuat).normalize();
@@ -8395,5 +8400,5 @@ if (texSel) {
 
 
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a17fdd008881e4b5',t:'MTc4MzUyMTgyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a181076ec96ac9d1',t:'MTc4MzUzNDA1MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a189a75a0fe0ca29',t:'MTc4MzYyNDQ4OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a17fdd008881e4b5',t:'MTc4MzUyMTgyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a181076ec96ac9d1',t:'MTc4MzUzNDA1MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
