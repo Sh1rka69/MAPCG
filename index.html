@@ -2308,16 +2308,22 @@
         let subjectsNetworkLoading = false;
 
         function parseSubjectCubes(rawArr) {
+            // Keep original GoreBox fields intact (incl. numeric tileMode + raw Unity
+            // position/rotation). Conversion to Three.js happens only at spawn/import time
+            // via mapGoreBoxCubeToProjectBlock — same path as real maps.
             return (Array.isArray(rawArr) ? rawArr : []).map(c => ({
+                name: c.name || 'MapCube',
                 materialName: c.materialName,
                 tag: c.tag || 'Concrete',
-                tileMode: mapTileModeToTiling(c.tileMode),
+                // preserve numeric GoreBox tileMode when present; also store string form
+                tileMode: (typeof c.tileMode === 'number') ? c.tileMode : c.tileMode,
+                tilingMode: mapTileModeToTiling(typeof c.tileMode === 'number' ? c.tileMode : (c.tileMode === 'xy' ? 0 : c.tileMode === 'yx' ? 1 : 2)),
                 visible: c.visible !== false,
                 collisions: c.collisions !== false,
                 physics: !!c.physics,
-                position: c.position,
-                rotation: c.rotation,
-                scale: c.scale
+                position: c.position ? { x: +c.position.x || 0, y: +c.position.y || 0, z: +c.position.z || 0 } : { x: 0, y: 0, z: 0 },
+                rotation: c.rotation ? { x: +c.rotation.x || 0, y: +c.rotation.y || 0, z: +c.rotation.z || 0 } : { x: 0, y: 0, z: 0 },
+                scale: c.scale ? { x: +c.scale.x || 1, y: +c.scale.y || 1, z: +c.scale.z || 1 } : { x: 1, y: 1, z: 1 }
             }));
         }
 
@@ -5050,18 +5056,38 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             // ======== SPAWN COLLECTION OBJECT ========
             spawnCollectionObject: function(item) {
                 // item: { name, cubeCount, image, cubes: [{materialName, tag, tileMode, visible, collisions, physics, position, rotation, scale}] }
+                // ВАЖНО: JSON коллекции — это GoreBox/Unity (left-handed). Нельзя просто
+                // копировать position/rotation в Three.js: при импорте карт используется
+                // mapGoreBoxCubeToProjectBlock (Z → -Z + unityEulerDegToThreeQuaternion).
+                // Раньше spawnCollectionObject инвертировал только rotation, а position.z
+                // оставлял Unity-шным → кубы оказывались "зеркально" относительно друг друга
+                // (клавиатура монитора, арки моста и т.п.). Используем тот же пайплайн.
                 const origin = this.getShapeOrigin();
                 const groupId = this.makeShapeGroupId('collection');
                 const created = [];
 
                 item.cubes.forEach(cubeDef => {
-                    // Resolve material: materialName is a GoreBox named texture (e.g. "Red Bricks", "BlackConcrete")
-                    // We use it as the texture key. materialType comes from tag.
-                    const matName = cubeDef.materialName || 'grid';
-                    const matT = cubeDef.tag || 'Concrete';
-                    const tex = matName; // named GoreBox texture -> pass directly, createMaterial handles it
-                    const col = '#ffffff';
-                    const tMode = cubeDef.tileMode || 'stretch';
+                    // Прогоняем через тот же Unity→Three конвертер, что и .gbmap / MapData.json
+                    const mapped = mapGoreBoxCubeToProjectBlock({
+                        name: cubeDef.name || 'MapCube',
+                        tag: cubeDef.tag || 'Concrete',
+                        tileMode: (typeof cubeDef.tileMode === 'number')
+                            ? cubeDef.tileMode
+                            : (cubeDef.tileMode === 'xy' ? 0 : cubeDef.tileMode === 'yx' ? 1 : cubeDef.tileMode === 'stretch' ? 2 : 1),
+                        visible: cubeDef.visible !== false,
+                        collisions: cubeDef.collisions !== false,
+                        physics: !!cubeDef.physics,
+                        materialName: cubeDef.materialName || 'grid',
+                        position: cubeDef.position || { x: 0, y: 0, z: 0 },
+                        rotation: cubeDef.rotation || { x: 0, y: 0, z: 0 },
+                        scale: cubeDef.scale || { x: 1, y: 1, z: 1 }
+                    });
+
+                    const matName = mapped.userData.materialName || cubeDef.materialName || 'grid';
+                    const matT = mapped.userData.materialType || cubeDef.tag || 'Concrete';
+                    const tex = mapped.userData.texture || matName;
+                    const col = mapped.userData.colorHex || '#ffffff';
+                    const tMode = mapped.userData.tilingMode || 'stretch';
 
                     const preset = MATERIAL_PRESETS[matT] || MATERIAL_PRESETS.Concrete;
                     const initialReflect = preset.envMapIntensity;
@@ -5073,22 +5099,21 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     mesh.castShadow = !isWaterLike(tex, matT);
                     mesh.receiveShadow = true;
 
-                    // Position: collection objects are relative to center, place relative to origin in world
-                    const p = cubeDef.position || {x:0,y:0,z:0};
-                    const r = cubeDef.rotation || {x:0,y:0,z:0};
-                    const s = cubeDef.scale || {x:1,y:1,z:1};
-
+                    // Local GoreBox coords already converted to Three space in `mapped`.
+                    // Place the whole object relative to the spawn origin.
                     mesh.position.set(
-                        origin.x + p.x,
-                        origin.y + p.y,
-                        origin.z + p.z
+                        origin.x + (mapped.pos?.x || 0),
+                        origin.y + (mapped.pos?.y || 0),
+                        origin.z + (mapped.pos?.z || 0)
                     );
-                    // Collection cubes are stored in GoreBox/Unity-like degrees.
-                    // Convert them through the same bridge as imported GoreBox maps.
-                    mesh.quaternion.copy(unityEulerDegToThreeQuaternion(r));
-                    mesh.scale.set(s.x, s.y, s.z);
+                    if (mapped.quat && Number.isFinite(mapped.quat.w)) {
+                        mesh.quaternion.set(mapped.quat.x || 0, mapped.quat.y || 0, mapped.quat.z || 0, mapped.quat.w).normalize();
+                    } else {
+                        mesh.quaternion.copy(unityEulerDegToThreeQuaternion(cubeDef.rotation || { x: 0, y: 0, z: 0 }));
+                    }
+                    mesh.scale.set(mapped.scl?.x || 1, mapped.scl?.y || 1, mapped.scl?.z || 1);
 
-                    const isVisible = cubeDef.visible !== false;
+                    const isVisible = mapped.userData.visible !== false;
                     if (!isVisible) {
                         this.releaseCubeMaterial(mesh.material);
                         mesh.material = this.acquireCubeMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur }, false);
@@ -5098,18 +5123,19 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     mesh.userData = {
                         type: 'cube',
                         visible: isVisible,
-                        collisions: cubeDef.collisions !== false,
+                        collisions: mapped.userData.collisions !== false,
                         texture: tex,
                         materialType: matT,
                         colorHex: col,
                         tilingMode: tMode,
                         materialName: matName,
-                        sourceTag: matT,
+                        sourceTag: mapped.userData.sourceTag || matT,
                         skyboxReflectivity: initialReflect,
                         skyboxBlur: initialBlur,
                         groupId: groupId,
                         shapeType: 'collection',
-                        shapePart: true
+                        shapePart: true,
+                        collectionName: item.name || null
                     };
 
                     this.updateCubeUVs(mesh);
