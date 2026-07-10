@@ -22,6 +22,9 @@
 
         :root {
             --ui-scale: 0.7;
+            --joystick-size: 150px;
+            --joystick-knob-size: 63px;
+            --joystick-opacity: 0.85;
             --td-bg-0: #0a0a0c;
             --td-bg-1: #111114;
             --td-bg-2: #18181c;
@@ -618,6 +621,46 @@
             transform: translateX(-50%);
         }
 
+
+        /* ── Mobile virtual joystick ───────────────────────────────────── */
+        #mobile-joystick {
+            position: absolute;
+            left: 24px;
+            bottom: 28px;
+            width: var(--joystick-size);
+            height: var(--joystick-size);
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1.5px solid rgba(255, 255, 255, 0.28);
+            box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.35);
+            opacity: var(--joystick-opacity);
+            z-index: 45;
+            pointer-events: auto;
+            touch-action: none;
+            display: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #mobile-joystick.visible {
+            display: block;
+        }
+        #mobile-joystick-knob {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: var(--joystick-knob-size);
+            height: var(--joystick-knob-size);
+            border-radius: 50%;
+            background: rgba(255, 138, 61, 0.55);
+            border: 1.5px solid rgba(255, 184, 112, 0.85);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        #mobile-joystick.floating-active {
+            transition: none;
+        }
+
         .modal-enter { animation: tdModalIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
 
         .ui-scale-layer.modal-enter {
@@ -983,6 +1026,11 @@
 
             <!-- MIN PIXEL SCALE -->
             <button onclick="engine.applyPixelRatio(0.2); const pr = document.getElementById('setting-pixel-ratio'); if (pr) pr.value = 0.2; const lbl = document.getElementById('pixel-ratio-val'); if (lbl) lbl.innerText = '0.20x';" class="absolute bottom-2 left-2 z-50 px-2 py-1 text-xs font-semibold pointer-events-auto select-none transition" style="background: rgba(0,0,0,0.6); border: 1px solid var(--td-border); color: var(--td-text-dim);" title="Set Pixel Scale to 0.20x">MIN</button>
+
+            <!-- MOBILE JOYSTICK -->
+            <div id="mobile-joystick" aria-hidden="true">
+                <div id="mobile-joystick-knob"></div>
+            </div>
 
             <!-- TOP BAR -->
             <div class="ui-panel h-12 w-full flex items-center justify-between px-3 pointer-events-auto z-40 relative" style="border-bottom: 1px solid var(--td-border);">
@@ -1537,6 +1585,41 @@
                             <input type="range" id="setting-camera-move-speed" min="0.1" max="5" step="0.1" value="1" class="flex-1" oninput="document.getElementById('camera-move-speed-val').innerText = Number(this.value).toFixed(1); engine.applyCameraMoveSpeed?.(parseFloat(this.value));">
                             <span id="camera-move-speed-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">1.0</span>
                         </div>
+
+                        <label class="td-label block mt-3 mb-1">Hitbox Opacity</label>
+                        <div class="flex items-center gap-2 mb-1">
+                            <input type="range" id="setting-hitbox-opacity" min="0" max="1" step="0.05" value="0.8" class="flex-1" oninput="document.getElementById('hitbox-opacity-val').innerText = Math.round(Number(this.value) * 100) + '%'; engine.applyHitboxOpacity?.(parseFloat(this.value));">
+                            <span id="hitbox-opacity-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">80%</span>
+                        </div>
+                        <p class="text-[10px] mb-3 leading-tight" style="color: var(--td-text-muted);">Yellow selection outline transparency.</p>
+
+                        <div class="p-2 mt-1" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                            <label class="td-label block mb-2" style="font-size: 9px;">Mobile Joystick</label>
+
+                            <label class="flex items-center gap-2 mb-2 cursor-pointer">
+                                <input type="checkbox" id="setting-joystick-enabled" onchange="engine.applyJoystickEnabled?.(this.checked);">
+                                <span class="text-xs" style="color: var(--td-text-dim);">Enable Joystick Mode</span>
+                            </label>
+                            <p class="text-[10px] mb-2 leading-tight" style="color: var(--td-text-muted);">Off: move camera with fingers. On: move with on-screen joystick.</p>
+
+                            <label class="flex items-center gap-2 mb-2 cursor-pointer">
+                                <input type="checkbox" id="setting-joystick-floating" onchange="engine.applyJoystickFloating?.(this.checked);">
+                                <span class="text-xs" style="color: var(--td-text-dim);">Floating Joystick</span>
+                            </label>
+                            <p class="text-[10px] mb-3 leading-tight" style="color: var(--td-text-muted);">Joystick appears under the finger where you touch.</p>
+
+                            <label class="td-label block mb-1" style="font-size: 9px;">Joystick Opacity</label>
+                            <div class="flex items-center gap-2 mb-2">
+                                <input type="range" id="setting-joystick-opacity" min="0.1" max="1" step="0.05" value="0.85" class="flex-1" oninput="document.getElementById('joystick-opacity-val').innerText = Math.round(Number(this.value) * 100) + '%'; engine.applyJoystickOpacity?.(parseFloat(this.value));">
+                                <span id="joystick-opacity-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">85%</span>
+                            </div>
+
+                            <label class="td-label block mb-1" style="font-size: 9px;">Joystick Size</label>
+                            <div class="flex items-center gap-2">
+                                <input type="range" id="setting-joystick-size" min="80" max="260" step="5" value="150" class="flex-1" oninput="document.getElementById('joystick-size-val').innerText = this.value + 'px'; engine.applyJoystickSize?.(parseInt(this.value, 10));">
+                                <span id="joystick-size-val" class="mono text-xs w-12 text-right" style="color: var(--td-accent);">150px</span>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Graphics -->
@@ -1608,7 +1691,7 @@
                         </label>
 
                         <label class="flex items-center gap-2 mb-2 cursor-pointer">
-                            <input type="checkbox" id="setting-water-waves" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked>
+                            <input type="checkbox" id="setting-water-waves" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();">
                             <span class="text-xs" style="color: var(--td-text-dim);" data-i18n="waterWaves">Water Waves</span>
                         </label>
 
@@ -2435,7 +2518,7 @@
         }
 
         const weatherUniforms = { uTime: { value: 0 }, uWeatherType: { value: 0 }, uWeatherIntensity: { value: 0 } };
-        const waterUniforms = { uWavesEnabled: { value: 1.0 } };
+        const waterUniforms = { uWavesEnabled: { value: 0.0 } };
 
         function isWaterLike(textureId, matType) {
             return matType === 'Water' || textureId === 'GBWater';
@@ -3018,7 +3101,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
         const spawnMaterial = new THREE.MeshBasicMaterial({ color: 0x3b82f6, wireframe: true, transparent: true, opacity: 0.6 });
         const sharedEdgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
-        const outlineMat = new THREE.LineBasicMaterial({ color: 0xffea00, linewidth: 3, depthTest: false, transparent: true, opacity: 0.8 });
+        const outlineMat = new THREE.LineBasicMaterial({ color: 0xffea00, linewidth: 3, depthTest: false, depthWrite: false, transparent: true, opacity: 0.8 });
+        let hitboxOpacityValue = 0.8;
 
         // ── Быстрый мировой AABB для куба-меша (без обхода геометрии) ────────────────────────
         // Box3.setFromObject() проходит по ВСЕМ вершинам геометрии (у воды это 32x6x32 сегментов —
@@ -3059,7 +3143,10 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             frustum: new THREE.Frustum(), projScreenMatrix: new THREE.Matrix4(),
             isMultiSelectMode: false, shapeGroupSelect: true, shapesPanelOpen: false, transformGroup: new THREE.Group(),
             isMobile: false, editorMode: true,
-            mobileJoystick: { active: false, pointerId: null, x: 0, y: 0 },
+            mobileJoystick: { active: false, pointerId: null, x: 0, y: 0, baseLeft: 24, baseBottom: 28, originX: 0, originY: 0 },
+            joystickEnabled: false,
+            joystickFloating: false,
+            hitboxOpacity: 0.8,
             
 
             // === REALISTIC WATER CONTACT FOAM PARTICLES ===
@@ -3999,6 +4086,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 window.addEventListener('resize', this.onWindowResize.bind(this));
                 window.addEventListener('orientationchange', () => { setTimeout(() => this.onWindowResize(), 50); setTimeout(() => this.onWindowResize(), 300); });
                 this.setupTouchLook();
+                this.setupMobileJoystick();
 
                 // Улучшенный обработчик нажатий для исключения ложных срабатываний при свайпе
                 this.renderer.domElement.addEventListener('pointerdown', this.onPointerDown.bind(this));
@@ -4009,7 +4097,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 window.addEventListener('keydown', this.onKeyDown.bind(this));
                 window.addEventListener('keyup', this.onKeyUp.bind(this));
 
-                this.updateEnvironment(); this.applyCameraSensitivity(parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1')); this.applyCameraMoveSpeed(parseFloat(localStorage.getItem('mmcg_camera_move_55') || '1')); this.applyPixelRatio(parseFloat(localStorage.getItem('mmcg_pixel_ratio_55') || '0.8')); this.applyFpsCounterVisibility(localStorage.getItem('mmcg_show_fps_55') === '1'); this.applyPixelSmoothing(localStorage.getItem('mmcg_pixel_smoothing_55') === '1'); this.updateSelectionPanels(); this.camera.far = 2000; this.camera.updateProjectionMatrix(); this.updateDepthEncodingUniforms(); this.animate();
+                this.updateEnvironment(); this.applyCameraSensitivity(parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1')); this.applyCameraMoveSpeed(parseFloat(localStorage.getItem('mmcg_camera_move_55') || '1')); this.applyPixelRatio(parseFloat(localStorage.getItem('mmcg_pixel_ratio_55') || '0.8')); this.applyFpsCounterVisibility(localStorage.getItem('mmcg_show_fps_55') === '1'); this.applyPixelSmoothing(localStorage.getItem('mmcg_pixel_smoothing_55') === '1'); this.applyHitboxOpacity(parseFloat(localStorage.getItem('mmcg_hitbox_opacity_55') || '0.8'), false); this.updateSelectionPanels(); this.camera.far = 2000; this.camera.updateProjectionMatrix(); this.updateDepthEncodingUniforms(); this.animate();
             },
 
             initClouds: function() {
@@ -4385,24 +4473,65 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 if (!this.mobileJoystickEl || !this.mobileJoystickKnob) return;
 
                 // Load saved joystick prefs
-                const savedSize = parseInt(localStorage.getItem('mmcg_joystick_size_55') || '150');
+                const savedSize = parseInt(localStorage.getItem('mmcg_joystick_size_55') || '150', 10);
                 const savedOpacity = parseFloat(localStorage.getItem('mmcg_joystick_opacity_55') || '0.85');
+                const savedEnabled = localStorage.getItem('mmcg_joystick_enabled_55') === '1';
+                const savedFloating = localStorage.getItem('mmcg_joystick_floating_55') === '1';
                 this.applyJoystickSize(savedSize);
                 this.applyJoystickOpacity(savedOpacity);
+                this.applyJoystickEnabled(savedEnabled, false);
+                this.applyJoystickFloating(savedFloating, false);
+
                 const sizeSlider = document.getElementById('setting-joystick-size');
                 const opacitySlider = document.getElementById('setting-joystick-opacity');
-                if (sizeSlider) { sizeSlider.value = savedSize; document.getElementById('joystick-size-val').innerText = savedSize + 'px'; }
-                if (opacitySlider) { opacitySlider.value = savedOpacity; document.getElementById('joystick-opacity-val').innerText = Math.round(savedOpacity * 100) + '%'; }
+                const enabledCb = document.getElementById('setting-joystick-enabled');
+                const floatingCb = document.getElementById('setting-joystick-floating');
+                if (sizeSlider) { sizeSlider.value = savedSize; const el = document.getElementById('joystick-size-val'); if (el) el.innerText = savedSize + 'px'; }
+                if (opacitySlider) { opacitySlider.value = savedOpacity; const el = document.getElementById('joystick-opacity-val'); if (el) el.innerText = Math.round(savedOpacity * 100) + '%'; }
+                if (enabledCb) enabledCb.checked = !!savedEnabled;
+                if (floatingCb) floatingCb.checked = !!savedFloating;
 
                 const reset = () => {
                     this.mobileJoystick.active = false;
                     this.mobileJoystick.pointerId = null;
                     this.mobileJoystick.x = 0;
                     this.mobileJoystick.y = 0;
-                    this.mobileJoystickKnob.style.transform = 'translate(-50%, -50%)';
+                    if (this.mobileJoystickKnob) this.mobileJoystickKnob.style.transform = 'translate(-50%, -50%)';
+                    if (this.joystickFloating && this.mobileJoystickEl) {
+                        // return to base parking position when floating
+                        this.mobileJoystickEl.style.left = this.mobileJoystick.baseLeft + 'px';
+                        this.mobileJoystickEl.style.bottom = this.mobileJoystick.baseBottom + 'px';
+                        this.mobileJoystickEl.style.top = '';
+                        this.mobileJoystickEl.style.right = '';
+                        this.mobileJoystickEl.classList.remove('floating-active');
+                        if (!this.joystickEnabled) this.mobileJoystickEl.classList.remove('visible');
+                    }
+                };
+
+                const placeFloatingAt = (clientX, clientY) => {
+                    if (!this.mobileJoystickEl) return;
+                    const size = this.mobileJoystickEl.offsetWidth || parseInt(getComputedStyle(document.documentElement).getPropertyValue('--joystick-size')) || 150;
+                    const half = size / 2;
+                    // Convert screen coords into the scaled ui-layer coordinate space
+                    const layer = this.mobileJoystickEl.offsetParent || document.getElementById('ui-layer');
+                    const layerRect = layer ? layer.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+                    const scaleX = (layer && layer.offsetWidth) ? (layerRect.width / layer.offsetWidth) : 1;
+                    const scaleY = (layer && layer.offsetHeight) ? (layerRect.height / layer.offsetHeight) : 1;
+                    const localX = (clientX - layerRect.left) / (scaleX || 1);
+                    const localY = (clientY - layerRect.top) / (scaleY || 1);
+                    const maxW = layer ? layer.offsetWidth : window.innerWidth;
+                    const maxH = layer ? layer.offsetHeight : window.innerHeight;
+                    const left = Math.max(8, Math.min(maxW - size - 8, localX - half));
+                    const top = Math.max(8, Math.min(maxH - size - 8, localY - half));
+                    this.mobileJoystickEl.style.left = left + 'px';
+                    this.mobileJoystickEl.style.top = top + 'px';
+                    this.mobileJoystickEl.style.bottom = 'auto';
+                    this.mobileJoystickEl.style.right = 'auto';
+                    this.mobileJoystickEl.classList.add('visible', 'floating-active');
                 };
 
                 const updateKnob = (clientX, clientY) => {
+                    if (!this.mobileJoystickEl || !this.mobileJoystickKnob) return;
                     const rect = this.mobileJoystickEl.getBoundingClientRect();
                     const cx = rect.left + rect.width / 2;
                     const cy = rect.top + rect.height / 2;
@@ -4422,6 +4551,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 // Works on both desktop (mouse) and mobile (touch/pointer)
                 this.mobileJoystickEl.addEventListener('pointerdown', (e) => {
                     if (gameplay.isPlaytest) return;
+                    if (!this.joystickEnabled) return;
                     e.preventDefault();
                     e.stopPropagation();
                     this.mobileJoystickEl.setPointerCapture?.(e.pointerId);
@@ -4440,7 +4570,29 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 window.addEventListener('pointerup', end);
                 window.addEventListener('pointercancel', end);
                 window.addEventListener('blur', reset);
+
+                // Floating joystick: appear under finger on left half of screen
+                const canvas = this.renderer?.domElement;
+                if (canvas) {
+                    canvas.addEventListener('pointerdown', (e) => {
+                        if (gameplay.isPlaytest) return;
+                        if (!this.joystickEnabled || !this.joystickFloating) return;
+                        if (e.pointerType === 'mouse' && e.button !== 0) return;
+                        // Only spawn on left half to leave right side for look
+                        if (e.clientX > window.innerWidth * 0.55) return;
+                        if (this.mobileJoystick.pointerId !== null) return;
+                        if (this.transformControl?.dragging) return;
+                        placeFloatingAt(e.clientX, e.clientY);
+                        this.mobileJoystick.pointerId = e.pointerId;
+                        try { this.mobileJoystickEl.setPointerCapture?.(e.pointerId); } catch (_) {}
+                        updateKnob(e.clientX, e.clientY);
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }, true);
+                }
+
                 reset();
+                this.updateJoystickVisibility();
             },
 
             applyJoystickSize: function(size) {
@@ -4452,9 +4604,73 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             },
 
             applyJoystickOpacity: function(opacity) {
-                const o = Math.min(1, Math.max(0.1, opacity || 0.85));
+                const o = Math.min(1, Math.max(0.1, opacity == null ? 0.85 : opacity));
                 document.documentElement.style.setProperty('--joystick-opacity', String(o));
                 localStorage.setItem('mmcg_joystick_opacity_55', String(o));
+            },
+
+            applyJoystickEnabled: function(enabled, persist = true) {
+                this.joystickEnabled = !!enabled;
+                if (persist) localStorage.setItem('mmcg_joystick_enabled_55', this.joystickEnabled ? '1' : '0');
+                const cb = document.getElementById('setting-joystick-enabled');
+                if (cb) cb.checked = this.joystickEnabled;
+                // When joystick is on, disable one-finger pan-style move via orbit; keep look
+                if (this.orbit) {
+                    // leave orbit.touches.ONE = -1 always (look handled by touchLook)
+                }
+                if (!this.joystickEnabled && this.mobileJoystick) {
+                    this.mobileJoystick.active = false;
+                    this.mobileJoystick.x = 0;
+                    this.mobileJoystick.y = 0;
+                    this.mobileJoystick.pointerId = null;
+                }
+                this.updateJoystickVisibility();
+            },
+
+            applyJoystickFloating: function(floating, persist = true) {
+                this.joystickFloating = !!floating;
+                if (persist) localStorage.setItem('mmcg_joystick_floating_55', this.joystickFloating ? '1' : '0');
+                const cb = document.getElementById('setting-joystick-floating');
+                if (cb) cb.checked = this.joystickFloating;
+                if (this.mobileJoystickEl) {
+                    this.mobileJoystickEl.style.left = (this.mobileJoystick?.baseLeft ?? 24) + 'px';
+                    this.mobileJoystickEl.style.bottom = (this.mobileJoystick?.baseBottom ?? 28) + 'px';
+                    this.mobileJoystickEl.style.top = '';
+                    this.mobileJoystickEl.style.right = '';
+                    this.mobileJoystickEl.classList.remove('floating-active');
+                }
+                this.updateJoystickVisibility();
+            },
+
+            updateJoystickVisibility: function() {
+                const el = this.mobileJoystickEl || document.getElementById('mobile-joystick');
+                if (!el) return;
+                // Fixed joystick is visible when enabled and not floating; floating appears only on touch
+                if (this.joystickEnabled && !this.joystickFloating && !gameplay?.isPlaytest) {
+                    el.classList.add('visible');
+                } else if (!(this.joystickFloating && this.mobileJoystick?.active)) {
+                    el.classList.remove('visible');
+                }
+            },
+
+            applyHitboxOpacity: function(opacity, persist = true) {
+                // Keep transparent always ON — at opacity=1 with transparent:false the coplanar
+                // edge lines get depth-culled / disappear against the cube surface.
+                const o = Math.min(1, Math.max(0, opacity == null ? 0.8 : opacity));
+                this.hitboxOpacity = o;
+                hitboxOpacityValue = o;
+                if (outlineMat) {
+                    outlineMat.opacity = o;
+                    outlineMat.transparent = true;
+                    outlineMat.depthTest = false;
+                    outlineMat.depthWrite = false;
+                    outlineMat.needsUpdate = true;
+                }
+                if (persist) localStorage.setItem('mmcg_hitbox_opacity_55', String(o));
+                const slider = document.getElementById('setting-hitbox-opacity');
+                if (slider) slider.value = String(o);
+                const lbl = document.getElementById('hitbox-opacity-val');
+                if (lbl) lbl.innerText = Math.round(o * 100) + '%';
             },
 
             setupTouchLook: function() {
@@ -5998,7 +6214,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.renderer.toneMapping = rtEnabled ? THREE.ACESFilmicToneMapping : THREE.LinearToneMapping;
                 this.renderer.toneMappingExposure = rtEnabled ? 1.12 : 1.00;
 
-                waterUniforms.uWavesEnabled.value = (document.getElementById('setting-water-waves')?.checked ?? true) ? 1.0 : 0.0;
+                waterUniforms.uWavesEnabled.value = (document.getElementById('setting-water-waves')?.checked ?? false) ? 1.0 : 0.0;
 
                 // Texture smoothing now applies to ABSOLUTELY ALL cube textures: GoreBox, custom,
                 // generated base textures and normal maps. No water/custom exception.
@@ -6026,7 +6242,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.updateSelectionPanels();
             },
 
-            getEnvState: function() { return { skybox: document.getElementById('setting-skybox').value, weather: document.getElementById('setting-weather').value, fogColor: document.getElementById('setting-fog-color').value, fogStart: parseFloat(document.getElementById('setting-fog-start').value) || 15, fogEnd: parseFloat(document.getElementById('setting-fog-end').value) || 250, sunAngle: parseFloat(document.getElementById('setting-sun-angle').value) || 180, sunVertical: parseFloat(document.getElementById('setting-sun-vertical')?.value) || 60, shadows: document.getElementById('setting-shadows').checked, shadowQuality: parseInt(document.getElementById('setting-shadow-quality')?.value ?? '2', 10), bloom: document.getElementById('setting-bloom').checked, bloomStrength: parseFloat(document.getElementById('setting-bloom-strength')?.value || '1'), cameraSensitivity: parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'), aoIntensity: parseFloat(document.getElementById('setting-ao-intensity')?.value || '0.55'), ssao: document.getElementById('setting-ssao').checked, rayTracing: document.getElementById('setting-reflections') ? document.getElementById('setting-reflections').checked : false, reflectionSharpness: parseFloat(document.getElementById('setting-reflection-sharpness')?.value || '80') / 100, waterWaves: document.getElementById('setting-water-waves') ? document.getElementById('setting-water-waves').checked : true, particlesEnabled: document.getElementById('setting-particles-enabled') ? document.getElementById('setting-particles-enabled').checked : true, textureSmoothing: document.getElementById('setting-texture-smoothing') ? document.getElementById('setting-texture-smoothing').checked : false, drawDistance: this.drawDistance || 350, textureQuality: currentTextureQualityIndex, customSkyboxDataUrl: this.customSkyboxDataUrl || null, customSkyboxName: this.customSkyboxName || null, gridVisible: document.getElementById('setting-grid') ? document.getElementById('setting-grid').checked : true, lightContour: document.getElementById('setting-light-contour') ? document.getElementById('setting-light-contour').checked : true }; },
+            getEnvState: function() { return { skybox: document.getElementById('setting-skybox').value, weather: document.getElementById('setting-weather').value, fogColor: document.getElementById('setting-fog-color').value, fogStart: parseFloat(document.getElementById('setting-fog-start').value) || 15, fogEnd: parseFloat(document.getElementById('setting-fog-end').value) || 250, sunAngle: parseFloat(document.getElementById('setting-sun-angle').value) || 180, sunVertical: parseFloat(document.getElementById('setting-sun-vertical')?.value) || 60, shadows: document.getElementById('setting-shadows').checked, shadowQuality: parseInt(document.getElementById('setting-shadow-quality')?.value ?? '2', 10), bloom: document.getElementById('setting-bloom').checked, bloomStrength: parseFloat(document.getElementById('setting-bloom-strength')?.value || '1'), cameraSensitivity: parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'), aoIntensity: parseFloat(document.getElementById('setting-ao-intensity')?.value || '0.55'), ssao: document.getElementById('setting-ssao').checked, rayTracing: document.getElementById('setting-reflections') ? document.getElementById('setting-reflections').checked : false, reflectionSharpness: parseFloat(document.getElementById('setting-reflection-sharpness')?.value || '80') / 100, waterWaves: document.getElementById('setting-water-waves') ? document.getElementById('setting-water-waves').checked : false, particlesEnabled: document.getElementById('setting-particles-enabled') ? document.getElementById('setting-particles-enabled').checked : true, textureSmoothing: document.getElementById('setting-texture-smoothing') ? document.getElementById('setting-texture-smoothing').checked : false, drawDistance: this.drawDistance || 350, textureQuality: currentTextureQualityIndex, customSkyboxDataUrl: this.customSkyboxDataUrl || null, customSkyboxName: this.customSkyboxName || null, gridVisible: document.getElementById('setting-grid') ? document.getElementById('setting-grid').checked : true, lightContour: document.getElementById('setting-light-contour') ? document.getElementById('setting-light-contour').checked : true }; },
 
             setCustomSkybox: function(dataUrl, fileName = 'Custom Skybox') {
                 this.customSkyboxDataUrl = dataUrl;
@@ -7191,7 +7407,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                         document.getElementById('reflection-sharpness-val').innerText = String(val);
                     }
                     if (document.getElementById('setting-ao-intensity')) { document.getElementById('setting-ao-intensity').value = String(data.env.aoIntensity ?? 0.55); if (document.getElementById('ao-intensity-val')) document.getElementById('ao-intensity-val').innerText = Number(document.getElementById('setting-ao-intensity').value).toFixed(2); }
-                    if (document.getElementById('setting-water-waves')) document.getElementById('setting-water-waves').checked = data.env.waterWaves !== false;
+                    if (document.getElementById('setting-water-waves')) document.getElementById('setting-water-waves').checked = data.env.waterWaves === true;
                     if (document.getElementById('setting-particles-enabled')) document.getElementById('setting-particles-enabled').checked = data.env.particlesEnabled !== false;
                     if (document.getElementById('setting-texture-smoothing')) document.getElementById('setting-texture-smoothing').checked = data.env.textureSmoothing === true;
                     if (document.getElementById('setting-draw-distance')) {
@@ -7302,6 +7518,33 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                         }
                     }
 
+                    // Virtual joystick camera move — full 3D free-fly relative to look direction
+                    // (forward/back uses camera look vector including pitch; strafe uses camera right)
+                    if (this.joystickEnabled && this.mobileJoystick && this.mobileJoystick.active) {
+                        const jx = this.mobileJoystick.x || 0;
+                        const jy = this.mobileJoystick.y || 0;
+                        if (Math.abs(jx) > 0.02 || Math.abs(jy) > 0.02) {
+                            const jSpeed = camSpeed * 1.15;
+
+                            // Camera-local axes from world matrix: +X = right, -Z = look forward
+                            if (!this._joyRight) this._joyRight = new THREE.Vector3();
+                            if (!this._joyForward) this._joyForward = new THREE.Vector3();
+                            this.camera.updateMatrixWorld();
+                            this._joyRight.setFromMatrixColumn(this.camera.matrixWorld, 0).normalize();
+                            this._joyForward.setFromMatrixColumn(this.camera.matrixWorld, 2).negate().normalize();
+
+                            // jy > 0 (finger down) → backward; jy < 0 (finger up) → forward
+                            // jx > 0 (finger right) → strafe right; jx < 0 → strafe left
+                            // Combined diagonals move on all 3 world axes according to look yaw+pitch
+                            if (!this._joyMove) this._joyMove = new THREE.Vector3();
+                            this._joyMove
+                                .copy(this._joyForward).multiplyScalar(-jy * jSpeed)
+                                .addScaledVector(this._joyRight, jx * jSpeed);
+                            this.camera.position.add(this._joyMove);
+                            this.orbit.target.add(this._joyMove);
+                        }
+                    }
+
 
                     this.orbit.update();
                     if (isNaN(this.camera.position.x)) { this.camera.position.set(15, 20, 15); this.orbit.target.set(0,0,0); }
@@ -7321,8 +7564,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.updateDistanceCulling(false, dt);
                 this.updateShadowFrustumFollow(); // move shadow frustum with camera, rerender only when moved ≥15 units
                 this.manualLights.forEach(l => this.updateManualLightTarget(l));
-                while(this.outlines.length < this.selectedBlocks.length) { const line = new THREE.LineSegments(sharedEdgeGeo, outlineMat); this.scene.add(line); this.outlines.push(line); }
-                this.outlines.forEach((o, i) => { if (i < this.selectedBlocks.length) { const obj = this.selectedBlocks[i]; const showOutline = !(obj.userData?.type === 'light' && !this.lightContourVisible); o.visible = showOutline; obj.getWorldPosition(o.position); obj.getWorldQuaternion(o.quaternion); obj.getWorldScale(o.scale); o.scale.addScalar(0.04); } else { o.visible = false; } });
+                while(this.outlines.length < this.selectedBlocks.length) { const line = new THREE.LineSegments(sharedEdgeGeo, outlineMat); line.renderOrder = 999; line.frustumCulled = false; this.scene.add(line); this.outlines.push(line); }
+                this.outlines.forEach((o, i) => { if (i < this.selectedBlocks.length) { const obj = this.selectedBlocks[i]; const showOutline = !(obj.userData?.type === 'light' && !this.lightContourVisible); o.visible = showOutline; obj.getWorldPosition(o.position); obj.getWorldQuaternion(o.quaternion); obj.getWorldScale(o.scale); /* exact cube edges — no padding */ } else { o.visible = false; } });
                 try {
                     // ── Depth pre-pass for AO / Ray Tracing (separate target → no WebGL feedback loop) ──
                     if ((this.ssaoPass.enabled || this.rtPass?.enabled) && this._depthTarget) {
@@ -7358,8 +7601,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
         const gameplay = {
             isPlaytest: false, controls: null, velocity: new THREE.Vector3(), direction: new THREE.Vector3(), moveState: { forward: false, backward: false, left: false, right: false, jump: false, sprint: false, crouch: false }, canJump: false, raycasterDown: new THREE.Raycaster(new THREE.Vector3(), new THREE.Vector3(0, -1, 0), 0, 1.5), lastStepTime: 0, baseHeight: 1.8, crouchHeight: 0.9,
             init: function() { this.controls = new PointerLockControls(engine.camera, document.body); this.controls.addEventListener('lock', () => { this.isPlaytest = true; }); this.controls.addEventListener('unlock', () => { this.stopPlaytest(); }); document.addEventListener('keydown', (e) => this.onKeyDown(e)); document.addEventListener('keyup', (e) => this.onKeyUp(e)); },
-            startPlaytest: function() { engine.deselect(); document.getElementById('ui-layer').style.display = 'none'; document.getElementById('playtest-overlay').style.display = 'block'; if (engine.spawnPointObj) { engine.camera.position.copy(engine.spawnPointObj.position); engine.camera.position.y += 1; } else { engine.camera.position.set(0, 5, 0); } engine.spawnPointObj && (engine.spawnPointObj.visible = false); this.velocity.set(0,0,0); audioEngine.init(); this.controls.lock(); },
-            stopPlaytest: function() { this.isPlaytest = false; document.getElementById('ui-layer').style.display = 'flex'; document.getElementById('playtest-overlay').style.display = 'none'; engine.spawnPointObj && (engine.spawnPointObj.visible = true); },
+            startPlaytest: function() { engine.deselect(); document.getElementById('ui-layer').style.display = 'none'; document.getElementById('playtest-overlay').style.display = 'block'; if (engine.spawnPointObj) { engine.camera.position.copy(engine.spawnPointObj.position); engine.camera.position.y += 1; } else { engine.camera.position.set(0, 5, 0); } engine.spawnPointObj && (engine.spawnPointObj.visible = false); this.velocity.set(0,0,0); audioEngine.init(); engine.updateJoystickVisibility?.(); this.controls.lock(); },
+            stopPlaytest: function() { this.isPlaytest = false; document.getElementById('ui-layer').style.display = 'flex'; document.getElementById('playtest-overlay').style.display = 'none'; engine.updateJoystickVisibility?.(); engine.spawnPointObj && (engine.spawnPointObj.visible = true); },
             exitPlaytest: function() { try { if (document.pointerLockElement) document.exitPointerLock(); } catch(e) {} this.stopPlaytest(); },
             onKeyDown: function(e) { if(!this.isPlaytest) { return; } if (e.code === 'Escape') { this.exitPlaytest(); return; } switch(e.code) { case 'KeyW': this.moveState.forward = true; break; case 'KeyS': this.moveState.backward = true; break; case 'KeyA': this.moveState.left = true; break; case 'KeyD': this.moveState.right = true; break; case 'Space': if(this.canJump) this.velocity.y += 12; this.canJump = false; break; case 'ShiftLeft': this.moveState.sprint = true; break; case 'ControlLeft': case 'KeyC': this.moveState.crouch = true; break; } },
             onKeyUp: function(e) { if(!this.isPlaytest) return; switch(e.code) { case 'KeyW': this.moveState.forward = false; break; case 'KeyS': this.moveState.backward = false; break; case 'KeyA': this.moveState.left = false; break; case 'KeyD': this.moveState.right = false; break; case 'ShiftLeft': this.moveState.sprint = false; break; case 'ControlLeft': case 'KeyC': this.moveState.crouch = false; break; } },
@@ -8018,6 +8261,29 @@ if (texSel) {
                 }
                 if (document.getElementById('setting-light-contour')) {
                     document.getElementById('setting-light-contour').checked = engine.lightContourVisible !== false;
+                }
+                const hitboxOp = document.getElementById('setting-hitbox-opacity');
+                if (hitboxOp) {
+                    const ho = parseFloat(localStorage.getItem('mmcg_hitbox_opacity_55') || String(engine.hitboxOpacity ?? 0.8));
+                    hitboxOp.value = String(ho);
+                    const lbl = document.getElementById('hitbox-opacity-val');
+                    if (lbl) lbl.innerText = Math.round(ho * 100) + '%';
+                }
+                const joyEn = document.getElementById('setting-joystick-enabled');
+                if (joyEn) joyEn.checked = !!engine.joystickEnabled || localStorage.getItem('mmcg_joystick_enabled_55') === '1';
+                const joyFloat = document.getElementById('setting-joystick-floating');
+                if (joyFloat) joyFloat.checked = !!engine.joystickFloating || localStorage.getItem('mmcg_joystick_floating_55') === '1';
+                const joySize = document.getElementById('setting-joystick-size');
+                if (joySize) {
+                    joySize.value = localStorage.getItem('mmcg_joystick_size_55') || '150';
+                    const lbl = document.getElementById('joystick-size-val');
+                    if (lbl) lbl.innerText = joySize.value + 'px';
+                }
+                const joyOp = document.getElementById('setting-joystick-opacity');
+                if (joyOp) {
+                    joyOp.value = localStorage.getItem('mmcg_joystick_opacity_55') || '0.85';
+                    const lbl = document.getElementById('joystick-opacity-val');
+                    if (lbl) lbl.innerText = Math.round(Number(joyOp.value) * 100) + '%';
                 }
                 const drawDistance = document.getElementById('setting-draw-distance');
                 if (drawDistance) { drawDistance.value = String(engine.drawDistance || 350); const lbl = document.getElementById('draw-distance-val'); if (lbl) lbl.innerText = drawDistance.value + 'm'; }
