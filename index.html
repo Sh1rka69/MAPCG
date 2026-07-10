@@ -2303,7 +2303,7 @@
         //  Формат архива: пары файлов с одинаковым именем — "Имя.jpg"
         //  (превью) + "Имя.json" (массив кубов, как в parseCubes/rawArr).
         // ─────────────────────────────────────────────────────────────
-        const SUBJECTS_CACHE_KEY = 'mapcg_subjects_collection_v1';
+        const SUBJECTS_CACHE_KEY = 'mapcg_subjects_collection_v3';
         let subjectsCacheApplied = false;
         let subjectsNetworkLoading = false;
 
@@ -2608,10 +2608,25 @@
         }
 
         // --- GOREBOX/UNITY <-> THREE.JS ROTATION BRIDGE ---
-        // ВАЖНО: предыдущая попытка с ZXY ухудшила импорт. Для этого редактора и уже существующих
-        // карт правильная совместимая схема такая: при зеркале Z углы X/Y меняют знак, Z остаётся,
-        // а хранить/применять результат нужно именно в order='YXZ'. Главный баг был не в этой формуле,
-        // а в том, что при загрузке mesh.rotation.set(...) сбрасывал order обратно в XYZ.
+        // Unity: left-handed, Quaternion.Euler(x,y,z) = qY * qX * qZ  → THREE Euler order 'ZXY'.
+        // Three.js: right-handed. Converting a full TRS through a Z-axis reflection S=diag(1,1,-1):
+        //   M_three = S * M_unity * S
+        // keeps the same local mesh (±X/±Y/±Z box) and yields a proper RH transform.
+        // The old shortcut Euler(-x,-y,z,'YXZ') matches this only for single-axis rotations and
+        // breaks multi-axis pieces (keyboard keys, cables, rail posts at 45°, etc.).
+        const _goreS = /* S = diag(1,1,-1) */ null; // filled lazily below
+        function getGoreAxisFlipMatrix() {
+            if (!getGoreAxisFlipMatrix._m) {
+                getGoreAxisFlipMatrix._m = new THREE.Matrix4().set(
+                    1, 0, 0, 0,
+                    0, 1, 0, 0,
+                    0, 0,-1, 0,
+                    0, 0, 0, 1
+                );
+            }
+            return getGoreAxisFlipMatrix._m;
+        }
+
         function normalizeAngle360(deg) {
             const n = Number.isFinite(deg) ? deg : 0;
             return ((n % 360) + 360) % 360;
@@ -2619,23 +2634,71 @@
 
         function normalizeUnitySignedAngle(deg) {
             const d = parseFloat(deg) || 0;
-            return d > 180 ? d - 360 : d;
+            // Unity stores eulers in [0,360); convert to signed for cleaner intermediate math
+            const n = ((d % 360) + 360) % 360;
+            return n > 180 ? n - 360 : n;
         }
 
         function unityEulerDegToThreeQuaternion(rotation = {}) {
             const rx = THREE.MathUtils.degToRad(normalizeUnitySignedAngle(rotation.x));
             const ry = THREE.MathUtils.degToRad(normalizeUnitySignedAngle(rotation.y));
             const rz = THREE.MathUtils.degToRad(normalizeUnitySignedAngle(rotation.z));
-            return new THREE.Quaternion().setFromEuler(new THREE.Euler(-rx, -ry, rz, 'YXZ')).normalize();
+            // Native Unity rotation (LH)
+            const qUnity = new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, 'ZXY')).normalize();
+            // R_three = S * R_unity * S  (similarity by Z reflection)
+            const S = getGoreAxisFlipMatrix();
+            const R = new THREE.Matrix4().makeRotationFromQuaternion(qUnity);
+            const Rthree = new THREE.Matrix4().multiplyMatrices(S, R).multiply(S);
+            return new THREE.Quaternion().setFromRotationMatrix(Rthree).normalize();
         }
 
         function threeQuaternionToUnityEulerDeg(qThreeIn) {
+            // Inverse of unityEulerDegToThreeQuaternion: R_unity = S * R_three * S
             const qThree = qThreeIn.clone().normalize();
-            const e = new THREE.Euler().setFromQuaternion(qThree, 'YXZ');
+            const S = getGoreAxisFlipMatrix();
+            const Rthree = new THREE.Matrix4().makeRotationFromQuaternion(qThree);
+            const Runity = new THREE.Matrix4().multiplyMatrices(S, Rthree).multiply(S);
+            const qUnity = new THREE.Quaternion().setFromRotationMatrix(Runity).normalize();
+            // Extract Unity euler (ZXY)
+            const e = new THREE.Euler().setFromQuaternion(qUnity, 'ZXY');
             return {
-                x: normalizeAngle360(-THREE.MathUtils.radToDeg(e.x)),
-                y: normalizeAngle360(-THREE.MathUtils.radToDeg(e.y)),
+                x: normalizeAngle360(THREE.MathUtils.radToDeg(e.x)),
+                y: normalizeAngle360(THREE.MathUtils.radToDeg(e.y)),
                 z: normalizeAngle360(THREE.MathUtils.radToDeg(e.z))
+            };
+        }
+
+        // Full GoreBox TRS → Three.js TRS (position + quaternion + scale).
+        // Prefer this over converting rotation alone when position must stay consistent.
+        function goreBoxTRSToThree(position = {}, rotation = {}, scale = {}) {
+            const px = parseFloat(position.x) || 0;
+            const py = parseFloat(position.y) || 0;
+            const pz = parseFloat(position.z) || 0;
+            const sx = parseFloat(scale.x); const sy = parseFloat(scale.y); const sz = parseFloat(scale.z);
+            const scl = new THREE.Vector3(
+                Number.isFinite(sx) ? sx : 1,
+                Number.isFinite(sy) ? sy : 1,
+                Number.isFinite(sz) ? sz : 1
+            );
+            const rx = THREE.MathUtils.degToRad(normalizeUnitySignedAngle(rotation.x));
+            const ry = THREE.MathUtils.degToRad(normalizeUnitySignedAngle(rotation.y));
+            const rz = THREE.MathUtils.degToRad(normalizeUnitySignedAngle(rotation.z));
+            const qUnity = new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, 'ZXY')).normalize();
+            const Munity = new THREE.Matrix4().compose(new THREE.Vector3(px, py, pz), qUnity, scl);
+            const S = getGoreAxisFlipMatrix();
+            const Mthree = new THREE.Matrix4().multiplyMatrices(S, Munity).multiply(S);
+            const pos = new THREE.Vector3();
+            const quat = new THREE.Quaternion();
+            const outScl = new THREE.Vector3();
+            Mthree.decompose(pos, quat, outScl);
+            // Guard: decompose can yield tiny negatives from numerical error — keep positive scales
+            outScl.x = Math.abs(outScl.x) < 1e-8 ? scl.x : outScl.x;
+            outScl.y = Math.abs(outScl.y) < 1e-8 ? scl.y : outScl.y;
+            outScl.z = Math.abs(outScl.z) < 1e-8 ? scl.z : outScl.z;
+            return {
+                pos: { x: pos.x, y: pos.y, z: pos.z },
+                quat: { x: quat.x, y: quat.y, z: quat.z, w: quat.w },
+                scl: { x: outScl.x, y: outScl.y, z: outScl.z }
             };
         }
 
@@ -2652,24 +2715,26 @@
         function mapGoreBoxCubeToProjectBlock(cube) {
             const materialName = canonicalTextureKey(cube.materialName || normalizeTextureKey(cube.name || 'texture'));
             const materialType = mapGoreBoxTagToMaterialType(cube.tag);
-            const tilingMode = mapTileModeToTiling(cube.tileMode);
+            // Accept both numeric GoreBox tileMode and already-mapped string forms
+            let tileModeRaw = cube.tileMode;
+            if (typeof tileModeRaw === 'string') {
+                tileModeRaw = tileModeRaw === 'xy' ? 0 : tileModeRaw === 'yx' ? 1 : 2;
+            }
+            const tilingMode = mapTileModeToTiling(tileModeRaw);
             const textureKey = canonicalTextureKey(materialName);
 
-            // Фикс отзеркаливания: инвертируем координату Z для правой системы координат Three.js
-            const posX = parseFloat(cube.position?.x) || 0;
-            const posY = parseFloat(cube.position?.y) || 0;
-            const posZ = -(parseFloat(cube.position?.z) || 0);
-
-            const q = unityEulerDegToThreeQuaternion(cube.rotation || { x: 0, y: 0, z: 0 });
+            // Full TRS conversion (S * M * S) — keeps multi-axis rotations consistent with positions
+            const trs = goreBoxTRSToThree(cube.position || { x: 0, y: 0, z: 0 }, cube.rotation || { x: 0, y: 0, z: 0 }, cube.scale || { x: 1, y: 1, z: 1 });
+            const q = new THREE.Quaternion(trs.quat.x, trs.quat.y, trs.quat.z, trs.quat.w).normalize();
             const euler = new THREE.Euler().setFromQuaternion(q, 'YXZ');
 
             return {
                 type: 'cube',
-                pos: { x: posX, y: posY, z: posZ },
+                pos: { x: trs.pos.x, y: trs.pos.y, z: trs.pos.z },
                 rot: { x: euler.x, y: euler.y, z: euler.z },
                 rotOrder: 'YXZ',
                 quat: { x: q.x, y: q.y, z: q.z, w: q.w },
-                scl: { x: parseFloat(cube.scale?.x) || 1, y: parseFloat(cube.scale?.y) || 1, z: parseFloat(cube.scale?.z) || 1 },
+                scl: { x: trs.scl.x, y: trs.scl.y, z: trs.scl.z },
                 userData: {
                     type: 'cube', visible: cube.visible !== false, collisions: cube.collisions !== false, physics: cube.physics === true,
                     texture: textureKey, materialType, colorHex: '#ffffff', tilingMode, materialName, sourceTag: cube.tag || materialType, goreBoxVersion: 4, sourceName: cube.name || 'MapCube'
@@ -2990,6 +3055,22 @@ let activeProjectNormalMaps = {}; // textureKey -> { texture: THREE.Texture, nam
                 mat.side = THREE.DoubleSide;
                 mat.transparent = true;
                 mat.depthWrite = false;
+            }
+
+            // ── Z-FIGHTING FIX ────────────────────────────────────────────────
+            // Coplanar / nearly-coplanar cube faces (stacked walls, collection pieces,
+            // large distant surfaces) flicker because 24-bit depth + huge far/near ratio
+            // cannot resolve them. polygonOffset pushes each fragment slightly in depth
+            // without changing geometry. Combined with a sane near plane this removes
+            // flicker even for big cubes far from the camera.
+            // Transparent materials keep depthWrite=false and must NOT use offset that
+            // would sort incorrectly against solids.
+            if (!(hasAlpha || isWater || isGlass || preset.transparent)) {
+                mat.polygonOffset = true;
+                // Tiny constant offset — enough to separate coplanar faces, small enough
+                // not to cause visible gaps/shadow acne at contact edges.
+                mat.polygonOffsetFactor = 1;
+                mat.polygonOffsetUnits = 1;
             }
 
             mat.userData = { isWater, hasAlpha, reflectivity, reflectBlur, pbrMode: pbrEnabled, textureId, materialType: matType, colorHex };
@@ -3627,7 +3708,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.renderer.shadowMap.needsUpdate = true;
                 
                 this.pmremGenerator = new THREE.PMREMGenerator(this.renderer); this.pmremGenerator.compileEquirectangularShader();
-                this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 8000); this.camera.position.set(15, 20, 15);
+                this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.15, 2500); this.camera.position.set(15, 20, 15);
 
                 // ── EffectComposer — colour-only targets (no depth texture = no feedback loop)
                 const _cw = window.innerWidth, _ch = window.innerHeight;
@@ -4103,7 +4184,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 window.addEventListener('keydown', this.onKeyDown.bind(this));
                 window.addEventListener('keyup', this.onKeyUp.bind(this));
 
-                this.updateEnvironment(); this.applyCameraSensitivity(parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1')); this.applyCameraMoveSpeed(parseFloat(localStorage.getItem('mmcg_camera_move_55') || '1')); this.applyPixelRatio(parseFloat(localStorage.getItem('mmcg_pixel_ratio_55') || '0.8')); this.applyFpsCounterVisibility(localStorage.getItem('mmcg_show_fps_55') === '1'); this.applyPixelSmoothing(localStorage.getItem('mmcg_pixel_smoothing_55') === '1'); this.applyHitboxOpacity(parseFloat(localStorage.getItem('mmcg_hitbox_opacity_55') || '0.8'), false); this.updateSelectionPanels(); this.camera.far = 2000; this.camera.updateProjectionMatrix(); this.updateDepthEncodingUniforms(); this.animate();
+                this.updateEnvironment(); this.applyCameraSensitivity(parseFloat(localStorage.getItem('mmcg_camera_sens_55') || '1')); this.applyCameraMoveSpeed(parseFloat(localStorage.getItem('mmcg_camera_move_55') || '1')); this.applyPixelRatio(parseFloat(localStorage.getItem('mmcg_pixel_ratio_55') || '0.8')); this.applyFpsCounterVisibility(localStorage.getItem('mmcg_show_fps_55') === '1'); this.applyPixelSmoothing(localStorage.getItem('mmcg_pixel_smoothing_55') === '1'); this.applyHitboxOpacity(parseFloat(localStorage.getItem('mmcg_hitbox_opacity_55') || '0.8'), false); this.updateSelectionPanels(); this.camera.near = 0.15; this.camera.far = 2500; this.camera.updateProjectionMatrix(); this.updateDepthEncodingUniforms(); this.animate();
             },
 
             initClouds: function() {
@@ -4349,7 +4430,20 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 if ('specularIntensity' in mat) mat.specularIntensity = glare;
                 if ('clearcoat' in mat) mat.clearcoat = Math.max(mat.clearcoat || 0, glare * 0.35);
                 if ('metalness' in mat) mat.metalness = isMetal ? 0.9 : 0.0;
-                if (p.visible === false) { mat.transparent = true; mat.opacity = 0.3; }
+                if (p.visible === false) {
+                    mat.transparent = true;
+                    mat.opacity = 0.3;
+                    // Hidden preview cubes: no depth write → no z-fight with solid neighbours
+                    mat.depthWrite = false;
+                    mat.polygonOffset = false;
+                } else if (!mat.transparent && !isWaterLike(p.tex, p.matT) && p.tex !== 'Glass') {
+                    // Solid cubes always get a stable depth offset (also for materials
+                    // created before createMaterial gained polygonOffset support).
+                    mat.polygonOffset = true;
+                    mat.polygonOffsetFactor = 1;
+                    mat.polygonOffsetUnits = 1;
+                    mat.depthWrite = true;
+                }
                 mat.needsUpdate = true;
                 return mat;
             },
@@ -5055,65 +5149,70 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
             // ======== SPAWN COLLECTION OBJECT ========
             spawnCollectionObject: function(item) {
-                // item: { name, cubeCount, image, cubes: [{materialName, tag, tileMode, visible, collisions, physics, position, rotation, scale}] }
-                // ВАЖНО: JSON коллекции — это GoreBox/Unity (left-handed). Нельзя просто
-                // копировать position/rotation в Three.js: при импорте карт используется
-                // mapGoreBoxCubeToProjectBlock (Z → -Z + unityEulerDegToThreeQuaternion).
-                // Раньше spawnCollectionObject инвертировал только rotation, а position.z
-                // оставлял Unity-шным → кубы оказывались "зеркально" относительно друг друга
-                // (клавиатура монитора, арки моста и т.п.). Используем тот же пайплайн.
+                // Collection JSON is pure GoreBox/Unity TRS (left-handed, ZXY eulers).
+                // Convert EVERY cube with goreBoxTRSToThree (S*M*S) — same math as map import.
+                if (!item || !Array.isArray(item.cubes) || !item.cubes.length) return;
+
                 const origin = this.getShapeOrigin();
                 const groupId = this.makeShapeGroupId('collection');
                 const created = [];
 
-                item.cubes.forEach(cubeDef => {
-                    // Прогоняем через тот же Unity→Three конвертер, что и .gbmap / MapData.json
-                    const mapped = mapGoreBoxCubeToProjectBlock({
-                        name: cubeDef.name || 'MapCube',
-                        tag: cubeDef.tag || 'Concrete',
-                        tileMode: (typeof cubeDef.tileMode === 'number')
-                            ? cubeDef.tileMode
-                            : (cubeDef.tileMode === 'xy' ? 0 : cubeDef.tileMode === 'yx' ? 1 : cubeDef.tileMode === 'stretch' ? 2 : 1),
-                        visible: cubeDef.visible !== false,
-                        collisions: cubeDef.collisions !== false,
-                        physics: !!cubeDef.physics,
-                        materialName: cubeDef.materialName || 'grid',
-                        position: cubeDef.position || { x: 0, y: 0, z: 0 },
-                        rotation: cubeDef.rotation || { x: 0, y: 0, z: 0 },
-                        scale: cubeDef.scale || { x: 1, y: 1, z: 1 }
-                    });
+                // Compute object-local AABB center in Three space so the group sits on the spawn point
+                // predictably (JSON positions are relative to an arbitrary authoring origin).
+                let cx = 0, cy = 0, cz = 0, n = 0;
+                const converted = item.cubes.map((cubeDef) => {
+                    const trs = goreBoxTRSToThree(
+                        cubeDef.position || { x: 0, y: 0, z: 0 },
+                        cubeDef.rotation || { x: 0, y: 0, z: 0 },
+                        cubeDef.scale || { x: 1, y: 1, z: 1 }
+                    );
+                    cx += trs.pos.x; cy += trs.pos.y; cz += trs.pos.z; n++;
+                    return { cubeDef, trs };
+                });
+                if (n > 0) { cx /= n; cy /= n; cz /= n; }
 
-                    const matName = mapped.userData.materialName || cubeDef.materialName || 'grid';
-                    const matT = mapped.userData.materialType || cubeDef.tag || 'Concrete';
-                    const tex = mapped.userData.texture || matName;
-                    const col = mapped.userData.colorHex || '#ffffff';
-                    const tMode = mapped.userData.tilingMode || 'stretch';
+                // Lift so the lowest point of the object rests near the spawn origin Y
+                let minY = Infinity;
+                converted.forEach(({ trs }) => {
+                    const hy = Math.abs(trs.scl.y) * 0.5;
+                    // conservative bound using scale (rotation can raise/lower corners a bit)
+                    minY = Math.min(minY, trs.pos.y - hy);
+                });
+                if (!Number.isFinite(minY)) minY = 0;
+
+                converted.forEach(({ cubeDef, trs }) => {
+                    const matName = cubeDef.materialName || 'grid';
+                    // Prefer original GoreBox tag for physics/material type
+                    const matT = mapGoreBoxTagToMaterialType(cubeDef.tag || 'Concrete');
+                    const tex = canonicalTextureKey(matName);
+                    const col = '#ffffff';
+                    let tileModeRaw = cubeDef.tileMode;
+                    if (typeof tileModeRaw === 'string') {
+                        tileModeRaw = tileModeRaw === 'xy' ? 0 : tileModeRaw === 'yx' ? 1 : 2;
+                    } else if (typeof tileModeRaw !== 'number') {
+                        tileModeRaw = 1;
+                    }
+                    const tMode = mapTileModeToTiling(tileModeRaw);
 
                     const preset = MATERIAL_PRESETS[matT] || MATERIAL_PRESETS.Concrete;
                     const initialReflect = preset.envMapIntensity;
                     const initialBlur = preset.roughness;
 
                     const mat = this.acquireCubeMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur });
-
                     const mesh = new THREE.Mesh(createBlockGeometry(tex, matT), mat);
                     mesh.castShadow = !isWaterLike(tex, matT);
                     mesh.receiveShadow = true;
 
-                    // Local GoreBox coords already converted to Three space in `mapped`.
-                    // Place the whole object relative to the spawn origin.
+                    // Center XZ on spawn origin; put underside near origin.y
                     mesh.position.set(
-                        origin.x + (mapped.pos?.x || 0),
-                        origin.y + (mapped.pos?.y || 0),
-                        origin.z + (mapped.pos?.z || 0)
+                        origin.x + (trs.pos.x - cx),
+                        origin.y + (trs.pos.y - minY),
+                        origin.z + (trs.pos.z - cz)
                     );
-                    if (mapped.quat && Number.isFinite(mapped.quat.w)) {
-                        mesh.quaternion.set(mapped.quat.x || 0, mapped.quat.y || 0, mapped.quat.z || 0, mapped.quat.w).normalize();
-                    } else {
-                        mesh.quaternion.copy(unityEulerDegToThreeQuaternion(cubeDef.rotation || { x: 0, y: 0, z: 0 }));
-                    }
-                    mesh.scale.set(mapped.scl?.x || 1, mapped.scl?.y || 1, mapped.scl?.z || 1);
+                    mesh.quaternion.set(trs.quat.x, trs.quat.y, trs.quat.z, trs.quat.w).normalize();
+                    mesh.scale.set(trs.scl.x, trs.scl.y, trs.scl.z);
 
-                    const isVisible = mapped.userData.visible !== false;
+                    const isVisible = cubeDef.visible !== false;
                     if (!isVisible) {
                         this.releaseCubeMaterial(mesh.material);
                         mesh.material = this.acquireCubeMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur }, false);
@@ -5123,13 +5222,13 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     mesh.userData = {
                         type: 'cube',
                         visible: isVisible,
-                        collisions: mapped.userData.collisions !== false,
+                        collisions: cubeDef.collisions !== false,
                         texture: tex,
                         materialType: matT,
                         colorHex: col,
                         tilingMode: tMode,
                         materialName: matName,
-                        sourceTag: mapped.userData.sourceTag || matT,
+                        sourceTag: cubeDef.tag || matT,
                         skyboxReflectivity: initialReflect,
                         skyboxBlur: initialBlur,
                         groupId: groupId,
@@ -5148,6 +5247,9 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
                 if (!created.length) return;
 
+                // Ensure world matrices are current before grouping
+                created.forEach(m => m.updateMatrixWorld(true));
+
                 this.selectedBlocks = created;
                 this.buildTransformGroup();
                 this.updateUIFromObject();
@@ -5155,10 +5257,9 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
                 audioEngine.playSpawn();
 
-                // Notification
                 const ind = document.createElement('div');
                 ind.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-green-700/90 text-white px-8 py-3 rounded-full text-xl font-bold z-[100] text-center uppercase tracking-wider';
-                ind.innerText = '✦ ' + item.name + ' (' + created.length + ' cubes)';
+                ind.innerText = '✦ ' + (item.name || 'Object') + ' (' + created.length + ' cubes)';
                 document.body.appendChild(ind);
                 setTimeout(() => { ind.style.opacity = '0'; ind.style.transition = 'opacity 0.3s'; setTimeout(() => ind.remove(), 300); }, 2500);
             },
@@ -5325,10 +5426,10 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 // MeshPhysicalMaterial с onBeforeCompile компилирует GLSL-шейдер один раз и шарится по всем кубам.
                 // Без этого каждый из сотен кубов компилировал собственную копию шейдера -> GPU stall + лаг.
                 const sharedMat = createMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur });
-                // polygonOffset устраняет Z-fighting между кубами почти-одной плоскости - "flickering mess" исчезает.
+                // polygonOffset устраняет Z-fighting между кубами почти-одной плоскости.
                 sharedMat.polygonOffset = true;
-                sharedMat.polygonOffsetFactor = -1;
-                sharedMat.polygonOffsetUnits = -1;
+                sharedMat.polygonOffsetFactor = 1;
+                sharedMat.polygonOffsetUnits = 1;
                 // Флаг для refreshObjectMaterial: не делать dispose() этого материала, он общий.
                 sharedMat.userData._sharedImportMat = true;
 
@@ -5846,10 +5947,16 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
             buildTransformGroup: function() {
                 this.releaseTransformGroup(); if (this.selectedBlocks.length === 0) return;
-                if (this.selectedBlocks.length === 1) { this.transformControl.attach(this.selectedBlocks[0]); return; }
+                // Use WORLD positions for the pivot so multi-cube groups (collection objects)
+                // stay exactly where they were spawned even if parenting/order changes.
                 this.transformGroup.position.set(0,0,0); this.transformGroup.rotation.set(0,0,0); this.transformGroup.scale.set(1,1,1); this.scene.add(this.transformGroup);
-                let center = new THREE.Vector3(); this.selectedBlocks.forEach(b => center.add(b.position)); center.divideScalar(this.selectedBlocks.length); this.transformGroup.position.copy(center);
-                this.selectedBlocks.forEach(b => this.transformGroup.attach(b)); this.transformControl.attach(this.transformGroup);
+                let center = new THREE.Vector3();
+                const _wp = new THREE.Vector3();
+                this.selectedBlocks.forEach(b => { b.updateMatrixWorld(true); b.getWorldPosition(_wp); center.add(_wp); });
+                center.divideScalar(this.selectedBlocks.length);
+                this.transformGroup.position.copy(center);
+                this.selectedBlocks.forEach(b => this.transformGroup.attach(b));
+                this.transformControl.attach(this.transformGroup);
             },
 
             releaseTransformGroup: function() {
@@ -6032,6 +6139,28 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 // Выбранные кубы уже обновлены выше, поэтому полный проход не нужен.
                 this.updateSelectionPanels();
                 if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
+            },
+
+            // Dynamically tighten the depth range so large distant coplanar faces
+            // still resolve. Logarithmic depth + polygonOffset handle the rest.
+            updateCameraDepthRange: function() {
+                if (!this.camera) return;
+                // Depth buffer precision is roughly proportional to near/far.
+                // near=0.01 + far=2000 made coplanar cube faces flicker (z-fighting),
+                // especially large surfaces far from the camera.
+                const minNear = 0.15;
+                const maxNear = 0.6;
+                const dist = this.camera.position.length();
+                // Raise near slightly when the camera is far from the origin / scene
+                const near = THREE.MathUtils.clamp(0.15 + dist * 0.0015, minNear, maxNear);
+                // Keep far large enough for sky/editor freefly, but not absurdly huge
+                const far = 2500;
+                if (Math.abs(this.camera.near - near) > 0.02 || Math.abs(this.camera.far - far) > 1) {
+                    this.camera.near = near;
+                    this.camera.far = far;
+                    this.camera.updateProjectionMatrix();
+                    if (this.updateDepthEncodingUniforms) this.updateDepthEncodingUniforms();
+                }
             },
 
             applyDrawDistance: function(value = null) {
@@ -7589,6 +7718,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.updateCubeDebrisParticles(dt);
                 this.updateDistanceCulling(false, dt);
                 this.updateShadowFrustumFollow(); // move shadow frustum with camera, rerender only when moved ≥15 units
+                this.updateCameraDepthRange?.();
                 this.manualLights.forEach(l => this.updateManualLightTarget(l));
                 while(this.outlines.length < this.selectedBlocks.length) { const line = new THREE.LineSegments(sharedEdgeGeo, outlineMat); line.renderOrder = 999; line.frustumCulled = false; this.scene.add(line); this.outlines.push(line); }
                 this.outlines.forEach((o, i) => { if (i < this.selectedBlocks.length) { const obj = this.selectedBlocks[i]; const showOutline = !(obj.userData?.type === 'light' && !this.lightContourVisible); o.visible = showOutline; obj.getWorldPosition(o.position); obj.getWorldQuaternion(o.quaternion); obj.getWorldScale(o.scale); /* exact cube edges — no padding */ } else { o.visible = false; } });
@@ -8721,5 +8851,5 @@ if (texSel) {
 
 
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a17fdd008881e4b5',t:'MTc4MzUyMTgyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a181076ec96ac9d1',t:'MTc4MzUzNDA1MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a17fdd008881e4b5',t:'MTc4MzUyMTgyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a181076ec96ac9d1',t:'MTc4MzUzNDA1MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a191a6371dbbca23',t:'MTc4MzcwODMyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
