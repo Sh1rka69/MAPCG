@@ -5884,7 +5884,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             duplicateObject: function() {
                 if (this.selectedBlocks.length === 0 || this.selectedBlocks.includes(this.spawnPointObj)) return; this.releaseTransformGroup(); const duplicated = []; const groupMap = new Map();
                 this.selectedBlocks.forEach(obj => {
-                    const data = this.serializeObject(obj); data.pos.x += this.snapToGrid ? 1 : 0.5;
+                    const data = this.serializeObject(obj);
                     if (obj.userData?.type === 'light') {
                         this.addLight(data);
                         duplicated.push(this.selectedBlocks[0]);
@@ -5898,8 +5898,37 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     applySerializedTransform(mesh, data); mesh.userData = data.userData;
                     if (mesh.userData.visible === false) { this.releaseCubeMaterial(mesh.material); mesh.material = this.acquireCubeMaterialFor(mesh); mesh.castShadow = false; }
                     this.updateCubeUVs(mesh); this.scene.add(mesh); this.blocks.push(mesh); duplicated.push(mesh);
+                    this.flashDuplicateHighlight(mesh);
                 });
                 this.selectedBlocks = duplicated; this.buildTransformGroup(); this.updateUIFromObject(); this.updateSelectionPanels(); if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
+            },
+
+            flashDuplicateHighlight: function(mesh) {
+                if (!mesh.geometry) return;
+                if (!this._dupHighlights) this._dupHighlights = [];
+                const overlayMat = new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+                const overlay = new THREE.Mesh(mesh.geometry, overlayMat);
+                overlay.renderOrder = 999;
+                overlay.matrixAutoUpdate = false;
+                mesh.add(overlay);
+                overlay.position.set(0, 0, 0); overlay.rotation.set(0, 0, 0); overlay.scale.set(1.02, 1.02, 1.02);
+                overlay.updateMatrix();
+                this._dupHighlights.push({ overlay, mat: overlayMat, elapsed: 0, duration: 1.0, hostMesh: mesh });
+            },
+
+            updateDuplicateHighlights: function(dt) {
+                if (!this._dupHighlights || this._dupHighlights.length === 0) return;
+                for (let i = this._dupHighlights.length - 1; i >= 0; i--) {
+                    const h = this._dupHighlights[i];
+                    h.elapsed += dt;
+                    const t = Math.min(h.elapsed / h.duration, 1);
+                    h.mat.opacity = 0.85 * (1 - t);
+                    if (t >= 1) {
+                        if (h.hostMesh) h.hostMesh.remove(h.overlay);
+                        h.mat.dispose();
+                        this._dupHighlights.splice(i, 1);
+                    }
+                }
             },
 
             setTransformMode: function(mode) { this.transformControl.setMode(mode); ['translate', 'rotate', 'scale'].forEach(m => document.getElementById(`mode-${m}`).classList.toggle('active-tool', m === mode)); },
@@ -7491,6 +7520,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
 
             animate: function() {
                 requestAnimationFrame(this.animate.bind(this)); const dt = this.clock.getDelta(); weatherUniforms.uTime.value += dt;
+                this.updateDuplicateHighlights(dt);
                 if (this.fpsCounterEnabled) {
                     this.fpsFrameCount++;
                     this.fpsElapsed += dt;
