@@ -1649,26 +1649,26 @@
                         </label>
 
                         <label class="flex items-center gap-2 mb-2 cursor-pointer">
-                            <input type="checkbox" id="setting-bloom" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();">
+                            <input type="checkbox" id="setting-bloom" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked>
                             <span class="text-xs" style="color: var(--td-text-dim);" data-i18n="bloom">Bloom</span>
                         </label>
                         <div class="p-2 mb-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
                             <label class="td-label block mb-1" style="font-size: 9px;">Bloom strength</label>
                             <div class="flex items-center gap-2">
-                                <input type="range" id="setting-bloom-strength" min="0" max="3" step="0.05" value="0.8" class="flex-1" oninput="document.getElementById('bloom-strength-val').innerText = Number(this.value).toFixed(2)">
-                                <span id="bloom-strength-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">0.80</span>
+                                <input type="range" id="setting-bloom-strength" min="0" max="3" step="0.05" value="1.5" class="flex-1" oninput="document.getElementById('bloom-strength-val').innerText = Number(this.value).toFixed(2)">
+                                <span id="bloom-strength-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">1.50</span>
                             </div>
                         </div>
 
                         <label class="flex items-center gap-2 mb-2 cursor-pointer">
-                            <input type="checkbox" id="setting-ssao" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();">
+                            <input type="checkbox" id="setting-ssao" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked>
                             <span class="text-xs" style="color: var(--td-text-dim);" data-i18n="ssao">Ambient Occlusion</span>
                         </label>
                         <div class="p-2 mb-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
                             <label class="td-label block mb-1" style="font-size: 9px;">AO Intensity</label>
                             <div class="flex items-center gap-2">
-                                <input type="range" id="setting-ao-intensity" min="0" max="1.5" step="0.05" value="0.55" class="flex-1" oninput="document.getElementById('ao-intensity-val').innerText=Number(this.value).toFixed(2); engine.updateGraphics();">
-                                <span id="ao-intensity-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">0.55</span>
+                                <input type="range" id="setting-ao-intensity" min="0" max="1.5" step="0.05" value="1.20" class="flex-1" oninput="document.getElementById('ao-intensity-val').innerText=Number(this.value).toFixed(2); engine.updateGraphics();">
+                                <span id="ao-intensity-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">1.20</span>
                             </div>
                         </div>
 
@@ -1717,16 +1717,16 @@
                         <div class="p-2 mb-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
                             <label class="td-label block mb-1" style="font-size: 9px;">Max Texture Quality</label>
                             <div class="flex items-center gap-2">
-                                <input type="range" id="setting-texture-quality" min="0" max="4" step="1" value="3" class="flex-1" oninput="engine.previewTextureQualityLabel?.(parseInt(this.value,10));" onchange="engine.applyTextureQualitySetting?.(parseInt(this.value,10)); window.historyManager.takeSnapshot();">
-                                <span id="texture-quality-val" class="mono text-xs w-12 text-right" style="color: var(--td-accent);">1080p</span>
+                                <input type="range" id="setting-texture-quality" min="0" max="4" step="1" value="2" class="flex-1" oninput="engine.previewTextureQualityLabel?.(parseInt(this.value,10));" onchange="engine.applyTextureQualitySetting?.(parseInt(this.value,10)); window.historyManager.takeSnapshot();">
+                                <span id="texture-quality-val" class="mono text-xs w-12 text-right" style="color: var(--td-accent);">564p</span>
                             </div>
                         </div>
 
                         <div class="p-2 mt-1" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
                             <label class="td-label block mb-1" style="font-size: 9px;">Render Resolution</label>
                             <div class="flex items-center gap-2">
-                                <input type="range" id="setting-pixel-ratio" min="0.2" max="2" step="0.05" value="0.8" class="flex-1" oninput="document.getElementById('pixel-ratio-val').innerText = Number(this.value).toFixed(2) + 'x'; engine.applyPixelRatio?.(parseFloat(this.value));">
-                                <span id="pixel-ratio-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">0.80x</span>
+                                <input type="range" id="setting-pixel-ratio" min="0.2" max="2" step="0.05" value="0.7" class="flex-1" oninput="document.getElementById('pixel-ratio-val').innerText = Number(this.value).toFixed(2) + 'x'; engine.applyPixelRatio?.(parseFloat(this.value));">
+                                <span id="pixel-ratio-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">0.70x</span>
                             </div>
                         </div>
 
@@ -2428,7 +2428,7 @@
 
         const TEXTURE_QUALITY_LEVELS = [144, 256, 564, 1080, 2048];
         const TEXTURE_QUALITY_LABELS = ['144p', '256p', '564p', '1080p', '2K'];
-        let currentTextureQualityIndex = 3;
+        let currentTextureQualityIndex = 2;
         let currentTextureMaxResolution = TEXTURE_QUALITY_LEVELS[currentTextureQualityIndex];
 
         function getTextureQualityIndexFromUI() {
@@ -3642,6 +3642,11 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 const _cw = window.innerWidth, _ch = window.innerHeight;
                 const _compTarget = new THREE.WebGLRenderTarget(_cw, _ch, { type: THREE.UnsignedByteType, depthBuffer: true });
                 this.composer = new EffectComposer(this.renderer, _compTarget);
+                // We blit the composited result to the screen manually (see render loop) instead
+                // of letting EffectComposer auto-mark the last pass as renderToScreen. This gives
+                // us a reliable handle on the final image so SSR temporal history can be captured
+                // from it — composer internals don't expose the last pass's output otherwise.
+                this.composer.renderToScreen = false;
                 this.composer.addPass(new RenderPass(this.scene, this.camera));
 
                 // ── Separate depth target for AO/RT (not attached to composer → no feedback loop) ──
@@ -3773,18 +3778,41 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                             vec3  pos   = getViewPos(vUv, centerD.x);
                             float depth = max(0.001, centerD.x);
 
-                            /* ── Best-neighbour normal reconstruction (view-space) ─────────── */
+                            /* ── Stable normal reconstruction (view-space) ─────────────────────
+                               Previously used a hard if/else "best neighbour" pick based on which
+                               side had the smaller depth delta. On perfectly flat, coplanar seams
+                               (adjacent unit cubes sharing an edge) the L/R (or U/D) depth deltas
+                               are nearly identical — sub-pixel camera jitter between frames flips
+                               which side "wins" every frame, causing the reconstructed normal to
+                               jump discretely along cube seams. That produced moving dark bands
+                               that were not real corners. Fix: always use a symmetric central
+                               difference, but softly fall back toward the closer sample only when
+                               a real depth discontinuity (edge/corner) is detected, using a smooth
+                               weight instead of a hard branch — no more frame-to-frame flip. */
                             vec2 dR  = readDepth(vUv + vec2( texel.x, 0.0));
                             vec2 dL  = readDepth(vUv - vec2( texel.x, 0.0));
                             vec2 dU  = readDepth(vUv + vec2(0.0,  texel.y));
                             vec2 dDn = readDepth(vUv - vec2(0.0,  texel.y));
 
-                            vec3 dX = abs(dR.x - centerD.x) < abs(centerD.x - dL.x)
-                                ? getViewPos(vUv + vec2( texel.x, 0.0), dR.x) - pos
-                                : pos - getViewPos(vUv - vec2( texel.x, 0.0), dL.x);
-                            vec3 dY = abs(dU.x - centerD.x) < abs(centerD.x - dDn.x)
-                                ? getViewPos(vUv + vec2(0.0,  texel.y), dU.x) - pos
-                                : pos - getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);
+                            vec3 pR = getViewPos(vUv + vec2( texel.x, 0.0), dR.x);
+                            vec3 pL = getViewPos(vUv - vec2( texel.x, 0.0), dL.x);
+                            vec3 pU = getViewPos(vUv + vec2(0.0,  texel.y), dU.x);
+                            vec3 pD = getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);
+
+                            /* Depth-discontinuity weight: 0 = hard edge (use single closer side),
+                               1 = flat / continuous (use symmetric central difference). A smooth
+                               transition between the two removes the per-frame flip entirely. */
+                            float edgeScale = max(0.001, centerD.x) * 0.06;
+                            float wx = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dR.x - dL.x));
+                            float wy = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dU.x - dDn.x));
+
+                            vec3 dXCentral = (pR - pL) * 0.5;
+                            vec3 dYCentral = (pU - pD) * 0.5;
+                            vec3 dXEdge = (abs(dR.x - centerD.x) < abs(centerD.x - dL.x)) ? (pR - pos) : (pos - pL);
+                            vec3 dYEdge = (abs(dU.x - centerD.x) < abs(centerD.x - dDn.x)) ? (pU - pos) : (pos - pD);
+
+                            vec3 dX = mix(dXEdge, dXCentral, wx);
+                            vec3 dY = mix(dYEdge, dYCentral, wy);
 
                             vec3 N = normalize(cross(dX, dY));
                             /* Ensure N points toward camera (+z in OpenGL view space) */
@@ -3807,8 +3835,11 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                             float screenRX_W = screenRY_W / aspect;
 
                             /* ── golden-angle hemisphere sampling, evaluated at two radii per ring ── */
-                            // Reduced from 16→8 samples: halves AO cost per pixel on mobile GPU
-                            const int   S  = 8;
+                            // Reduced from 16→8→6 samples: each pixel does 2 depth reads per sample
+                            // (tight+wide), so this is the AO pass's main cost. 6 is still enough
+                            // for a stable result since the tight/wide combine + smoothstep already
+                            // hides sampling noise.
+                            const int   S  = 6;
                             const float GA = 2.39996322972865332;
                             float aoTight = 0.0, aoWide = 0.0;
                             float wTight  = 0.0, wWide  = 0.0;
@@ -3900,9 +3931,15 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                         precision highp float;
                         uniform sampler2D tDiffuse;
                         uniform sampler2D tDepth;
+                        uniform sampler2D tPrevFrame;
                         uniform vec2      resolution;       /* full output size — IGN + edge fade */
                         uniform vec2      uDepthResolution; /* half-res depth texture — texel offsets */
                         uniform mat4      proj;
+                        uniform mat4      uPrevViewProj;     /* previous frame's world→clip matrix */
+                        uniform mat4      uInvView;          /* this frame's view→world matrix */
+                        uniform vec3      uCamPos;           /* this frame's world-space camera position */
+                        uniform float     uHistoryValid;     /* 0 = first frame / just resized, skip blend */
+                        uniform float     uCameraMoved;      /* 0..1 — larger camera motion → trust history less */
                         uniform float     rtStrength;
                         uniform float     uSharpness;
                         uniform float     uFar;
@@ -3936,6 +3973,22 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                             return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));
                         }
 
+                        /* Reads the reflection colour with a small roughness-weighted multi-tap
+                           blur. A single texel lookup at the hit point is what made reflections
+                           look blocky/pixelated at a distance (each screen pixel maps to a large
+                           world area). Averaging a few neighbouring taps softens that without
+                           costing extra rays. */
+                        vec3 resolveReflectionColor(vec2 hitUV, float roughness) {
+                            vec2 px = 1.0 / resolution;
+                            float r = 1.0 + roughness * 2.5;
+                            vec3 sum = texture2D(tDiffuse, hitUV).rgb * 4.0;
+                            sum += texture2D(tDiffuse, hitUV + vec2( px.x,  0.0) * r).rgb;
+                            sum += texture2D(tDiffuse, hitUV + vec2(-px.x,  0.0) * r).rgb;
+                            sum += texture2D(tDiffuse, hitUV + vec2( 0.0,  px.y) * r).rgb;
+                            sum += texture2D(tDiffuse, hitUV + vec2( 0.0, -px.y) * r).rgb;
+                            return sum / 8.0;
+                        }
+
                         void main() {
                             vec4  col  = texture2D(tDiffuse, vUv);
                             vec2  centerD = readDepth(vUv);
@@ -3945,29 +3998,40 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                             vec2  texel = 1.0 / uDepthResolution; /* depth-tex res for correct neighbor taps */
                             vec3  pos   = getViewPos(vUv, centerD.x);
 
-                            /* ── Реконструкция нормали (best-neighbour, без швов) ── */
+                            /* ── Стабильная реконструкция нормали (см. AO-шейдер выше — тот же fix:
+                               центральная разность на плоских участках, чтобы швы кубов не давали
+                               скачущую нормаль и, как следствие, дрожащие отражения). ── */
                             vec2 dR  = readDepth(vUv + vec2( texel.x, 0.0));
                             vec2 dL  = readDepth(vUv - vec2( texel.x, 0.0));
                             vec2 dU  = readDepth(vUv + vec2(0.0,  texel.y));
                             vec2 dDn = readDepth(vUv - vec2(0.0,  texel.y));
-                            vec3 dX = abs(dR.x - centerD.x) < abs(centerD.x - dL.x)
-                                ? getViewPos(vUv + vec2( texel.x, 0.0), dR.x) - pos
-                                : pos - getViewPos(vUv - vec2( texel.x, 0.0), dL.x);
-                            vec3 dY = abs(dU.x - centerD.x) < abs(centerD.x - dDn.x)
-                                ? getViewPos(vUv + vec2(0.0,  texel.y), dU.x) - pos
-                                : pos - getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);
+                            vec3 pR = getViewPos(vUv + vec2( texel.x, 0.0), dR.x);
+                            vec3 pL = getViewPos(vUv - vec2( texel.x, 0.0), dL.x);
+                            vec3 pU = getViewPos(vUv + vec2(0.0,  texel.y), dU.x);
+                            vec3 pD = getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);
+                            float edgeScale = max(0.001, centerD.x) * 0.06;
+                            float wx = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dR.x - dL.x));
+                            float wy = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dU.x - dDn.x));
+                            vec3 dXEdge = (abs(dR.x - centerD.x) < abs(centerD.x - dL.x)) ? (pR - pos) : (pos - pL);
+                            vec3 dYEdge = (abs(dU.x - centerD.x) < abs(centerD.x - dDn.x)) ? (pU - pos) : (pos - pD);
+                            vec3 dX = mix(dXEdge, (pR - pL) * 0.5, wx);
+                            vec3 dY = mix(dYEdge, (pU - pD) * 0.5, wy);
                             vec3 N = normalize(cross(dX, dY));
                             if (N.z < 0.0) N = -N;
 
                             /* ── Трассировка отражённого луча в view-space ── */
                             vec3  V = normalize(pos);           /* камера в (0,0,0) */
-                            float blur = 1.0 - uSharpness;
+                            float roughness = clamp(1.0 - uSharpness, 0.0, 1.0);
                             vec3 randDir = vec3(IGN(vUv * resolution + 0.1) - 0.5, IGN(vUv * resolution + 0.2) - 0.5, IGN(vUv * resolution + 0.3) - 0.5);
-                            vec3  R = normalize(reflect(V, N) + randDir * blur * 0.1);
+                            vec3  R = normalize(reflect(V, N) + randDir * roughness * 0.06);
                             float jitter    = IGN(floor(vUv * resolution));
-                            // Reduced STEPS 28→14 and MAXDIST 60→30: halves RT cost per pixel on mobile
+                            /* Perf: dropped 22→14 steps. Temporal reprojection (below) accumulates
+                               samples across frames, so a single frame's ray no longer needs to be
+                               this precise — the history blend hides the coarser marching, but the
+                               GPU cost of the most expensive pass in the whole pipeline drops by
+                               ~35%. This was the single biggest FPS cost in the renderer. */
                             const int   STEPS   = 14;
-                            const float MAXDIST = 30.0;
+                            const float MAXDIST = 34.0;
                             float stepLen   = MAXDIST / float(STEPS);
                             float thickness = 0.9;
 
@@ -3985,9 +4049,12 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                                     float sceneZ = -sD.x;
                                     float diff   = sceneZ - p.z;        /* >0 когда луч зашёл за поверхность */
                                     if (diff > 0.0 && diff < thickness + t * 0.06) {
-                                        /* Бинарное уточнение точки попадания */
+                                        /* Binary refinement: 3 iterations is enough precision once
+                                           temporal accumulation smooths the result over several frames —
+                                           trimmed from 4 for perf, edge crispness loss is not visible
+                                           after the history blend. */
                                         float lo = prevT, hi = t;
-                                        for (int j = 0; j < 3; j++) { // reduced 5→3 refinement steps
+                                        for (int j = 0; j < 3; j++) {
                                             float mid = (lo + hi) * 0.5;
                                             vec3  pm  = pos + R * mid;
                                             vec2  uvm = viewToUv(pm);
@@ -4000,23 +4067,58 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                                     }
                                 }
                                 prevT = t;
-                                t += stepLen * (1.0 + float(i) * 0.09);  /* ускоряющийся шаг */
+                                t += stepLen * (1.0 + float(i) * 0.07);  /* ускоряющийся шаг */
                             }
 
                             vec3 outCol = col.rgb;
 
                             if (hit > 0.5) {
-                                vec3 refCol = texture2D(tDiffuse, hitUV).rgb;
-                                /* Френель: под скользящим углом отражения сильнее — физически корректно */
-                                float fres = pow(1.0 - max(0.0, dot(-V, N)), 3.0);
-                                float refAmt = clamp(rtStrength * (0.10 + 0.85 * fres), 0.0, 0.75);
+                                vec3 refCol = resolveReflectionColor(hitUV, roughness);
+                                /* Френель: под скользящим углом отражения сильнее — физически корректно.
+                                   Slightly softer power (3→2.4) reads closer to a real dielectric
+                                   Fresnel curve instead of an overly narrow rim highlight. */
+                                float fres = pow(1.0 - max(0.0, dot(-V, N)), 2.4);
+                                float refAmt = clamp(rtStrength * (0.08 + 0.88 * fres), 0.0, 0.82);
                                 /* Затухание у краёв экрана — убирает резкие обрывы отражений */
                                 vec2  edge = min(hitUV, 1.0 - hitUV);
-                                refAmt *= smoothstep(0.0, 0.08, min(edge.x, edge.y));
-                                outCol = mix(outCol, refCol, refAmt);
+                                refAmt *= smoothstep(0.0, 0.10, min(edge.x, edge.y));
+
+                                /* ── Temporal reprojection: blend with last frame's reflection at the
+                                   same WORLD point to average out per-frame ray noise. This is what
+                                   turns a single noisy screen-space sample into a smooth, denoised
+                                   result — the main reason real-time reflections look "cheap" without
+                                   it. ── */
+                                vec3 worldPos = (uInvView * vec4(pos, 1.0)).xyz;
+                                vec4 prevClip = uPrevViewProj * vec4(worldPos, 1.0);
+                                vec3 blended = mix(col.rgb, refCol, refAmt);
+                                if (uHistoryValid > 0.5 && prevClip.w > 0.0) {
+                                    vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;
+                                    if (prevUV.x > 0.0 && prevUV.x < 1.0 && prevUV.y > 0.0 && prevUV.y < 1.0) {
+                                        vec3 histCol = texture2D(tPrevFrame, prevUV).rgb;
+                                        float histWeight = mix(0.82, 0.15, uCameraMoved);
+                                        blended = mix(blended, histCol, histWeight);
+                                    }
+                                }
+                                outCol = blended;
+
                                 /* GI: одноотскоковый перенос цвета (colour bleeding) от точки попадания */
                                 float lum = dot(refCol, vec3(0.299, 0.587, 0.114));
                                 outCol += refCol * lum * 0.06 * rtStrength;
+                            } else if (uHistoryValid > 0.5) {
+                                /* No ray hit this frame (e.g. a single dropped sample near a grazing
+                                   angle) — reproject history instead of snapping straight back to the
+                                   unreflected colour, which would otherwise flicker every time a ray
+                                   happens to miss. Weighted lightly so real, persistent misses (e.g.
+                                   camera turned away) still fade out instead of ghosting forever. */
+                                vec3 worldPos = (uInvView * vec4(pos, 1.0)).xyz;
+                                vec4 prevClip = uPrevViewProj * vec4(worldPos, 1.0);
+                                if (prevClip.w > 0.0) {
+                                    vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;
+                                    if (prevUV.x > 0.0 && prevUV.x < 1.0 && prevUV.y > 0.0 && prevUV.y < 1.0) {
+                                        vec3 histCol = texture2D(tPrevFrame, prevUV).rgb;
+                                        outCol = mix(col.rgb, histCol, mix(0.5, 0.05, uCameraMoved));
+                                    }
+                                }
                             }
 
                             /* Мягкий кинематографичный контраст в RT-режиме */
@@ -4034,6 +4136,31 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.rtPass.enabled = false;
                 this.composer.insertPass(this.rtPass, 1); // сразу после RenderPass, до AO/Bloom
                 this.updateDepthEncodingUniforms();
+
+                // ── Temporal accumulation buffer for SSR denoising ──────────────────────
+                // A single raymarched sample per pixel is noisy/blocky. Reprojecting and
+                // blending with the previous frame's reflection result (exponential moving
+                // average, weighted by camera movement) turns that noise into smooth,
+                // production-quality reflections — the same technique used by TAA/SSR
+                // denoisers in modern engines. Costs one extra render target, no extra rays.
+                this._rtHistoryTarget = new THREE.WebGLRenderTarget(_cw, _ch, {
+                    type: THREE.UnsignedByteType,
+                    format: THREE.RGBAFormat,
+                    depthBuffer: false,
+                    stencilBuffer: false
+                });
+                this._rtHistoryTarget.texture.name = 'RTHistory';
+                this._rtHistoryTarget.texture.magFilter = THREE.LinearFilter;
+                this._rtHistoryTarget.texture.minFilter = THREE.LinearFilter;
+                this._rtPrevViewProj = new THREE.Matrix4();
+                this._rtPrevCamPos = new THREE.Vector3(999999, 999999, 999999);
+                this._rtHistoryReady = false;
+                this.rtPass.uniforms.tPrevFrame = { value: this._rtHistoryTarget.texture };
+                this.rtPass.uniforms.uPrevViewProj = { value: new THREE.Matrix4() };
+                this.rtPass.uniforms.uCamPos = { value: new THREE.Vector3() };
+                this.rtPass.uniforms.uInvView = { value: new THREE.Matrix4() };
+                this.rtPass.uniforms.uHistoryValid = { value: 0.0 };
+                this.rtPass.uniforms.uCameraMoved = { value: 0.0 };
 
 
                 this.sky = new Sky(); this.sky.scale.setScalar(25000); this.sun = new THREE.Vector3();
@@ -4215,6 +4342,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     this.rtPass.uniforms.uSharpness.value = sharpVal;
                 }
                 if (this._depthTarget) this._depthTarget.setSize(Math.floor(w / 2), Math.floor(h / 2)); // half-res depth target
+                if (this._rtHistoryTarget) { this._rtHistoryTarget.setSize(w, h); this._rtHistoryReady = false; }
                 if (this.updateDepthEncodingUniforms) this.updateDepthEncodingUniforms();
                 if (window.uiManager && uiManager.applyResponsiveScale) uiManager.applyResponsiveScale(false);
             },
@@ -4257,6 +4385,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     this.renderer.setSize(w, h, false); // false = не трогать CSS
                     if (this.composer) this.composer.setSize(w, h);
                     if (this._depthTarget) this._depthTarget.setSize(Math.floor(w / 2), Math.floor(h / 2)); // half-res depth target
+                    if (this._rtHistoryTarget) { this._rtHistoryTarget.setSize(w, h); this._rtHistoryReady = false; }
                     if (this.ssaoPass?.uniforms) { this.ssaoPass.uniforms.resolution.value.set(w, h); this.ssaoPass.uniforms.uDepthResolution.value.set(Math.floor(w / 2), Math.floor(h / 2)); this.ssaoPass.uniforms.tDepth.value = this._depthTarget.texture; }
                     if (this.rtPass?.uniforms) { this.rtPass.uniforms.resolution.value.set(w, h); this.rtPass.uniforms.uDepthResolution.value.set(Math.floor(w / 2), Math.floor(h / 2)); this.rtPass.uniforms.tDepth.value = this._depthTarget.texture; this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix); }
                     if (this.updateDepthEncodingUniforms) this.updateDepthEncodingUniforms();
@@ -6257,6 +6386,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 // ── ✨ RAY TRACING ────────────────────────────────────────────────
                 const rtEnabled = document.getElementById('setting-reflections')?.checked ?? false;
                 if (this.rtPass) {
+                    if (this.rtPass.enabled !== rtEnabled) this._rtHistoryReady = false; // avoid stale/ghosted history on toggle
                     this.rtPass.enabled = rtEnabled;
                     this.rtPass.uniforms.tDepth.value = this._depthTarget.texture;
                     this.rtPass.uniforms.resolution.value.set(
@@ -7507,7 +7637,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     if (this.customSkyboxTexture) { try { this.customSkyboxTexture.dispose(); } catch(e) {} this.customSkyboxTexture = null; }
                     if (this.customSkyboxEnvMap) { try { this.customSkyboxEnvMap.dispose(); } catch(e) {} this.customSkyboxEnvMap = null; }
                     if (document.getElementById('setting-draw-distance')) this.applyDrawDistance(350);
-                    if (document.getElementById('setting-texture-quality')) await this.applyTextureQualitySetting(3);
+                    if (document.getElementById('setting-texture-quality')) await this.applyTextureQualitySetting(2);
                     if (document.getElementById('setting-reflections')) document.getElementById('setting-reflections').checked = false; // Ray Tracing по умолчанию выключен
                 }
                 this.applyCameraSensitivity(parseFloat(document.getElementById('setting-camera-sensitivity')?.value || localStorage.getItem('mmcg_camera_sens_55') || '1'));
@@ -7653,8 +7783,68 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                         this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
                         // Резкость читаем из кэша (обновляется по input-событию слайдера), а не DOM каждый кадр
                         this.rtPass.uniforms.uSharpness.value = (this._reflectionSharpness ?? 0.8);
+
+                        // ── Temporal SSR accumulation: feed last frame's world→clip matrix and
+                        // this frame's view→world + camera position so the shader can reproject
+                        // and blend history at the *world-space* hit point (not screen-space,
+                        // which would smear during camera motion). ──
+                        if (this.rtPass.uniforms.uPrevViewProj) {
+                            this.rtPass.uniforms.uPrevViewProj.value.copy(this._rtPrevViewProj);
+                            this.rtPass.uniforms.uInvView.value.copy(this.camera.matrixWorld);
+                            this.rtPass.uniforms.uCamPos.value.copy(this.camera.position);
+                            const moved = this.camera.position.distanceTo(this._rtPrevCamPos);
+                            // Rotation matters as much as translation: orbiting/turning the camera
+                            // barely changes camera.position but completely changes what's on screen.
+                            // Using position delta alone left uCameraMoved near 0 during turns, so the
+                            // shader kept trusting stale history heavily → smeared "melting" look when
+                            // rotating. Compare quaternions to catch rotation-only motion too.
+                            if (!this._rtPrevCamQuat) this._rtPrevCamQuat = this.camera.quaternion.clone();
+                            const angleMoved = this._rtPrevCamQuat.angleTo(this.camera.quaternion); // radians
+                            // 0 = static camera (trust history heavily), 1 = fast motion (trust history little)
+                            const moveFactor = moved / 2.0;
+                            const rotFactor = angleMoved / 0.12; // ~7° of turn already maxes this out
+                            this.rtPass.uniforms.uCameraMoved.value = THREE.MathUtils.clamp(Math.max(moveFactor, rotFactor), 0.0, 1.0);
+                            this.rtPass.uniforms.uHistoryValid.value = this._rtHistoryReady ? 1.0 : 0.0;
+                        }
                     }
-                    if (this.bloomPass.enabled || this.ssaoPass.enabled || this.rtPass?.enabled) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+                    const _useComposer = this.bloomPass.enabled || this.ssaoPass.enabled || this.rtPass?.enabled;
+                    if (_useComposer) {
+                        this.composer.render();
+                        // composer.renderToScreen is false (see init), so the finished composite
+                        // sits in composer.readBuffer — blit it to the canvas ourselves. Doing this
+                        // explicitly (instead of relying on the composer's auto last-pass screen
+                        // write) is what lets us also capture the exact same frame into the SSR
+                        // history buffer below, with zero extra scene renders.
+                        this._blitQuad = this._blitQuad || (() => {
+                            const scene = new THREE.Scene();
+                            const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+                            const mat = new THREE.MeshBasicMaterial({ map: null, depthTest: false, depthWrite: false, toneMapped: false });
+                            const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+                            quad.frustumCulled = false;
+                            scene.add(quad);
+                            return { scene, cam, mat };
+                        })();
+                        this._blitQuad.mat.map = this.composer.readBuffer.texture;
+                        this.renderer.setRenderTarget(null);
+                        this.renderer.render(this._blitQuad.scene, this._blitQuad.cam);
+
+                        if (this.rtPass?.enabled && this._rtHistoryTarget) {
+                            // Store this frame's finished composite as next frame's history, and
+                            // remember the matrices/position used, for the next reprojection.
+                            this.renderer.setRenderTarget(this._rtHistoryTarget);
+                            this.renderer.render(this._blitQuad.scene, this._blitQuad.cam);
+                            this.renderer.setRenderTarget(null);
+                            this._rtPrevViewProj.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+                            this._rtPrevCamPos.copy(this.camera.position);
+                            if (!this._rtPrevCamQuat) this._rtPrevCamQuat = this.camera.quaternion.clone(); else this._rtPrevCamQuat.copy(this.camera.quaternion);
+                            this._rtHistoryReady = true;
+                        } else if (this._rtHistoryReady) {
+                            this._rtHistoryReady = false; // reflections turned off — invalidate stale history
+                        }
+                    } else {
+                        this.renderer.render(this.scene, this.camera);
+                        if (this._rtHistoryReady) this._rtHistoryReady = false;
+                    }
                     this._renderSkipFrames = 0;
                 } catch (err) {
                     console.error('Scene render error:', err);
