@@ -10,7 +10,21 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <!-- Библиотека для безлимитного асинхронного сохранения (исправляет ошибку квоты) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <!-- vConsole: рабочая мобильная консоль для отладки (по клику на кнопку "Console") -->
+    <script src="https://unpkg.com/vconsole@3.15.1/dist/vconsole.min.js"></script>
     <style>
+        /* =================================================================
+           HARD OVERRIDE: .hidden must always win, no matter what other
+           display-utility classes (flex/grid/block/etc.) are also present
+           on the same element and no matter in what order the Tailwind CDN
+           JIT compiler happens to emit its own utility rules. Without this,
+           elements using both "hidden" and "flex" classes together, used by
+           every modal in this app, can render as visible and intercept clicks
+           even while carrying the "hidden" class, depending on Tailwind's
+           runtime stylesheet ordering.
+           ================================================================= */
+        .hidden { display: none !important; }
+
         /* =================================================================
            TEARDOWN-STYLE UI
            • SDF-look шрифт (Inter / системный sans)
@@ -443,6 +457,82 @@
             color: var(--td-accent-bright) !important;
         }
 
+        /* ── Явные состояния для переключателей ─────────────────────────── */
+        .state-toggle,
+        .merge-mode-btn {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .state-toggle::after,
+        .merge-mode-btn::after {
+            content: attr(data-state-badge);
+            position: absolute;
+            top: 4px;
+            right: 5px;
+            min-width: 22px;
+            height: 14px;
+            padding: 0 6px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid transparent;
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--td-text-dim);
+            font-size: 9px;
+            line-height: 1;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            opacity: 0;
+            transform: translateY(-2px);
+            transition: opacity 0.12s ease, transform 0.12s ease, background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+            pointer-events: none;
+        }
+
+        .state-toggle[data-state-badge]:not([data-state-badge=""])::after,
+        .merge-mode-btn[data-state-badge]:not([data-state-badge=""])::after {
+            opacity: 1;
+        }
+
+        .state-toggle.is-on {
+            background: rgba(255, 138, 61, 0.24) !important;
+            border-color: rgba(255, 138, 61, 0.95) !important;
+            color: #ffd7b6 !important;
+            box-shadow:
+                inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+                0 0 12px rgba(255, 138, 61, 0.18);
+        }
+
+        .state-toggle.is-off {
+            background: var(--td-bg-2) !important;
+            border-color: var(--td-border) !important;
+            color: var(--td-text-dim) !important;
+            box-shadow: none;
+        }
+
+        .state-toggle.is-on::after,
+        .merge-mode-btn.is-active::after {
+            background: rgba(255, 138, 61, 0.20);
+            border-color: rgba(255, 138, 61, 0.60);
+            color: #ffd7b6;
+        }
+
+        .merge-mode-btn.is-active {
+            background: rgba(255, 138, 61, 0.22) !important;
+            border-color: rgba(255, 138, 61, 0.95) !important;
+            color: #ffd7b6 !important;
+            box-shadow:
+                inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+                0 0 12px rgba(255, 138, 61, 0.16);
+        }
+
+        .merge-mode-btn.is-inactive {
+            background: var(--td-bg-2) !important;
+            border-color: var(--td-border) !important;
+            color: var(--td-text-dim) !important;
+        }
+
         /* ── Панель фигур (shapes panel) ────────────────────────────────── */
         .shape-panel {
             transform-origin: top right;
@@ -863,6 +953,11 @@
         }
         #playtest-btn:hover { background: var(--td-accent-bright) !important; }
 
+        /* Hover для кнопки World Pause — не трогает background/border, чтобы
+           не перетирать оранжевое "активное" состояние (когда мир заморожен). */
+        #btn-world-pause-toggle:hover { filter: brightness(1.35); }
+        #btn-world-pause-toggle[aria-pressed="true"] { box-shadow: 0 0 0 1px rgba(255,138,61,0.35) inset; }
+
         /* ── Убраны ненужные декоративные тени/градиенты ради FPS ──────── */
         *:focus-visible {
             outline: 1px solid var(--td-accent);
@@ -950,11 +1045,18 @@
 
             <!-- Нижние кнопки -->
             <div class="py-2 border-t border-[var(--td-border)] flex flex-col gap-px flex-shrink-0">
-                <button onclick="alert('Import Map = MapData.json (File) + CustomTextures (Folder) \nDeveloper: Sh1rka\nHotkeys:\nCtrl+S - Save\nCtrl+D - Duplicate\nCtrl+Z / Ctrl+Y - Undo/Redo history\nG, R, T - Translate, Rotate, Scale')" class="gbox-sidebar-btn" style="font-size: 14px; padding: 10px 18px;">
+                <button onclick="(window.uiManager ? uiManager.openHelpGuideModal() : document.getElementById('help-guide-modal').classList.remove('hidden'))" class="gbox-sidebar-btn" style="font-size: 14px; padding: 10px 18px;">
                     <span class="ui-icon ui-icon-anim" aria-hidden="true">
                         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><circle cx="10" cy="10" r="7"/><path d="M10 7v3M10 13h.01"/></svg>
                     </span>
                     <span data-i18n="helpBtn">Help / Info</span>
+                </button>
+
+                <button id="btn-console-toggle-sidebar" onclick="(window.uiManager ? uiManager.toggleConsole() : null)" class="gbox-sidebar-btn" style="font-size: 14px; padding: 10px 18px;" title="Toggle Debug Console (vConsole)">
+                    <span class="ui-icon ui-icon-anim" aria-hidden="true">
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><rect x="2" y="4" width="16" height="12" rx="1"/><path d="M5 8l3 2-3 2M10 12h5"/></svg>
+                    </span>
+                    <span data-i18n="consoleBtn">Console</span>
                 </button>
 
                 <button id="btn-fullscreen-toggle-sidebar" onclick="uiManager.toggleFullscreen()" class="gbox-sidebar-btn" style="font-size: 14px; padding: 10px 18px;">
@@ -1035,9 +1137,9 @@
             <!-- TOP BAR -->
             <div class="ui-panel h-12 w-full flex items-center justify-between px-3 pointer-events-auto z-40 relative" style="border-bottom: 1px solid var(--td-border);">
                 <div class="flex gap-1 h-full items-center">
-                    <button onclick="uiManager.showExportModal()" class="flex items-center gap-2 px-2 py-1.5 text-xs uppercase tracking-[0.1em] transition" style="color: var(--td-text-dim);" onmouseover="this.style.color='white'; this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.background='transparent'">
-                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M4 4h12v12H4zM4 8h12M8 4v12"/></svg>
-                        <span class="hidden sm:inline" data-i18n="projectBtn">Project</span>
+                    <button onclick="uiManager.showExportModal()" title="Export map to GoreBox (ZIP / GLB)" aria-label="Export" class="flex items-center gap-2 px-3 py-1.5 text-xs uppercase tracking-[0.1em] font-semibold transition" style="color: var(--td-accent); border: 1px solid rgba(255,138,61,0.45); background: rgba(255,138,61,0.10);" onmouseover="this.style.background='rgba(255,138,61,0.22)'; this.style.color='white'; this.style.borderColor='var(--td-accent)'" onmouseout="this.style.background='rgba(255,138,61,0.10)'; this.style.color='var(--td-accent)'; this.style.borderColor='rgba(255,138,61,0.45)'">
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="14" height="14" aria-hidden="true"><path d="M10 3v9M6 9l4 4 4-4M3 15v2h14v-2"/></svg>
+                        <span data-i18n="exportBtn">Export</span>
                     </button>
 
                     <button onclick="engine.saveCurrentMap()" class="flex items-center gap-2 px-3 py-1.5 text-xs uppercase tracking-[0.1em] transition" style="color: var(--td-ok); border: 1px solid transparent;" onmouseover="this.style.background='rgba(94,196,110,0.1)'; this.style.borderColor='rgba(94,196,110,0.3)'" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent'">
@@ -1067,6 +1169,29 @@
                     <button id="playtest-btn" onclick="gameplay.startPlaytest()" class="flex items-center gap-1.5 ml-1">
                         <svg viewBox="0 0 20 20" fill="currentColor" width="10" height="10"><path d="M5 4l11 6-11 6z"/></svg>
                         <span>Play</span>
+                    </button>
+
+                    <button id="btn-world-pause-toggle" onclick="engine.toggleWorldPause()" title="Pause World (Freeze Time)" aria-label="Pause World" aria-pressed="false" class="w-8 h-8 flex items-center justify-center transition ml-1" style="background: transparent; border: 1px solid var(--td-border); color: var(--td-text-dim);" type="button">
+                        <!-- Иконка "Pause" (две вертикальные полосы) — показывается когда мир идёт: клик поставит на паузу -->
+                        <svg data-icon="pause" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" width="14" height="14" aria-hidden="true">
+                            <path d="M7 4v12M13 4v12"/>
+                        </svg>
+                        <!-- Иконка "Play" — показывается когда мир на паузе: клик снимет паузу -->
+                        <svg data-icon="play" viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true" style="display:none;">
+                            <path d="M6 4l11 6-11 6z"/>
+                        </svg>
+                    </button>
+
+                    <button id="btn-help-guide-toggle" onclick="(window.uiManager ? uiManager.openHelpGuideModal() : document.getElementById('help-guide-modal').classList.remove('hidden'))" title="Help with the Editor" aria-label="Help with the Editor" class="w-8 h-8 flex items-center justify-center transition ml-1" style="background: transparent; border: 1px solid var(--td-border); color: var(--td-text-dim);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'" type="button">
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14" aria-hidden="true">
+                            <circle cx="10" cy="10" r="7"/><path d="M10 7v3M10 13h.01"/>
+                        </svg>
+                    </button>
+
+                    <button id="btn-console-toggle" onclick="uiManager.toggleConsole()" title="Toggle Debug Console (vConsole)" aria-label="Toggle Debug Console" class="w-8 h-8 flex items-center justify-center transition ml-1" style="background: transparent; border: 1px solid var(--td-border); color: var(--td-text-dim);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'" type="button">
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14" aria-hidden="true">
+                            <rect x="2" y="4" width="16" height="12" rx="1"/><path d="M5 8l3 2-3 2M10 12h5"/>
+                        </svg>
                     </button>
 
                     <button id="btn-fullscreen-toggle" onclick="uiManager.toggleFullscreen()" data-i18n-title="fullscreenBtn" title="Fullscreen Mode" aria-label="Fullscreen Mode" class="w-8 h-8 flex items-center justify-center transition ml-1" style="background: transparent; border: 1px solid var(--td-border); color: var(--td-text-dim);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'" type="button">
@@ -1106,7 +1231,7 @@
                             <div class="p-3 flex flex-col gap-2">
                                 <div class="flex items-center justify-between gap-2 pb-2" style="border-bottom: 1px solid var(--td-border);">
                                     <span data-i18n="shapeMenu" class="td-label">Shapes</span>
-                                    <button id="btn-shape-group-select" onclick="engine.toggleShapeGroupSelect()" data-i18n="shapeGroupSelect" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-accent-dim); color: var(--td-accent); border: 1px solid rgba(255,138,61,0.3);">Whole Shape</button>
+                                    <button id="btn-shape-group-select" onclick="engine.toggleShapeGroupSelect()" data-i18n="shapeGroupSelect" class="state-toggle px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-accent-dim); color: var(--td-accent); border: 1px solid rgba(255,138,61,0.3);">Whole Shape</button>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1">
                                     <button onclick="engine.addCylinder()" data-i18n="shapeCylinder" class="shape-btn px-2 py-2 text-xs transition uppercase tracking-[0.08em]" style="background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text);" onmouseover="this.style.borderColor='var(--td-accent)'; this.style.color='var(--td-accent)'" onmouseout="this.style.borderColor='var(--td-border)'; this.style.color='var(--td-text)'">Cylinder</button>
@@ -1477,6 +1602,270 @@
             </div>
         </div>
 
+        <!-- HELP GUIDE MODAL (full editor guide, fullscreen) -->
+        <div id="help-guide-modal" class="ui-scale-layer hidden fixed inset-0 z-[110] flex flex-col pointer-events-auto" style="background: var(--td-bg-0);">
+            <div class="w-full h-full flex flex-col modal-enter" style="background: var(--td-bg-1);">
+                <div class="flex justify-between items-center px-5 py-3 flex-shrink-0" style="border-bottom: 1px solid var(--td-border);">
+                    <h2 class="text-sm font-semibold tracking-[0.16em] uppercase flex items-center gap-2">
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14" style="color: var(--td-accent);"><path d="M4 3.5A1.5 1.5 0 015.5 2H14l4 4v11.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 014 17.5v-14z"/><path d="M14 2v4h4"/><path d="M7 11h6M7 14h6M7 8h2"/></svg>
+                        <span>MAPCG Editor Guide</span>
+                    </h2>
+                    <button onclick="(window.uiManager ? uiManager.closeHelpGuideModal() : document.getElementById('help-guide-modal').classList.add('hidden'))" class="w-7 h-7 flex items-center justify-center text-lg transition" style="color: var(--td-text-dim);" onmouseover="this.style.color='var(--td-danger)'" onmouseout="this.style.color='var(--td-text-dim)'">&times;</button>
+                </div>
+
+                <!-- QUICK NAV -->
+                <div class="flex flex-wrap gap-1 px-5 py-3 flex-shrink-0" style="border-bottom: 1px solid var(--td-border); background: var(--td-bg-0);">
+                    <span class="text-[10px] uppercase tracking-[0.12em] self-center mr-1" style="color: var(--td-text-muted);">Sections:</span>
+                    <button onclick="document.getElementById('guide-section-about').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">About</button>
+                    <button onclick="document.getElementById('guide-section-basics').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Basics</button>
+                    <button onclick="document.getElementById('guide-section-tools').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Tools</button>
+                    <button onclick="document.getElementById('guide-section-shapes').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Shapes</button>
+                    <button onclick="document.getElementById('guide-section-materials').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Materials</button>
+                    <button onclick="document.getElementById('guide-section-settings').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Settings</button>
+                    <button onclick="document.getElementById('guide-section-collection').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Collections</button>
+                    <button onclick="document.getElementById('guide-section-io').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Import/Export</button>
+                    <button onclick="document.getElementById('guide-section-keys').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Hotkeys</button>
+                    <button onclick="document.getElementById('guide-section-tips').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Tips</button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto custom-scrollbar">
+                <div class="flex flex-col gap-3 p-5 text-sm max-w-[900px] mx-auto w-full">
+
+                    <!-- ===== ABOUT ===== -->
+                    <div id="guide-section-about" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
+                        <div class="flex items-center gap-2 mb-2">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><rect x="3" y="3" width="14" height="14" rx="1"/><path d="M7 8h6M7 11h4"/></svg>
+                            <h3 class="td-label td-accent" style="font-size: 11px;">About the Editor</h3>
+                        </div>
+                        <p class="leading-relaxed" style="color: var(--td-text);">
+                            <b>MAPCG</b> is a browser-based 3D map editor for the game <b>GoreBox</b>.
+                            It lets you build levels out of cubes and primitive shapes, set up materials, lighting and weather,
+                            then export the finished map straight into the GoreBox format (ZIP / MapData.json).
+                        </p>
+                    </div>
+
+                    <!-- Developer -->
+                    <div class="p-4 flex items-center gap-3" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
+                        <div class="w-9 h-9 flex items-center justify-center flex-shrink-0" style="border: 1px solid var(--td-accent);">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18" style="color: var(--td-accent);"><circle cx="10" cy="7" r="3.2"/><path d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-[10px] uppercase tracking-[0.12em]" style="color: var(--td-text-muted);">Developer</div>
+                            <div class="font-semibold" style="color: var(--td-text);">Sh1rka</div>
+                        </div>
+                    </div>
+
+                    <!-- ===== BASICS ===== -->
+                    <div id="guide-section-basics" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
+                        <div class="flex items-center gap-2 mb-3">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><rect x="3" y="3" width="14" height="14" rx="1"/><path d="M3 8h14"/></svg>
+                            <h3 class="td-label td-accent" style="font-size: 11px;">Editor Basics</h3>
+                        </div>
+                        <p class="leading-relaxed mb-2" style="color: var(--td-text);">
+                            MAPCG is a cube-grid based map editor for GoreBox. Maps are built from cubes,
+                            primitive shapes (cylinders, triangles, rhombi, spheres) and imported 3D models.
+                            Every object is edited through the panel on the right: material, texture, physics, color.
+                        </p>
+                        <div class="grid grid-cols-2 gap-2 mt-3">
+                            <div class="flex items-start gap-2 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><rect x="4" y="4" width="12" height="12" rx="1"/></svg>
+                                <span style="color: var(--td-text-dim);"><b style="color: var(--td-text);">Cube</b> — the core building block. Can be stretched, painted, and re-textured per face.</span>
+                            </div>
+                            <div class="flex items-start gap-2 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><circle cx="10" cy="10" r="6"/></svg>
+                                <span style="color: var(--td-text-dim);"><b style="color: var(--td-text);">Spawn Point</b> — where the player appears on the map once it starts.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== TOOLS ===== -->
+                    <div id="guide-section-tools" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
+                        <div class="flex items-center gap-2 mb-3">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><path d="M14 3l3 3-8 8-4 1 1-4z"/></svg>
+                            <h3 class="td-label td-accent" style="font-size: 11px;">Transform Tools</h3>
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18" style="color: var(--td-accent); flex-shrink:0;"><path d="M10 3v14M3 10h14M10 3l-2 2M10 3l2 2M10 17l-2-2M10 17l2-2M3 10l2-2M3 10l2 2M17 10l-2-2M17 10l-2 2"/></svg>
+                                <div><b style="color: var(--td-text);">Translate</b><br><span style="color: var(--td-text-dim);">Moves the selected object along the X/Y/Z axes. Key <span class="mono" style="color: var(--td-accent-bright);">G</span>.</span></div>
+                            </div>
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18" style="color: var(--td-accent); flex-shrink:0;"><path d="M4 10a6 6 0 1010-4.5"/><path d="M4 4v3h3"/></svg>
+                                <div><b style="color: var(--td-text);">Rotate</b><br><span style="color: var(--td-text-dim);">Rotates the object around its axes. Key <span class="mono" style="color: var(--td-accent-bright);">R</span>.</span></div>
+                            </div>
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18" style="color: var(--td-accent); flex-shrink:0;"><path d="M4 4h5M4 4v5M16 16h-5M16 16v-5M4 4l5 5M16 16l-5-5"/></svg>
+                                <div><b style="color: var(--td-text);">Scale</b><br><span style="color: var(--td-text-dim);">Resizes the object along its axes. Key <span class="mono" style="color: var(--td-accent-bright);">T</span>.</span></div>
+                            </div>
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18" style="color: var(--td-accent); flex-shrink:0;"><path d="M3 3h4v4H3zM13 3h4v4h-4zM3 13h4v4H3zM13 13h4v4h-4z"/></svg>
+                                <div><b style="color: var(--td-text);">Snap to Grid</b><br><span style="color: var(--td-text-dim);">Constrains movement and size to grid steps so cubes align cleanly.</span></div>
+                            </div>
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18" style="color: var(--td-accent); flex-shrink:0;"><path d="M4 10a6 6 0 0112-1M16 5v4h-4"/></svg>
+                                <div><b style="color: var(--td-text);">Undo / Redo</b><br><span style="color: var(--td-text-dim);">Undo and redo recent actions: <span class="mono" style="color: var(--td-accent-bright);">Ctrl+Z</span> / <span class="mono" style="color: var(--td-accent-bright);">Ctrl+Y</span>.</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== SHAPES ===== -->
+                    <div id="guide-section-shapes" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
+                        <div class="flex items-center gap-2 mb-3">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><circle cx="7" cy="7" r="3"/><path d="M14 5l4 8h-8z"/></svg>
+                            <h3 class="td-label td-accent" style="font-size: 11px;">Shapes & Model Import</h3>
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <div class="flex items-start gap-2 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><path d="M4 3.5A1.5 1.5 0 015.5 2H14l4 4v11.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 014 17.5v-14z"/><path d="M14 2v4h4"/></svg>
+                                <span style="color: var(--td-text-dim);"><b style="color: var(--td-text);">Import 3D (OBJ / GLB / GLTF)</b> — your own model gets converted into cubes using a "1 polygon = 1 cube" approach.</span>
+                            </div>
+                            <div class="flex items-start gap-2 p-2" style="background: rgba(255,138,61,0.08); border: 1px solid rgba(255,138,61,0.3);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0; margin-top:1px;"><rect x="3" y="3" width="14" height="14" rx="1"/><rect x="7" y="7" width="6" height="6"/></svg>
+                                <span style="color: var(--td-text-dim);"><b style="color: var(--td-accent);">Whole Shape</b> — a mode where clicking any cube of a shape selects the entire shape at once (handy for moving/painting composite objects in one go).</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== MATERIALS ===== -->
+                    <div id="guide-section-materials" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
+                        <div class="flex items-center gap-2 mb-3">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><circle cx="10" cy="10" r="7"/><path d="M10 3a7 7 0 010 14"/></svg>
+                            <h3 class="td-label td-accent" style="font-size: 11px;">Materials & Textures</h3>
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><rect x="3" y="3" width="14" height="14"/><path d="M3 8h14M8 3v14"/></svg>
+                                <div><b style="color: var(--td-text);">Cube Material (Tag)</b><br><span style="color: var(--td-text-dim);">The texture applied to a cube's face: concrete, wood, metal, carpet, grass, glass (transparent, reflective), plasma (emissive, with bloom), and more.</span></div>
+                            </div>
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><path d="M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z"/></svg>
+                                <div><b style="color: var(--td-text);">Texture Tiling</b><br><span style="color: var(--td-text-dim);">How a texture repeats on a face: Stretch (fills the whole face), XY / YX (1×1 m tiling in different directions).</span></div>
+                            </div>
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><circle cx="10" cy="10" r="7"/><path d="M6 10a4 4 0 018 0"/></svg>
+                                <div><b style="color: var(--td-text);">Physics Material</b><br><span style="color: var(--td-text-dim);">The surface's in-game physical behavior (friction, bounce, etc.) — affects gameplay, not visuals.</span></div>
+                            </div>
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><circle cx="10" cy="10" r="7" fill="currentColor" fill-opacity="0.25"/></svg>
+                                <div><b style="color: var(--td-text);">Color (Tint)</b><br><span style="color: var(--td-text-dim);">A color tint layered on top of the cube's texture.</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== MAP SETTINGS ===== -->
+                    <div id="guide-section-settings" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
+                        <div class="flex items-center gap-2 mb-3">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><circle cx="10" cy="10" r="3"/><path d="M10 2v2M10 16v2M18 10h-2M4 10H2M15.5 4.5l-1.4 1.4M5.9 14.1l-1.4 1.4M15.5 15.5l-1.4-1.4M5.9 5.9L4.5 4.5"/></svg>
+                            <h3 class="td-label td-accent" style="font-size: 11px;">Map Settings</h3>
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-warn); flex-shrink:0; margin-top:1px;"><circle cx="10" cy="10" r="4"/><path d="M10 2v2M10 16v2M18 10h-2M4 10H2"/></svg>
+                                <div><b style="color: var(--td-text);">Sky & Weather</b><br><span style="color: var(--td-text-dim);">Skybox (day/dawn/sunset/night/midnight/custom image), sun angle (horizontal/vertical), and weather: clear, cloudy, rain, storm, snow, blizzard, fog.</span></div>
+                            </div>
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-warn); flex-shrink:0; margin-top:1px;"><rect x="3" y="3" width="14" height="14" rx="1"/></svg>
+                                <div><b style="color: var(--td-text);">Interface</b><br><span style="color: var(--td-text-dim);">UI scale, camera sensitivity and speed, hitbox opacity, and mobile joystick settings (mode, opacity, size).</span></div>
+                            </div>
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-warn); flex-shrink:0; margin-top:1px;"><path d="M3 10a7 7 0 0114 0"/><circle cx="10" cy="10" r="2"/></svg>
+                                <div><b style="color: var(--td-text);">Graphics</b><br><span style="color: var(--td-text-dim);">Dynamic shadows, Bloom (glow), Corner Shadows (SSAO), Ray Tracing, water waves, texture/pixel smoothing, and an FPS counter. Quality is automatically reduced on mobile devices.</span></div>
+                            </div>
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-warn); flex-shrink:0; margin-top:1px;"><path d="M4 12a6 4 0 0112 0M6 15a4 3 0 018 0"/></svg>
+                                <div><b style="color: var(--td-text);">Fog</b><br><span style="color: var(--td-text-dim);">Fog color (in clear weather) plus the start and end distances for visibility falloff.</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== COLLECTIONS ===== -->
+                    <div id="guide-section-collection" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
+                        <div class="flex items-center gap-2 mb-3">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg>
+                            <h3 class="td-label td-accent" style="font-size: 11px;">Collection of Subjects</h3>
+                        </div>
+                        <p class="leading-relaxed mb-2" style="color: var(--td-text-dim);">
+                            A ready-made set of objects (for example, from the Vabish library) that can be quickly placed onto the map.
+                        </p>
+                        <div class="grid grid-cols-1 gap-2">
+                            <div class="flex items-start gap-2 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><path d="M10 3v14M3 10h14"/></svg>
+                                <span style="color: var(--td-text-dim);"><b style="color: var(--td-text);">+ Add Collection</b> — load your own object set from a ZIP archive.</span>
+                            </div>
+                            <div class="flex items-start gap-2 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><path d="M4 10h9M9 5l5 5-5 5"/></svg>
+                                <span style="color: var(--td-text-dim);"><b style="color: var(--td-text);">Select → Panel</b> — the selected collection object opens in the editing panel.</span>
+                            </div>
+                            <div class="flex items-start gap-2 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M4 17h12"/></svg>
+                                <span style="color: var(--td-text-dim);"><b style="color: var(--td-text);">✦ Spawn Object</b> — places the selected collection object directly onto the map.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== IMPORT / EXPORT ===== -->
+                    <div id="guide-section-io" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
+                        <div class="flex items-center gap-2 mb-3">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><path d="M10 13V3M6 7l4-4 4 4"/><path d="M4 17h12"/></svg>
+                            <h3 class="td-label td-accent" style="font-size: 11px;">Importing & Exporting Maps</h3>
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><path d="M3 7v9a1 1 0 001 1h12a1 1 0 001-1V7M3 7l2-3h10l2 3M3 7h14"/></svg>
+                                <div><b style="color: var(--td-text);">Import ZIP Map</b><br><span style="color: var(--td-text-dim);">Loads a GoreBox map: <span class="mono" style="color: var(--td-accent-bright);">MapData.json</span> + the <span class="mono" style="color: var(--td-accent-bright);">CustomTextures</span> folder.</span></div>
+                            </div>
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><rect x="3" y="3" width="14" height="14"/><path d="M7 7h6M7 10h6M7 13h4"/></svg>
+                                <div><b style="color: var(--td-text);">Import .gbmap</b><br><span style="color: var(--td-text-dim);">Legacy GoreBox map format (both V15 and V16 are supported, including gzip/ZIP/UTF-16 encodings).</span></div>
+                            </div>
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-ok); flex-shrink:0; margin-top:1px;"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M4 17h12"/></svg>
+                                <div><b style="color: var(--td-text);">Save ZIP / Export with Lighting</b><br><span style="color: var(--td-text-dim);">Packs the finished map into a ZIP archive (MapData.json v4 + textures). The "with Lighting" option additionally bakes lighting per cube face.</span></div>
+                            </div>
+                            <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-ok); flex-shrink:0; margin-top:1px;"><path d="M4 3.5A1.5 1.5 0 015.5 2H14l4 4v11.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 014 17.5v-14z"/><path d="M14 2v4h4"/></svg>
+                                <div><b style="color: var(--td-text);">Export to GLB</b><br><span style="color: var(--td-text-dim);">Exports the map as a 3D model for viewing or further editing in Blender and other tools.</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== HOTKEYS ===== -->
+                    <div id="guide-section-keys" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
+                        <div class="flex items-center gap-2 mb-3">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><rect x="2" y="5" width="16" height="10" rx="1"/><path d="M5 8h.01M8 8h.01M11 8h.01M14 8h.01M5 11h8"/></svg>
+                            <h3 class="td-label td-accent" style="font-size: 11px;">Full Hotkey List</h3>
+                        </div>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <div class="flex items-center justify-between p-1.5" style="background: var(--td-bg-1);"><span class="mono text-xs" style="color: var(--td-accent-bright);">Ctrl+S</span><span class="text-xs" style="color: var(--td-text-dim);">Save</span></div>
+                            <div class="flex items-center justify-between p-1.5" style="background: var(--td-bg-1);"><span class="mono text-xs" style="color: var(--td-accent-bright);">Ctrl+D</span><span class="text-xs" style="color: var(--td-text-dim);">Duplicate</span></div>
+                            <div class="flex items-center justify-between p-1.5" style="background: var(--td-bg-1);"><span class="mono text-xs" style="color: var(--td-accent-bright);">Ctrl+Z</span><span class="text-xs" style="color: var(--td-text-dim);">Undo</span></div>
+                            <div class="flex items-center justify-between p-1.5" style="background: var(--td-bg-1);"><span class="mono text-xs" style="color: var(--td-accent-bright);">Ctrl+Y</span><span class="text-xs" style="color: var(--td-text-dim);">Redo</span></div>
+                            <div class="flex items-center justify-between p-1.5" style="background: var(--td-bg-1);"><span class="mono text-xs" style="color: var(--td-accent-bright);">G</span><span class="text-xs" style="color: var(--td-text-dim);">Translate</span></div>
+                            <div class="flex items-center justify-between p-1.5" style="background: var(--td-bg-1);"><span class="mono text-xs" style="color: var(--td-accent-bright);">R</span><span class="text-xs" style="color: var(--td-text-dim);">Rotate</span></div>
+                            <div class="flex items-center justify-between p-1.5" style="background: var(--td-bg-1);"><span class="mono text-xs" style="color: var(--td-accent-bright);">T</span><span class="text-xs" style="color: var(--td-text-dim);">Scale</span></div>
+                            <div class="flex items-center justify-between p-1.5" style="background: var(--td-bg-1);"><span class="mono text-xs" style="color: var(--td-accent-bright);">Delete</span><span class="text-xs" style="color: var(--td-text-dim);">Delete object</span></div>
+                        </div>
+                    </div>
+
+                    <!-- ===== TIPS ===== -->
+                    <div id="guide-section-tips" class="p-4 mb-4" style="background: rgba(255,138,61,0.06); border: 1px solid rgba(255,138,61,0.25);">
+                        <div class="flex items-center gap-2 mb-3">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><path d="M10 3a5 5 0 00-3 9c.5.5.8 1 .8 1.8V15h4.4v-1.2c0-.8.3-1.3.8-1.8a5 5 0 00-3-9z"/><path d="M8.5 17.5h3"/></svg>
+                            <h3 class="td-label td-accent" style="font-size: 11px;">Useful Tips</h3>
+                        </div>
+                        <ul class="flex flex-col gap-2" style="color: var(--td-text-dim);">
+                            <li class="flex items-start gap-2"><span style="color: var(--td-accent);">•</span><span>Save regularly (<span class="mono" style="color: var(--td-accent-bright);">Ctrl+S</span>) — especially before baking lighting or a heavy import.</span></li>
+                            <li class="flex items-start gap-2"><span style="color: var(--td-accent);">•</span><span>On mobile devices, graphics (shadows, reflections, ray tracing) are automatically simplified for stable FPS.</span></li>
+                            <li class="flex items-start gap-2"><span style="color: var(--td-accent);">•</span><span>Use Whole Shape so you don't have to select a composite shape cube by cube.</span></li>
+                            <li class="flex items-start gap-2"><span style="color: var(--td-accent);">•</span><span>Before exporting to GoreBox, make sure the spawn point is set and not stuck inside other cubes.</span></li>
+                        </ul>
+                    </div>
+
+                </div>
+                </div>
+            </div>
+        </div>
+
         <!-- SETTINGS MODAL -->
         <div id="settings-modal" class="ui-scale-layer hidden fixed inset-0 z-[60] flex justify-center items-center pointer-events-auto" style="background: rgba(0,0,0,0.75);">
             <div class="w-[560px] max-w-[94vw] max-h-[88vh] overflow-y-auto custom-scrollbar modal-enter" style="background: var(--td-bg-1); border: 1px solid var(--td-border-strong);">
@@ -1779,7 +2168,7 @@
                 en: {
                     newProject: "New Project", exit: "Exit", createMapTitle: "Create Map",
                     mapNamePlaceholder: "Your map name...", cancel: "Cancel", create: "Create", importMap: "Import ZIP Map",
-                    projectBtn: "Project (GoreBox)", settingsBtn: "Settings", spawnBtn: "SPAWN",
+                    projectBtn: "Project (GoreBox)", exportBtn: "Export", consoleBtn: "Console", settingsBtn: "Settings", spawnBtn: "SPAWN",
                     cubeBtn: "CUBE", shapeMenu: "SHAPES", shapeCylinder: "CYLINDER", shapeTriangle: "TRIANGLE", shapeRhombus: "RHOMBUS", shapeSphere: "SPHERE", shapeImportGLB: "IMPORT GLB", shapeGroupSelect: "WHOLE SHAPE", cubeMaterial: "Cube Material (Tag)", tilingLabel: "Texture Tiling",
                     physicsMaterial: "Physics Material", colorTint: "Color (Tint)", mapSettings: "MAP SETTINGS",
                     skyWeather: "Sky & Weather", skyboxLabel: "Skybox (Time of Day)", sunAngleLabel: "Sun Angle (Rotation)",
@@ -3151,6 +3540,13 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             lightContourVisible: true, manualLightSpecularStrength: 0.45,
             drawDistance: 350, distanceCullingEnabled: true, _cullingTimer: 0, _lastVisibleBlockCount: 0,
             outlines: [], clock: new THREE.Clock(),
+            // === WORLD PAUSE STATE ==================================================
+            // worldPaused: активное «застывание мира» (dt -> 0 для симуляции, звук приглушён,
+            // но рендер продолжается для UI/навигации по гайду).
+            // worldPausedByUser: юзер явно нажал кнопку паузы (не автопауза от Help).
+            // _pauseAutoStack: счётчик автопауз (Help/окна); позволяет вкладывать несколько
+            // причин автопаузы без потери ручного состояния.
+            worldPaused: false, worldPausedByUser: false, _pauseAutoStack: 0,
             fpsCounterEnabled: false, fpsFrameCount: 0, fpsElapsed: 0,
             weatherParticles: null, weatherType: 'clear', targetWeatherIntensity: 0,
             cloudsObj: null, snapToGrid: false, sparksList: [],
@@ -4343,6 +4739,12 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 }
                 if (this._depthTarget) this._depthTarget.setSize(Math.floor(w / 2), Math.floor(h / 2)); // half-res depth target
                 if (this._rtHistoryTarget) { this._rtHistoryTarget.setSize(w, h); this._rtHistoryReady = false; }
+                if (this._frozenTarget) {
+                    // Ресайз стоп-кадра паузы: старая текстура не подходит под новое разрешение,
+                    // помечаем что нужен повторный захват в следующем animate().
+                    this._frozenTarget.setSize(w, h);
+                    if (this.worldPaused) this._pauseNeedsCapture = true;
+                }
                 if (this.updateDepthEncodingUniforms) this.updateDepthEncodingUniforms();
                 if (window.uiManager && uiManager.applyResponsiveScale) uiManager.applyResponsiveScale(false);
             },
@@ -5010,7 +5412,12 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             toggleShapeGroupSelect: function(force = null) {
                 this.shapeGroupSelect = force === null ? !this.shapeGroupSelect : !!force;
                 const btn = document.getElementById('btn-shape-group-select');
-                if (btn) btn.classList.toggle('active-tool', this.shapeGroupSelect);
+                if (btn) {
+                    btn.classList.toggle('active-tool', this.shapeGroupSelect);
+                    btn.classList.toggle('is-on', this.shapeGroupSelect);
+                    btn.classList.toggle('is-off', !this.shapeGroupSelect);
+                    btn.title = `Whole Shape: ${this.shapeGroupSelect ? 'ON' : 'OFF'}`;
+                }
             },
 
             groupSelectedBlocks: function() {
@@ -6689,6 +7096,10 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
             },
 
             animateWeather: function(dt) {
+                // При паузе мира — полностью пропускаем анимацию погоды: не двигаем
+                // частицы (у них скорости-константы, а не через dt), не спавним
+                // молнии и не запускаем гром через setTimeout.
+                if (this.worldPaused) return;
                 if (weatherUniforms.uWeatherIntensity.value < this.targetWeatherIntensity) weatherUniforms.uWeatherIntensity.value = Math.min(1.0, weatherUniforms.uWeatherIntensity.value + dt * 0.5);
                 else if (weatherUniforms.uWeatherIntensity.value > this.targetWeatherIntensity) weatherUniforms.uWeatherIntensity.value = Math.max(0.0, weatherUniforms.uWeatherIntensity.value - dt * 0.2);
                 const particlesOn = this.particlesEnabled();
@@ -7657,17 +8068,174 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 if (this._camZ) this._camZ.innerText = this.camera.position.z.toFixed(1);
             },
 
+            // === WORLD PAUSE / TIME FREEZE ==========================================
+            // Централизованная «заморозка мира». Помечаем worldPaused=true — в animate()
+            // dt подменится на 0, вся симуляция замрёт. Плюс плавно приглушаем звук
+            // через masterGain WebAudio и потом suspend()-им AudioContext.
+            //
+            // reason: 'user' → сработала ручная кнопка Pause в верхней панели.
+            //         'auto' → автопауза от Help/окна. Автопаузы стакаются счётчиком,
+            //         чтобы вложенные модалки корректно снимали её только когда
+            //         последняя закрыта.
+            pauseWorld: function(reason) {
+                reason = reason || 'user';
+                if (reason === 'auto') {
+                    this._pauseAutoStack = (this._pauseAutoStack || 0) + 1;
+                } else {
+                    this.worldPausedByUser = true;
+                }
+                if (this.worldPaused) return; // уже на паузе — только флаги обновили
+                this.worldPaused = true;
+                // Захват «стоп-кадра»: на следующем полном кадре animate() отрендерит
+                // сцену в offscreen-текстуру, и дальше каждый кадр паузы GPU будет
+                // только блиттить эту текстуру. Тени/освещение/отражения/bloom/SSAO/RT
+                // — всё замрёт как картинка, независимо от того, что двигается на сцене.
+                this._pauseNeedsCapture = true;
+                this._fadeAudioTo(0.0, 0.6, /*suspendAfter*/ true);
+                this._updatePauseButtonUI();
+            },
+            // Создаёт (или обновляет размер) текстуру для стоп-кадра паузы.
+            _ensureFrozenTarget: function() {
+                if (!this.renderer) return null;
+                const size = new THREE.Vector2();
+                this.renderer.getSize(size);
+                const w = Math.max(2, Math.floor(size.x));
+                const h = Math.max(2, Math.floor(size.y));
+                if (!this._frozenTarget) {
+                    this._frozenTarget = new THREE.WebGLRenderTarget(w, h, {
+                        type: THREE.UnsignedByteType,
+                        depthBuffer: false,
+                        stencilBuffer: false,
+                        magFilter: THREE.LinearFilter,
+                        minFilter: THREE.LinearFilter,
+                        generateMipmaps: false,
+                    });
+                    this._frozenTarget.texture.name = 'FrozenFramePauseCache';
+                } else if (this._frozenTarget.width !== w || this._frozenTarget.height !== h) {
+                    this._frozenTarget.setSize(w, h);
+                    // Размер поменялся — старый снимок больше не подходит, попросим захват заново.
+                    if (this.worldPaused) this._pauseNeedsCapture = true;
+                }
+                return this._frozenTarget;
+            },
+            resumeWorld: function(reason) {
+                reason = reason || 'user';
+                if (reason === 'auto') {
+                    this._pauseAutoStack = Math.max(0, (this._pauseAutoStack || 0) - 1);
+                    // Автопауза уходит, но если юзер поставил вручную — оставляем на паузе.
+                    if (this._pauseAutoStack > 0 || this.worldPausedByUser) {
+                        this._updatePauseButtonUI();
+                        return;
+                    }
+                } else {
+                    this.worldPausedByUser = false;
+                    if (this._pauseAutoStack > 0) {
+                        // Юзер снял ручную паузу, но какая-то модалка всё ещё держит авто —
+                        // оставляем застывшим до её закрытия.
+                        this._updatePauseButtonUI();
+                        return;
+                    }
+                }
+                if (!this.worldPaused) return;
+                this.worldPaused = false;
+                // Сбрасываем накопленный delta часов, чтобы первый кадр после снятия
+                // паузы не «прыгнул» на 30 секунд симуляции.
+                try { this.clock.getDelta(); } catch(e) {}
+                this._fadeAudioTo(1.0, 0.6, /*suspendAfter*/ false);
+                this._updatePauseButtonUI();
+            },
+            toggleWorldPause: function() {
+                if (this.worldPausedByUser || (this.worldPaused && this._pauseAutoStack === 0)) {
+                    this.resumeWorld('user');
+                } else {
+                    this.pauseWorld('user');
+                }
+            },
+            // Публичный API: пере-захватить стоп-кадр не снимая паузы.
+            // Полезно если юзер хочет обновить статичное изображение после того,
+            // как что-то передвинул на сцене.
+            refreshPauseFrame: function() {
+                if (this.worldPaused) this._pauseNeedsCapture = true;
+            },
+            // Плавно тянет masterGain от текущего значения к target за duration секунд.
+            // Использует линейный ramp WebAudio (аппаратно-точный, без RAF-таймеров).
+            // targetMul: 1.0 = полная громкость (масштабируется от _audioBaseGain),
+            //            0.0 = тишина.
+            _fadeAudioTo: function(targetMul, duration, suspendAfter) {
+                try {
+                    if (!window.audioEngine || !audioEngine.ctx || !audioEngine.masterGain) return;
+                    const ctx = audioEngine.ctx;
+                    // Запоминаем «нормальную» громкость один раз, чтобы после паузы
+                    // вернуться именно к ней, а не к тому, что осталось от fade-out.
+                    if (this._audioBaseGain == null) this._audioBaseGain = audioEngine.masterGain.gain.value || 0.6;
+                    if (ctx.state === 'suspended' && targetMul > 0) {
+                        // Перед возобновлением звука нужно разбудить контекст.
+                        try { ctx.resume(); } catch(e) {}
+                    }
+                    const g = audioEngine.masterGain.gain;
+                    const now = ctx.currentTime;
+                    const target = Math.max(0.00001, this._audioBaseGain * targetMul);
+                    // cancelScheduledValues + setValueAtTime(current) — правильный способ
+                    // мягко «перехватить» уже идущий ramp без щелчка.
+                    try {
+                        g.cancelScheduledValues(now);
+                        g.setValueAtTime(g.value, now);
+                        g.linearRampToValueAtTime(target, now + duration);
+                    } catch(e) {
+                        g.value = target;
+                    }
+                    if (suspendAfter) {
+                        // Через (duration + запас) фактически усыпляем AudioContext —
+                        // ноль CPU на звук, пока мир на паузе.
+                        clearTimeout(this._audioSuspendTimer);
+                        this._audioSuspendTimer = setTimeout(() => {
+                            if (this.worldPaused && ctx.state === 'running') {
+                                try { ctx.suspend(); } catch(e) {}
+                            }
+                        }, (duration * 1000) + 80);
+                    } else {
+                        clearTimeout(this._audioSuspendTimer);
+                    }
+                } catch(e) { /* звук не критичен — молча игнорим */ }
+            },
+            _updatePauseButtonUI: function() {
+                const btn = document.getElementById('btn-world-pause-toggle');
+                if (!btn) return;
+                const isFrozen = this.worldPaused;
+                btn.setAttribute('aria-pressed', isFrozen ? 'true' : 'false');
+                btn.title = isFrozen ? 'Resume World (Time is frozen)' : 'Pause World (Freeze Time)';
+                btn.style.color = isFrozen ? 'var(--td-accent)' : 'var(--td-text-dim)';
+                btn.style.borderColor = isFrozen ? 'var(--td-accent)' : 'var(--td-border)';
+                btn.style.background = isFrozen ? 'rgba(255,138,61,0.14)' : 'transparent';
+                const iPlay = btn.querySelector('[data-icon="play"]');
+                const iPause = btn.querySelector('[data-icon="pause"]');
+                if (iPlay && iPause) {
+                    iPlay.style.display = isFrozen ? '' : 'none';
+                    iPause.style.display = isFrozen ? 'none' : '';
+                }
+            },
+
             animate: function() {
-                requestAnimationFrame(this.animate.bind(this)); const dt = this.clock.getDelta(); weatherUniforms.uTime.value += dt;
+                requestAnimationFrame(this.animate.bind(this));
+                // Всегда вычитываем реальный delta из часов, чтобы при снятии паузы
+                // не накопился гигантский скачок времени. Но если мир на паузе —
+                // подменяем dt на 0 для ВСЕЙ симуляции (шейдер-таймеры, движение
+                // камеры, физика плейтеста, погода). Рендер при этом продолжает
+                // идти — canvas остаётся живым, гайд листается на полном FPS.
+                const _rawDt = this.clock.getDelta();
+                const dt = this.worldPaused ? 0 : _rawDt;
+                weatherUniforms.uTime.value += dt;
                 this.updateDuplicateHighlights(dt);
                 if (this.fpsCounterEnabled) {
+                    // FPS считаем всегда по _rawDt, даже на паузе — чтобы юзер видел
+                    // насколько разгрузилась картинка (60 → 240 на неподвижной камере).
                     this.fpsFrameCount++;
-                    this.fpsElapsed += dt;
+                    this.fpsElapsed += _rawDt;
                     if (this.fpsElapsed >= 1) {
                         const fps = Math.round(this.fpsFrameCount / this.fpsElapsed);
                         this._lastFps = fps;
                         if (!this._fpsCounter) this._fpsCounter = document.getElementById('fps-counter');
-                        if (this._fpsCounter) this._fpsCounter.innerText = 'FPS: ' + fps;
+                        if (this._fpsCounter) this._fpsCounter.innerText = 'FPS: ' + fps + (this.worldPaused ? ' ⏸' : '');
                         this.fpsFrameCount = 0;
                         this.fpsElapsed = 0;
                     }
@@ -7753,6 +8321,110 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                     this.starsObj.material.uniforms.uTime.value += dt;
                 }
 
+                // ═══════════════════════════════════════════════════════════════════
+                // PAUSED FAST-PATH — стоп-кадр в offscreen-текстуру.
+                //
+                // Стратегия: в момент постановки на паузу один раз рендерим ПОЛНЫЙ
+                // кадр (со всеми тенями, SSAO, RT, bloom) в offscreen render target,
+                // а дальше каждый кадр паузы GPU только копирует эту текстуру на
+                // экран одним fullscreen-квадом. Это буквально ~1 треугольник
+                // с текстурой — стоит меньше 0.1 мс даже на слабых устройствах.
+                //
+                // Что это даёт:
+                //   • Двигаешь/удаляешь/красишь любые кубы — картинка не меняется.
+                //     Тени, отражения, освещение, bloom, SSAO, RT ЗАСТЫЛИ.
+                //   • Крутишь камеру — картинка тоже застыла (как «фото»). Хочешь
+                //     обновить вид — сними паузу.
+                //   • Ноль работы для теневого рендерера, composer, depth prepass,
+                //     RT-истории, culling, погоды, sparks, water foam и т.д.
+                //   • FPS ограничен только vsync (60/120 Гц), почти нулевая нагрузка.
+                //
+                // При снятии паузы всё возвращается автоматически (обычный путь ниже).
+                // ═══════════════════════════════════════════════════════════════════
+                if (this.worldPaused) {
+                    try {
+                        const target = this._ensureFrozenTarget();
+                        // Ленивая инициализация fullscreen-квадa для блита кэша на экран.
+                        if (!this._frozenBlit) {
+                            const scene = new THREE.Scene();
+                            const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+                            const mat = new THREE.MeshBasicMaterial({ map: null, depthTest: false, depthWrite: false, toneMapped: false });
+                            const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+                            quad.frustumCulled = false;
+                            scene.add(quad);
+                            this._frozenBlit = { scene, cam, mat };
+                        }
+
+                        // (1) Если нужно — захватываем «стоп-кадр». Это ЕДИНСТВЕННЫЙ
+                        //     дорогой проход за всё время паузы. Идёт через полный
+                        //     пайплайн (composer или прямой render), чтобы в текстуре
+                        //     оказались все эффекты (bloom/SSAO/RT/тени).
+                        if (this._pauseNeedsCapture && target) {
+                            const _useComposer = this.bloomPass?.enabled || this.ssaoPass?.enabled || this.rtPass?.enabled;
+
+                            if (_useComposer && this.composer) {
+                                // Полный пайплайн, но результат забираем из composer.readBuffer
+                                // и копируем в наш frozen target.
+                                // Пре-пасс глубины нужен для SSAO/RT — повторим ту же логику.
+                                if ((this.ssaoPass.enabled || this.rtPass?.enabled) && this._depthTarget) {
+                                    const _prevOverride = this.scene.overrideMaterial;
+                                    this.scene.overrideMaterial = this._depthPackMat;
+                                    if (!this._tmpClearColor) this._tmpClearColor = new THREE.Color();
+                                    this.renderer.getClearColor(this._tmpClearColor);
+                                    const _prevClearAlpha = this.renderer.getClearAlpha();
+                                    this.renderer.setClearColor(0xffffff, 1);
+                                    this.renderer.setRenderTarget(this._depthTarget);
+                                    this.renderer.clear();
+                                    this.renderer.render(this.scene, this.camera);
+                                    this.scene.overrideMaterial = _prevOverride;
+                                    this.renderer.setRenderTarget(null);
+                                    this.renderer.setClearColor(this._tmpClearColor, _prevClearAlpha);
+                                }
+                                if (this.rtPass?.enabled && this.rtPass.uniforms.uPrevViewProj) {
+                                    this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
+                                    this.rtPass.uniforms.uSharpness.value = (this._reflectionSharpness ?? 0.8);
+                                    this.rtPass.uniforms.uInvView.value.copy(this.camera.matrixWorld);
+                                    this.rtPass.uniforms.uCamPos.value.copy(this.camera.position);
+                                    // На стоп-кадре темпоральное SSR не нужно — считаем «свежим», без истории.
+                                    this.rtPass.uniforms.uCameraMoved.value = 1.0;
+                                    this.rtPass.uniforms.uHistoryValid.value = 0.0;
+                                }
+                                this.composer.render();
+                                // Копируем финальный композит в frozen target.
+                                this._frozenBlit.mat.map = this.composer.readBuffer.texture;
+                                this.renderer.setRenderTarget(target);
+                                this.renderer.render(this._frozenBlit.scene, this._frozenBlit.cam);
+                                this.renderer.setRenderTarget(null);
+                            } else {
+                                // Прямой рендер сразу в frozen target.
+                                this.renderer.setRenderTarget(target);
+                                this.renderer.render(this.scene, this.camera);
+                                this.renderer.setRenderTarget(null);
+                            }
+                            // Готовим квад к показу нашего стоп-кадра.
+                            this._frozenBlit.mat.map = target.texture;
+                            this._pauseNeedsCapture = false;
+                            // Инвалидируем RT-history, чтобы после снятия паузы шейдер
+                            // не мешал новую картинку со «стоп-кадром».
+                            this._rtHistoryReady = false;
+                        }
+
+                        // (2) Каждый кадр паузы — просто выводим кэш на экран.
+                        // Это буквально 1 треугольник с текстурой, GPU почти idle.
+                        if (this._frozenBlit && this._frozenBlit.mat.map) {
+                            this.renderer.setRenderTarget(null);
+                            this.renderer.render(this._frozenBlit.scene, this._frozenBlit.cam);
+                        } else {
+                            // Fallback (не должен случаться): один облегчённый рендер.
+                            this.renderer.setRenderTarget(null);
+                            this.renderer.render(this.scene, this.camera);
+                        }
+                    } catch (err) {
+                        console.error('Paused render error:', err);
+                    }
+                    return; // ← выходим до тяжёлого пайплайна.
+                }
+
                 this.animateWeather(dt);
                 this.updateWaterContactFoam?.(dt);
                 this.updateCubeDebrisParticles(dt);
@@ -7761,6 +8433,7 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 this.manualLights.forEach(l => this.updateManualLightTarget(l));
                 while(this.outlines.length < this.selectedBlocks.length) { const line = new THREE.LineSegments(sharedEdgeGeo, outlineMat); line.renderOrder = 999; line.frustumCulled = false; this.scene.add(line); this.outlines.push(line); }
                 this.outlines.forEach((o, i) => { if (i < this.selectedBlocks.length) { const obj = this.selectedBlocks[i]; const showOutline = !(obj.userData?.type === 'light' && !this.lightContourVisible); o.visible = showOutline; obj.getWorldPosition(o.position); obj.getWorldQuaternion(o.quaternion); obj.getWorldScale(o.scale); /* exact cube edges — no padding */ } else { o.visible = false; } });
+
                 try {
                     // ── Depth pre-pass for AO / Ray Tracing (separate target → no WebGL feedback loop) ──
                     if ((this.ssaoPass.enabled || this.rtPass?.enabled) && this._depthTarget) {
@@ -7884,9 +8557,23 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
                 if (file.type && file.type.startsWith('image/')) return true;
                 return /\.(jpe?g|png|webp|gif|bmp|tga)$/i.test(file.name || '');
             },
-            setMergeMode: function(mode) { this.mergeMode = mode; document.querySelectorAll(".merge-mode-btn").forEach(b => { const isActive = b.dataset.mode === mode; b.classList.toggle("bg-blue-600", isActive); b.classList.toggle("text-white", isActive); b.classList.toggle("border-blue-400", isActive); b.classList.toggle("bg-\[#101826\]", !isActive); b.classList.toggle("text-gray-400", !isActive); b.classList.toggle("border-gray-700", !isActive); }); },
+            setMergeMode: function(mode) {
+                this.mergeMode = mode;
+                document.querySelectorAll(".merge-mode-btn").forEach(b => {
+                    const isActive = b.dataset.mode === mode;
+                    b.classList.toggle("is-active", isActive);
+                    b.classList.toggle("is-inactive", !isActive);
+                    b.style.background = isActive ? "rgba(255,138,61,0.22)" : "var(--td-bg-2)";
+                    b.style.color = isActive ? "#ffd7b6" : "var(--td-text-dim)";
+                    b.style.borderColor = isActive ? "rgba(255,138,61,0.95)" : "var(--td-border)";
+                    b.style.boxShadow = isActive
+                        ? "inset 0 0 0 1px rgba(255,255,255,0.04), 0 0 12px rgba(255,138,61,0.16)"
+                        : "none";
+                });
+            },
             init: async function() {
                 await this.renderProjectList(); this.loadInterfaceScale();
+                this.setMergeMode(this.mergeMode || 'none');
                 ['pos', 'rot', 'sca'].forEach(type => { ['x', 'y', 'z'].forEach(axis => { document.getElementById(`inp-${type}-${axis}`).addEventListener('input', () => engine.updateObjectFromUI()); document.getElementById(`inp-${type}-${axis}`).addEventListener('change', () => { if(!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); }); });});
                 ['sel-texture', 'sel-material', 'inp-color', 'sel-tiling', 'inp-reflect', 'inp-reflect-blur'].forEach(id => { const el = document.getElementById(id); if (el) { el.addEventListener('input', () => { engine.updateObjectFromUI(); if(!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); }); el.addEventListener('change', () => { engine.updateObjectFromUI(); if(!window.historyManager.isRestoring) window.historyManager.takeSnapshot(); }); } });
 
@@ -7924,6 +8611,77 @@ if (texSel) {
                     document.addEventListener(evt, () => this.updateFullscreenBtn());
                 });
                 this.updateFullscreenBtn();
+            },
+
+            openHelpGuideModal: function() {
+                const m = document.getElementById('help-guide-modal');
+                if (!m) return;
+                // FIX: the modal is defined inside #editor-ui, which has display:none
+                // while the user is on the main menu. Re-parenting it to <body> makes
+                // the Help / Info button work from both the main menu and inside a project.
+                if (m.parentNode !== document.body) {
+                    document.body.appendChild(m);
+                }
+                m.classList.remove('hidden');
+                // Автопауза: пока открыт гайд — мир заморожен, гайд листается
+                // на полном FPS без нагрузки на GPU от рендера сцены/погоды/звуков.
+                // Работает только в редакторе (в главном меню engine ещё не активен).
+                if (window.engine && typeof engine.pauseWorld === 'function' && engine.scene) {
+                    try { engine.pauseWorld('auto'); } catch(e) {}
+                }
+            },
+
+            closeHelpGuideModal: function() {
+                const m = document.getElementById('help-guide-modal');
+                if (m) m.classList.add('hidden');
+                // Снимаем автопаузу. Если юзер ДО открытия гайда сам поставил на
+                // паузу — мир останется застывшим (см. resumeWorld).
+                if (window.engine && typeof engine.resumeWorld === 'function' && engine.scene) {
+                    try { engine.resumeWorld('auto'); } catch(e) {}
+                }
+            },
+
+            // === DEBUG CONSOLE (vConsole) =================================
+            // Реальная рабочая консоль: показывает console.log/warn/error,
+            // сетевые запросы, элементы DOM и системную информацию.
+            // Инициализируется лениво по первому клику, чтобы не мешать
+            // обычным пользователям.
+            _vconsole: null,
+            toggleConsole: function() {
+                if (typeof window.VConsole === 'undefined') {
+                    alert('Debug console library (vConsole) is not loaded.\nCheck your internet connection and reload the page.');
+                    return;
+                }
+                if (!this._vconsole) {
+                    try {
+                        this._vconsole = new window.VConsole({
+                            theme: 'dark',
+                            defaultPlugins: ['system', 'network', 'element', 'storage'],
+                            onReady: () => { console.log('[MAPCG] Debug console ready.'); }
+                        });
+                    } catch (e) {
+                        alert('Failed to open debug console: ' + (e && e.message ? e.message : e));
+                        return;
+                    }
+                    return; // при создании vConsole сама показывается свёрнутой кнопкой
+                }
+                // Уже создана — переключаем видимость самой панели/кнопки.
+                try {
+                    const switchBtn = document.querySelector('#__vconsole .vc-switch');
+                    const isHidden = !switchBtn || switchBtn.style.display === 'none';
+                    if (isHidden) {
+                        this._vconsole.show();
+                        if (switchBtn) switchBtn.style.display = '';
+                    } else {
+                        this._vconsole.hide();
+                        if (switchBtn) switchBtn.style.display = 'none';
+                    }
+                } catch (e) {
+                    // Fallback: пересоздать
+                    try { this._vconsole.destroy(); } catch(_) {}
+                    this._vconsole = null;
+                    this.toggleConsole();
+                }
             },
 
             isFullscreenActive: function() {
@@ -8070,13 +8828,28 @@ if (texSel) {
                 // Сверяемся с CollectionOfSubjects.zip в репозитории при каждом
                 // открытии окна — так новые модельки подхватываются "на лету"
                 if (typeof initSubjectsCollection === 'function') initSubjectsCollection();
+                // Автопауза: как и с Help Guide — пока окно открыто мир заморожен,
+                // все проходы GPU (тени/SSAO/RT/Bloom/composer) не считаются, юзер
+                // листает коллекцию на максимальном FPS. Через 'auto' — не портит
+                // ручное состояние: если юзер сам ставил на паузу, оно останется.
+                if (window.engine && typeof engine.pauseWorld === 'function' && engine.scene) {
+                    try { engine.pauseWorld('auto'); } catch(e) {}
+                }
             },
 
 
             closeCollectionModal: function() {
                 const overlay = document.getElementById('collection-modal-overlay');
-                if (overlay) overlay.classList.add('hidden');
+                if (!overlay) return;
+                // Не снимаем автопаузу, если модалка уже была скрыта — иначе стак
+                // автопауз уйдёт в минус при повторных вызовах close (защита от
+                // двойного закрытия при клике на overlay + крестик и т.п.).
+                const wasOpen = !overlay.classList.contains('hidden');
+                overlay.classList.add('hidden');
                 this._collectionSelected = null;
+                if (wasOpen && window.engine && typeof engine.resumeWorld === 'function' && engine.scene) {
+                    try { engine.resumeWorld('auto'); } catch(e) {}
+                }
             },
 
             collectionSelectItem: function() {
@@ -8950,5 +9723,6 @@ if (texSel) {
 
 
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a17fdd008881e4b5',t:'MTc4MzUyMTgyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a181076ec96ac9d1',t:'MTc4MzUzNDA1MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a17fdd008881e4b5',t:'MTc4MzUyMTgyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a181076ec96ac9d1',t:'MTc4MzUzNDA1MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
 </html>
