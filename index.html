@@ -780,26 +780,7 @@
         .gb-btn-col { display: flex; flex-direction: column; gap: 16px; align-items: center; }
         .gb-btn-col.inner { align-items: flex-end; margin-right: 12px; }
         .gb-btn-col.outer { align-items: flex-end; }
-
-        .gb-body-indicator {
-            position: absolute; bottom: 40px; left: 22px;
-            width: 54px; height: 140px;
-            pointer-events: none;
-            z-index: 6;
-        }
-        .gb-body-part {
-            position: absolute;
-            background: rgba(255,255,255,0.25);
-            border: 1.5px solid rgba(255,255,255,0.4);
-            transition: background 0.2s, border-color 0.2s;
-        }
-        .gb-body-part.damaged {
-            background: rgba(217,69,69,0.75);
-            border-color: #ff6b6b;
-            box-shadow: 0 0 8px rgba(217,69,69,0.5);
-        }
-
-        .gb-weapon-label {
+.gb-weapon-label {
             position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
             text-align: center; color: #fff;
             pointer-events: none;
@@ -833,22 +814,7 @@
             -webkit-backdrop-filter: blur(4px);
         }
         .gb-exit-btn:active { background: rgba(217,69,69,0.4); border-color: #ff6b6b; }
-
-        .gb-rotate-view {
-            position: absolute; top: 50%; left: 22px; transform: translateY(-50%);
-            width: 58px; height: 58px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.08);
-            border: 1.5px solid rgba(255,255,255,0.3);
-            color: #fff;
-            display: flex; align-items: center; justify-content: center;
-            pointer-events: auto;
-            cursor: pointer;
-            z-index: 6;
-        }
-        .gb-rotate-view svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-
-        #playtest-overlay #mobile-joystick {
+#playtest-overlay #mobile-joystick {
             position: absolute;
             left: 100px; bottom: 40px;
             display: none;
@@ -898,17 +864,7 @@
             opacity: 0; transition: opacity 0.2s; z-index: 4;
         }
         #gb-damage-vignette.show { opacity: 1; }
-
-        .gb-interact-hint {
-            position: absolute; top: 60%; left: 50%; transform: translate(-50%, 20px);
-            color: #fff; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600;
-            background: rgba(0,0,0,0.55); padding: 6px 14px; border: 1px solid rgba(255,255,255,0.3);
-            pointer-events: none; opacity: 0; transition: opacity 0.15s;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.8);
-        }
-        .gb-interact-hint.show { opacity: 1; transform: translate(-50%, 0); }
-
-        #mobile-joystick {
+#mobile-joystick {
             position: absolute;
             left: 24px;
             bottom: 28px;
@@ -1391,18 +1347,8 @@
 
 
             <button onclick="gameplay.exitPlaytest()" title="Exit Playtest (Esc)" class="gb-exit-btn">ESC</button>
-
-
-            <button class="gb-rotate-view" id="gb-look-reset" title="Reset View" onpointerdown="gameplay.resetView()">
-                <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
-            </button>
-
-
-            <div class="gb-topbar">
-                <button class="gb-topbar-btn" id="gb-btn-menu" title="Menu" onpointerdown="gameplay.exitPlaytest()">
-                    <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-                </button>
-                <button class="gb-topbar-btn" id="gb-btn-inventory" title="Inventory (Tab)" onpointerdown="gameplay.toggleInventory()">
+<div class="gb-topbar">
+<button class="gb-topbar-btn" id="gb-btn-inventory" title="Inventory (Tab)" onpointerdown="gameplay.toggleInventory()">
                     <svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9 4v16M15 4v16M5 12h14"/><rect x="9" y="10" width="6" height="5" rx="1"/></svg>
                 </button>
                 <button class="gb-topbar-btn weapon selected" data-weapon="fists" title="Hands (1)" onpointerdown="gameplay.selectWeapon('fists')">
@@ -1446,15 +1392,8 @@
                 <button class="gb-circle-btn small" id="gb-btn-fly" title="Fly / Wings (X)" onpointerdown="gameplay.toggleFly()">
                     <svg viewBox="0 0 24 24"><path d="M4 14c3-4 8-8 16-9-2 5-6 10-12 12-2 .7-3 1-4 1 0-1 0-2 0-4z"/><path d="M8 15c2-1 5-2 8-2"/></svg>
                 </button>
-                <button class="gb-circle-btn small" id="gb-btn-noshoot" title="Safety / No Fire (V)" onpointerdown="gameplay.toggleSafety()">
-                    <svg viewBox="0 0 24 24"><path d="M4 4l16 16" stroke-width="2.5"/><path d="M7 7l10 10"/><path d="M5 10h2v2l5 5h4l1-1-2-6-3-3H7l-2 3z"/></svg>
-                </button>
                 <button class="gb-circle-btn accent" id="gb-btn-flashlight" title="Flashlight (F)" onpointerdown="gameplay.toggleFlashlight()">
                     <svg viewBox="0 0 24 24"><path d="M5 5l8 8"/><path d="M14 6l4 4-2 2-4-4z" fill="currentColor" fill-opacity="0.2"/><path d="M14 6l4 4-2 2-4-4z"/><path d="M13 13l2 2-3 3-2-2 2-2z"/><path d="M3 7l2-2 2 2-2 2z"/></svg>
-                </button>
-                <button class="gb-circle-btn accent" id="gb-btn-use" title="Use / Interact (E)" onpointerdown="gameplay.interactAction()">
-
-                    <svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke-width="3" fill="none"/></svg>
                 </button>
             </div>
 
@@ -1482,35 +1421,10 @@
                 </div>
             </div>
 
-
-            <div class="gb-body-indicator" id="gb-body-indicator">
-
-                <div class="gb-body-part" data-part="head" style="top:0; left:14px; width:26px; height:22px; border-radius:3px;"></div>
-
-                <div class="gb-body-part" data-part="neck" style="top:22px; left:22px; width:10px; height:6px;"></div>
-
-                <div class="gb-body-part" data-part="chest" style="top:28px; left:6px; width:42px; height:30px;"></div>
-
-                <div class="gb-body-part" data-part="abdomen" style="top:58px; left:10px; width:34px; height:22px;"></div>
-
-                <div class="gb-body-part" data-part="larm" style="top:30px; left:-4px; width:10px; height:36px;"></div>
-
-                <div class="gb-body-part" data-part="rarm" style="top:30px; right:-4px; width:10px; height:36px;"></div>
-
-                <div class="gb-body-part" data-part="lleg" style="bottom:0; left:12px; width:12px; height:50px;"></div>
-
-                <div class="gb-body-part" data-part="rleg" style="bottom:0; right:12px; width:12px; height:50px;"></div>
-            </div>
-
-
             <div class="gb-weapon-label" id="gb-weapon-label">
                 <div class="wname" id="gb-wname">Hands</div>
                 <div class="wtype" id="gb-wtype">Melee</div>
             </div>
-
-
-            <div class="gb-interact-hint" id="gb-interact-hint">[E] Use</div>
-
 
             <div class="gb-tap-to-start" id="gb-tap-to-start" onclick="gameplay.lockPointer()">
                 TAP TO PLAY
@@ -10414,14 +10328,7 @@ const gameplay = {
             audioEngine.playUIClick();
         } catch (e) {}
     },
-    toggleSafety: function() {
-        this.safetyOff = !this.safetyOff;
-        const btn = document.getElementById("gb-btn-noshoot");
-        if (btn) btn.classList.toggle("active", !this.safetyOff);
-        try {
-            audioEngine.playUIClick();
-        } catch (e) {}
-    },
+
     toggleRagdoll: function() {
         if (!this.isPlaytest) return;
         if (this.flyMode) {
@@ -10471,17 +10378,7 @@ const gameplay = {
             audioEngine.playUIClick();
         } catch (e) {}
     },
-    resetView: function() {
-        try {
-            const euler = new THREE.Euler(0, 0, 0, "YXZ");
-            euler.setFromQuaternion(engine.camera.quaternion);
-            euler.x = 0;
-            engine.camera.quaternion.setFromEuler(euler);
-        } catch (e) {}
-        try {
-            audioEngine.playUIClick();
-        } catch (e) {}
-    },
+
     lockPointer: function() {
         const t = document.getElementById("gb-tap-to-start");
         if (t) t.classList.add("hidden");
@@ -10548,8 +10445,7 @@ const gameplay = {
         document.getElementById("gb-btn-fly")?.classList.remove("active");
         document.getElementById("gb-btn-sleep")?.classList.remove("active");
         document.getElementById("gb-btn-flashlight")?.classList.remove("active");
-        document.getElementById("gb-btn-noshoot")?.classList.add("active");
-        this.safetyOff = false;
+
         this.attackCooldown = 0;
         this.kickCooldown = 0;
         audioEngine.init();
@@ -10606,6 +10502,7 @@ const gameplay = {
     doJumpRelease: function() {
         this.moveState.jumpHeld = false;
     },
+
     doKick: function() {
         if (!this.isPlaytest || this.isRagdoll) return;
         if (this.kickCooldown > 0) return;
@@ -10616,12 +10513,7 @@ const gameplay = {
     doAttack: function() {
         if (!this.isPlaytest || this.isRagdoll) return;
         if (this.attackCooldown > 0) return;
-        if (this.currentWeapon === "pistol" && !this.safetyOff) {
-            try {
-                audioEngine.playUIClick();
-            } catch (e) {}
-            return;
-        }
+
         const def = this._weaponDefs[this.currentWeapon];
         this.attackCooldown = def.cooldown || .32;
         this.attackAnim = 1;
@@ -10638,15 +10530,7 @@ const gameplay = {
             ov.classList.add("gb-shake");
         }
     },
-    interactAction: function() {
-        if (this.isRagdoll) {
-            this.toggleRagdoll();
-            return;
-        }
-        try {
-            audioEngine.playUIClick();
-        } catch (e) {}
-    },
+
     _fireBullet: function() {
         const ray = this.rayForward;
         const origin = new THREE.Vector3;
@@ -10707,16 +10591,7 @@ const gameplay = {
             this.toggleRagdoll();
         }
     },
-    _refreshBodyIndicator: function() {
-        const ind = document.getElementById("gb-body-indicator");
-        if (!ind) return;
-        ind.querySelectorAll(".gb-body-part").forEach(el => {
-            const part = el.dataset.part;
-            const hp = this.bodyParts[part] ?? 100;
-            el.classList.toggle("damaged", hp < 70);
-            if (hp < 30) el.style.background = "rgba(217,69,69,0.9)"; else if (hp < 70) el.style.background = "rgba(217,69,69,0.5)"; else el.style.background = "rgba(255,255,255,0.25)";
-        });
-    },
+    _refreshBodyIndicator: function() {},
     onKeyDown: function(e) {
         if (!this.isPlaytest) return;
         if (e.code === "Escape") {
@@ -10727,11 +10602,11 @@ const gameplay = {
             this.exitPlaytest();
             return;
         }
-        if ([ "KeyW", "KeyA", "KeyS", "KeyD", "Space", "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight", "KeyC", "KeyF", "KeyE", "KeyQ", "KeyV", "KeyZ", "KeyX", "Digit1", "Digit2", "Digit3", "Digit4" ].includes(e.code)) {
+        if ([ "KeyW", "KeyA", "KeyS", "KeyD", "Space", "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight", "KeyC", "KeyF", "KeyQ", "KeyZ", "KeyX", "Digit1", "Digit2", "Digit3", "Digit4" ].includes(e.code)) {
             e.preventDefault();
         }
         if (this.isRagdoll) {
-            if (e.code === "KeyZ" || e.code === "KeyE" || e.code === "KeyX") {} else {
+            if (e.code === "KeyZ" || e.code === "KeyX") {} else {
                 return;
             }
         }
@@ -10772,16 +10647,8 @@ const gameplay = {
             this.toggleFlashlight();
             break;
 
-          case "KeyE":
-            this.interactAction();
-            break;
-
           case "KeyQ":
             this.doKick();
-            break;
-
-          case "KeyV":
-            this.toggleSafety();
             break;
 
           case "KeyZ":
@@ -11044,19 +10911,7 @@ const gameplay = {
             this.vmGroup.rotation.z = Math.sin(this.bobPhase) * .005;
         }
         this._updateFOV(dt, speedH);
-        const hint = document.getElementById("gb-interact-hint");
-        if (hint) {
-            const r = new THREE.Raycaster;
-            const o = new THREE.Vector3;
-            engine.camera.getWorldPosition(o);
-            const d = new THREE.Vector3;
-            engine.camera.getWorldDirection(d);
-            r.set(o, d);
-            r.far = 3;
-            const hs = r.intersectObjects(engine.blocks || []);
-            hint.classList.toggle("show", hs.length > 0 && hs[0].distance < 2.5);
-            if (this.isRagdoll) hint.classList.remove("show");
-        }
+
     },
     _updateFOV: function(dt, speedH) {
         let targetFOV = 65;
@@ -12494,5 +12349,5 @@ document.addEventListener("pointerdown", e => {
     </div>
 
 
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
