@@ -2681,6 +2681,214 @@
 
 
         // ─────────────────────────────────────────────────────────────
+        //  MUSIC LOADER + PLAYER — fetch + JSZip + localForage
+        //  • GitHub Pages / веб-сервер  → авто-загрузка Music.zip
+        //  • Офлайн / Android WebView   → кнопка выбора файла 1 раз
+        //  • После первой загрузки      → кэш IndexedDB (офлайн-плей)
+        //
+        //  Треки играются рандомно при открытии Help Guide и при старте
+        //  плейтеста. Плавный fade-in / fade-out через WebAudio GainNode.
+        // ─────────────────────────────────────────────────────────────
+        const MUSIC_CACHE_KEY = 'mapcg_music_v1';
+
+        // Массив треков в памяти: [{name, dataUrl}, ...]. Заполняется из ZIP.
+        const musicTracks = [];
+
+        async function loadMusicFromZipBuffer(buffer) {
+            const zip = await JSZip.loadAsync(buffer);
+            const data = [];
+            for (const [filename, file] of Object.entries(zip.files)) {
+                if (file.dir) continue;
+                const basename = filename.split('/').pop();
+                if (!basename || !/\.(mp3|ogg|wav|m4a|aac|opus|flac)$/i.test(basename)) continue;
+                const name = basename.replace(/\.(mp3|ogg|wav|m4a|aac|opus|flac)$/i, '');
+                const blob = await file.async('blob');
+                const dataUrl = await new Promise(res => {
+                    const r = new FileReader();
+                    r.onload = e => res(e.target.result);
+                    r.readAsDataURL(blob);
+                });
+                data.push({ name, dataUrl });
+            }
+            return data;
+        }
+
+        function applyMusicData(data) {
+            musicTracks.length = 0;
+            data.forEach(t => musicTracks.push(t));
+            console.log('[MapCG] ' + musicTracks.length + ' music tracks ready:', musicTracks.map(t => t.name));
+        }
+
+        async function initMusic() {
+            // 1. IndexedDB кэш — мгновенно, полностью офлайн
+            try {
+                const cached = await localforage.getItem(MUSIC_CACHE_KEY);
+                if (cached && Array.isArray(cached) && cached.length > 0) {
+                    applyMusicData(cached); return;
+                }
+            } catch(e) {}
+            // 2. Авто-загрузка с сервера (GitHub Pages / веб-сервер)
+            try {
+                const resp = await fetch('./Music.zip');
+                if (resp.ok) {
+                    const data = await loadMusicFromZipBuffer(await resp.arrayBuffer());
+                    if (data.length > 0) {
+                        applyMusicData(data);
+                        try { await localforage.setItem(MUSIC_CACHE_KEY, data); } catch(e) {}
+                        return;
+                    }
+                }
+            } catch(e) { console.warn('[MapCG] Music.zip auto-fetch failed — showing manual load button.'); }
+            // 3. Ручной выбор (первый раз офлайн / Android без кэша)
+            const btn = document.getElementById('music-load-btn');
+            if (btn) btn.style.display = 'flex';
+        }
+
+        async function handleManualMusicZip(event) {
+            const input = event.target;
+            const file = input.files[0]; if (!file) return;
+            input.value = '';
+            const statusEl = document.getElementById('music-status-text');
+            if (statusEl) statusEl.innerHTML = '<span style="color:#60a5fa">⏳ Loading...</span>';
+            try {
+                const data = await loadMusicFromZipBuffer(await file.arrayBuffer());
+                const count = data.length;
+                if (count === 0) throw new Error('Нет аудио в архиве');
+                applyMusicData(data);
+                try { await localforage.setItem(MUSIC_CACHE_KEY, data); } catch(e) {}
+                if (statusEl) statusEl.innerHTML = '<span style="color:#4ade80">✔ ' + count + ' треков загружено!</span>';
+                setTimeout(() => {
+                    const btn = document.getElementById('music-load-btn');
+                    if (btn) btn.style.display = 'none';
+                }, 1500);
+            } catch(e) {
+                if (statusEl) statusEl.innerHTML = '<span style="color:#f87171">❌ Ошибка: ' + (e.message || 'выберите правильный Music.zip') + '</span>';
+                console.error('[MapCG] Music load failed:', e);
+            }
+        }
+
+        // ─── Плеер с плавными fade-in / fade-out через WebAudio GainNode ───
+        // Работает на любом уже сгенерированном или отдельном AudioContext.
+        // Использует HTMLAudioElement (нативно тянет сжатый mp3, не грузит RAM
+        // полным PCM как AudioBufferSource), через createMediaElementSource
+        // пропускает через GainNode для контроля громкости и fade-переходов.
+        const musicPlayer = {
+            ctx: null, gainNode: null, audioEl: null, sourceNode: null,
+            currentTrackName: null, isFading: false, targetVolume: 0.55,
+            _lastPlayedIndex: -1,
+
+            _ensureCtx: function() {
+                // Пере-используем один и тот же AudioContext, если уже создан
+                // audioEngine (для погоды/громов). Иначе создаём свой.
+                if (this.ctx) return this.ctx;
+                if (window.audioEngine && audioEngine.ctx) {
+                    this.ctx = audioEngine.ctx;
+                } else {
+                    try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+                    catch(e) { console.warn('[MapCG] Web Audio not available:', e); return null; }
+                }
+                return this.ctx;
+            },
+
+            _pickRandomTrack: function() {
+                if (musicTracks.length === 0) return null;
+                if (musicTracks.length === 1) return 0;
+                // Избегаем повтора того же трека подряд, чтобы каждое открытие
+                // ощущалось разнообразнее.
+                let idx;
+                do { idx = Math.floor(Math.random() * musicTracks.length); }
+                while (idx === this._lastPlayedIndex);
+                return idx;
+            },
+
+            playRandomFadeIn: function(fadeSeconds) {
+                if (musicTracks.length === 0) return; // нечего играть
+                const ctx = this._ensureCtx();
+                if (!ctx) return;
+                if (ctx.state === 'suspended') { try { ctx.resume(); } catch(e) {} }
+
+                // Если уже что-то играет — сначала остановим (без плавного, чтобы
+                // не накладывались два трека). Это редкий случай (двойной вызов).
+                if (this.audioEl) this._hardStop();
+
+                const idx = this._pickRandomTrack();
+                if (idx === null) return;
+                this._lastPlayedIndex = idx;
+                const track = musicTracks[idx];
+                this.currentTrackName = track.name;
+
+                try {
+                    const el = new Audio();
+                    el.src = track.dataUrl;
+                    el.loop = true;
+                    el.preload = 'auto';
+                    el.crossOrigin = 'anonymous';
+                    el.volume = 1.0; // громкостью управляем через GainNode
+                    this.audioEl = el;
+
+                    // MediaElementSource → Gain → destination
+                    this.sourceNode = ctx.createMediaElementSource(el);
+                    this.gainNode = ctx.createGain();
+                    this.gainNode.gain.value = 0.0001; // стартуем в тишине
+                    this.sourceNode.connect(this.gainNode);
+                    this.gainNode.connect(ctx.destination);
+
+                    const dur = Math.max(0.1, fadeSeconds || 1.2);
+                    const t0 = ctx.currentTime;
+                    this.gainNode.gain.cancelScheduledValues(t0);
+                    this.gainNode.gain.setValueAtTime(0.0001, t0);
+                    this.gainNode.gain.linearRampToValueAtTime(this.targetVolume, t0 + dur);
+
+                    // play() может вернуть promise; ошибки автоплея (мобильный
+                    // браузер без user-gesture) молча игнорим.
+                    const p = el.play();
+                    if (p && p.catch) p.catch((e) => { console.warn('[MapCG] Music play blocked:', e); });
+                    console.log('[MapCG] Music: playing "' + track.name + '"');
+                } catch (e) {
+                    console.warn('[MapCG] Music play error:', e);
+                    this._hardStop();
+                }
+            },
+
+            fadeOutAndStop: function(fadeSeconds) {
+                if (!this.audioEl || !this.gainNode || !this.ctx) return;
+                const ctx = this.ctx;
+                const el = this.audioEl;
+                const g = this.gainNode;
+                const src = this.sourceNode;
+                const dur = Math.max(0.1, fadeSeconds || 1.2);
+                const t0 = ctx.currentTime;
+                try {
+                    g.gain.cancelScheduledValues(t0);
+                    g.gain.setValueAtTime(g.value, t0);
+                    g.gain.linearRampToValueAtTime(0.0001, t0 + dur);
+                } catch(e) {}
+                // «Забываем» ссылки СРАЗУ — если во время fade придёт новый playRandomFadeIn,
+                // он не будет ждать этого fade.
+                this.audioEl = null;
+                this.sourceNode = null;
+                this.gainNode = null;
+                this.currentTrackName = null;
+                setTimeout(() => {
+                    try { el.pause(); el.src = ''; el.load(); } catch(e) {}
+                    try { if (src) src.disconnect(); } catch(e) {}
+                    try { if (g) g.disconnect(); } catch(e) {}
+                }, (dur * 1000) + 50);
+            },
+
+            _hardStop: function() {
+                try { if (this.audioEl) { this.audioEl.pause(); this.audioEl.src = ''; this.audioEl.load(); } } catch(e) {}
+                try { if (this.sourceNode) this.sourceNode.disconnect(); } catch(e) {}
+                try { if (this.gainNode) this.gainNode.disconnect(); } catch(e) {}
+                this.audioEl = null; this.sourceNode = null; this.gainNode = null; this.currentTrackName = null;
+            }
+        };
+        window.musicPlayer = musicPlayer;
+
+        initMusic();
+
+
+        // ─────────────────────────────────────────────────────────────
         //  COLLECTION OF SUBJECTS LOADER — fetch + JSZip + localForage
         //  • GitHub Pages / веб-сервер  → авто-загрузка CollectionOfSubjects.zip.
         //    Каждое открытие окна коллекции сверяется с сервером заново —
@@ -8529,8 +8737,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
         const gameplay = {
             isPlaytest: false, controls: null, velocity: new THREE.Vector3(), direction: new THREE.Vector3(), moveState: { forward: false, backward: false, left: false, right: false, jump: false, sprint: false, crouch: false }, canJump: false, raycasterDown: new THREE.Raycaster(new THREE.Vector3(), new THREE.Vector3(0, -1, 0), 0, 1.5), lastStepTime: 0, baseHeight: 1.8, crouchHeight: 0.9,
             init: function() { this.controls = new PointerLockControls(engine.camera, document.body); this.controls.addEventListener('lock', () => { this.isPlaytest = true; }); this.controls.addEventListener('unlock', () => { this.stopPlaytest(); }); document.addEventListener('keydown', (e) => this.onKeyDown(e)); document.addEventListener('keyup', (e) => this.onKeyUp(e)); },
-            startPlaytest: function() { engine.deselect(); document.getElementById('ui-layer').style.display = 'none'; document.getElementById('playtest-overlay').style.display = 'block'; if (engine.spawnPointObj) { engine.camera.position.copy(engine.spawnPointObj.position); engine.camera.position.y += 1; } else { engine.camera.position.set(0, 5, 0); } engine.spawnPointObj && (engine.spawnPointObj.visible = false); this.velocity.set(0,0,0); audioEngine.init(); engine.updateJoystickVisibility?.(); this.controls.lock(); },
-            stopPlaytest: function() { this.isPlaytest = false; document.getElementById('ui-layer').style.display = 'flex'; document.getElementById('playtest-overlay').style.display = 'none'; engine.updateJoystickVisibility?.(); engine.spawnPointObj && (engine.spawnPointObj.visible = true); },
+            startPlaytest: function() { engine.deselect(); document.getElementById('ui-layer').style.display = 'none'; document.getElementById('playtest-overlay').style.display = 'block'; if (engine.spawnPointObj) { engine.camera.position.copy(engine.spawnPointObj.position); engine.camera.position.y += 1; } else { engine.camera.position.set(0, 5, 0); } engine.spawnPointObj && (engine.spawnPointObj.visible = false); this.velocity.set(0,0,0); audioEngine.init(); engine.updateJoystickVisibility?.(); this.controls.lock(); try { window.musicPlayer && musicPlayer.playRandomFadeIn(1.5); } catch(e) {} },
+            stopPlaytest: function() { this.isPlaytest = false; document.getElementById('ui-layer').style.display = 'flex'; document.getElementById('playtest-overlay').style.display = 'none'; engine.updateJoystickVisibility?.(); engine.spawnPointObj && (engine.spawnPointObj.visible = true); try { window.musicPlayer && musicPlayer.fadeOutAndStop(1.2); } catch(e) {} },
             exitPlaytest: function() { try { if (document.pointerLockElement) document.exitPointerLock(); } catch(e) {} this.stopPlaytest(); },
             onKeyDown: function(e) { if(!this.isPlaytest) { return; } if (e.code === 'Escape') { this.exitPlaytest(); return; } switch(e.code) { case 'KeyW': this.moveState.forward = true; break; case 'KeyS': this.moveState.backward = true; break; case 'KeyA': this.moveState.left = true; break; case 'KeyD': this.moveState.right = true; break; case 'Space': if(this.canJump) this.velocity.y += 12; this.canJump = false; break; case 'ShiftLeft': this.moveState.sprint = true; break; case 'ControlLeft': case 'KeyC': this.moveState.crouch = true; break; } },
             onKeyUp: function(e) { if(!this.isPlaytest) return; switch(e.code) { case 'KeyW': this.moveState.forward = false; break; case 'KeyS': this.moveState.backward = false; break; case 'KeyA': this.moveState.left = false; break; case 'KeyD': this.moveState.right = false; break; case 'ShiftLeft': this.moveState.sprint = false; break; case 'ControlLeft': case 'KeyC': this.moveState.crouch = false; break; } },
@@ -8629,6 +8837,8 @@ if (texSel) {
                 if (window.engine && typeof engine.pauseWorld === 'function' && engine.scene) {
                     try { engine.pauseWorld('auto'); } catch(e) {}
                 }
+                // Рандомный трек с плавным fade-in — «атмосфера чтения гайда».
+                try { window.musicPlayer && musicPlayer.playRandomFadeIn(1.5); } catch(e) {}
             },
 
             closeHelpGuideModal: function() {
@@ -8639,6 +8849,8 @@ if (texSel) {
                 if (window.engine && typeof engine.resumeWorld === 'function' && engine.scene) {
                     try { engine.resumeWorld('auto'); } catch(e) {}
                 }
+                // Плавно тушим музыку гайда.
+                try { window.musicPlayer && musicPlayer.fadeOutAndStop(1.2); } catch(e) {}
             },
 
             // === DEBUG CONSOLE (vConsole) =================================
@@ -9715,6 +9927,14 @@ if (texSel) {
         <button onclick="document.getElementById('tex-zip-input').click()" style="background:#ff8a3d;color:#000;border:none;padding:6px 14px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;margin-left:6px;">&#128194; Load</button>
         <input type="file" id="tex-zip-input" accept=".zip" style="display:none" onchange="handleManualTexZip(event)">
         <button onclick="document.getElementById('tex-load-btn').style.display='none'" title="Закрыть" style="background:transparent;color:#8a8a90;border:none;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;margin-left:4px;padding:0;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#94a3b8'">&#10005;</button>
+    </div>
+
+    <!-- MUSIC FALLBACK BUTTON (показывается только если Music.zip нельзя загрузить автоматически) -->
+    <div id="music-load-btn" style="display:none;position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;background:#18181c;border:1px solid rgba(96,165,250,0.4);padding:12px 20px;gap:10px;align-items:center;white-space:nowrap;pointer-events:auto;">
+        <span id="music-status-text" style="color:#e8e8e8;font-weight:600;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;">&#127925; Select Music.zip</span>
+        <button onclick="document.getElementById('music-zip-input').click()" style="background:#60a5fa;color:#000;border:none;padding:6px 14px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;margin-left:6px;">&#128194; Load</button>
+        <input type="file" id="music-zip-input" accept=".zip" style="display:none" onchange="handleManualMusicZip(event)">
+        <button onclick="document.getElementById('music-load-btn').style.display='none'" title="Закрыть" style="background:transparent;color:#8a8a90;border:none;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;margin-left:4px;padding:0;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#94a3b8'">&#10005;</button>
     </div>
 
 
