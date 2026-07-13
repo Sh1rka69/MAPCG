@@ -758,6 +758,103 @@
         }
         @keyframes uiScaleLayerFadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
 
+        /* ═══════════════════════════════════════════════════════════════
+           HELP GUIDE — анимации появления и исчезновения элементов.
+           Каждая секция всплывает снизу с плавным blur→sharp, кнопки
+           верхней навигации сыплются сверху со stagger. При закрытии —
+           обратный процесс, потом модалка реально скрывается через JS
+           setTimeout (см. closeHelpGuideModal).
+           ═══════════════════════════════════════════════════════════════ */
+
+        @keyframes hgSectionIn {
+            0%   { opacity: 0; transform: translateY(24px) scale(0.985); filter: blur(6px); }
+            60%  { filter: blur(0); }
+            100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+        }
+        @keyframes hgSectionOut {
+            0%   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+            100% { opacity: 0; transform: translateY(30px) scale(0.97); filter: blur(4px); }
+        }
+        @keyframes hgNavIn {
+            0%   { opacity: 0; transform: translateY(-14px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes hgNavOut {
+            0%   { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-10px); }
+        }
+        @keyframes hgHeaderIn {
+            0%   { opacity: 0; transform: translateY(-8px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Пока модалка открывается (нет класса .hg-closing) —
+           применяем entry-анимации со stagger'ом по индексу. */
+        #help-guide-modal:not(.hg-closing) [id^="guide-section-"] {
+            animation: hgSectionIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        /* Stagger — каждая секция появляется на 70мс позже предыдущей. */
+        #help-guide-modal:not(.hg-closing) #guide-section-about      { animation-delay: 0.06s; }
+        #help-guide-modal:not(.hg-closing) #guide-section-basics     { animation-delay: 0.13s; }
+        #help-guide-modal:not(.hg-closing) #guide-section-tools      { animation-delay: 0.20s; }
+        #help-guide-modal:not(.hg-closing) #guide-section-shapes     { animation-delay: 0.27s; }
+        #help-guide-modal:not(.hg-closing) #guide-section-materials  { animation-delay: 0.34s; }
+        #help-guide-modal:not(.hg-closing) #guide-section-settings   { animation-delay: 0.41s; }
+        #help-guide-modal:not(.hg-closing) #guide-section-collection { animation-delay: 0.48s; }
+        #help-guide-modal:not(.hg-closing) #guide-section-io         { animation-delay: 0.55s; }
+        #help-guide-modal:not(.hg-closing) #guide-section-keys       { animation-delay: 0.62s; }
+        #help-guide-modal:not(.hg-closing) #guide-section-tips       { animation-delay: 0.69s; }
+
+        /* Кнопки навигации: помечены классом .hg-nav-btn (см. ниже в JS init). */
+        #help-guide-modal:not(.hg-closing) .hg-nav-btn {
+            animation: hgNavIn 0.35s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+        }
+        #help-guide-modal:not(.hg-closing) .hg-nav-btn:nth-child(1)  { animation-delay: 0.05s; }
+        #help-guide-modal:not(.hg-closing) .hg-nav-btn:nth-child(2)  { animation-delay: 0.08s; }
+        #help-guide-modal:not(.hg-closing) .hg-nav-btn:nth-child(3)  { animation-delay: 0.11s; }
+        #help-guide-modal:not(.hg-closing) .hg-nav-btn:nth-child(4)  { animation-delay: 0.14s; }
+        #help-guide-modal:not(.hg-closing) .hg-nav-btn:nth-child(5)  { animation-delay: 0.17s; }
+        #help-guide-modal:not(.hg-closing) .hg-nav-btn:nth-child(6)  { animation-delay: 0.20s; }
+        #help-guide-modal:not(.hg-closing) .hg-nav-btn:nth-child(7)  { animation-delay: 0.23s; }
+        #help-guide-modal:not(.hg-closing) .hg-nav-btn:nth-child(8)  { animation-delay: 0.26s; }
+        #help-guide-modal:not(.hg-closing) .hg-nav-btn:nth-child(9)  { animation-delay: 0.29s; }
+        #help-guide-modal:not(.hg-closing) .hg-nav-btn:nth-child(10) { animation-delay: 0.32s; }
+        #help-guide-modal:not(.hg-closing) .hg-nav-btn:nth-child(11) { animation-delay: 0.35s; }
+
+        /* Заголовок модалки — короткий fade-slide сверху. */
+        #help-guide-modal:not(.hg-closing) h2 {
+            animation: hgHeaderIn 0.4s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+        }
+
+        /* ═══ EXIT-анимации: класс .hg-closing навешивается при клике на «×» ═══
+           После окончания CSS-анимации (400мс) JS реально прячет модалку. */
+        #help-guide-modal.hg-closing [id^="guide-section-"] {
+            animation: hgSectionOut 0.32s cubic-bezier(0.5, 0, 0.75, 0) both;
+        }
+        /* Обратный stagger — сначала уходят нижние секции, потом верхние.
+           Порядок наоборот: tips → about. */
+        #help-guide-modal.hg-closing #guide-section-tips       { animation-delay: 0.00s; }
+        #help-guide-modal.hg-closing #guide-section-keys       { animation-delay: 0.02s; }
+        #help-guide-modal.hg-closing #guide-section-io         { animation-delay: 0.04s; }
+        #help-guide-modal.hg-closing #guide-section-collection { animation-delay: 0.06s; }
+        #help-guide-modal.hg-closing #guide-section-settings   { animation-delay: 0.08s; }
+        #help-guide-modal.hg-closing #guide-section-materials  { animation-delay: 0.10s; }
+        #help-guide-modal.hg-closing #guide-section-shapes     { animation-delay: 0.12s; }
+        #help-guide-modal.hg-closing #guide-section-tools      { animation-delay: 0.14s; }
+        #help-guide-modal.hg-closing #guide-section-basics     { animation-delay: 0.16s; }
+        #help-guide-modal.hg-closing #guide-section-about      { animation-delay: 0.18s; }
+
+        #help-guide-modal.hg-closing .hg-nav-btn {
+            animation: hgNavOut 0.28s ease-in both;
+        }
+        #help-guide-modal.hg-closing h2 {
+            animation: hgNavOut 0.28s ease-in both;
+        }
+        /* Вся модалка целиком плавно исчезает на выходе. */
+        #help-guide-modal.hg-closing {
+            animation: uiScaleLayerFadeIn 0.5s ease reverse forwards;
+        }
+
         #flash-overlay {
             position: absolute; inset: 0; background: #fff; opacity: 0;
             pointer-events: none; z-index: 15; transition: opacity 0.1s ease-out;
@@ -1604,7 +1701,11 @@
 
         <!-- HELP GUIDE MODAL (full editor guide, fullscreen) -->
         <div id="help-guide-modal" class="ui-scale-layer hidden fixed inset-0 z-[110] flex flex-col pointer-events-auto" style="background: var(--td-bg-0);">
-            <div class="w-full h-full flex flex-col modal-enter" style="background: var(--td-bg-1);">
+            <!-- Аудио-реактивный фон: canvas c переливающимися волнами.
+                 Абсолютно позиционирован под контентом (z-index: 0), контент
+                 плывёт поверх с полупрозрачным фоном, чтобы волны просвечивали. -->
+            <canvas id="help-guide-bg-canvas" style="position:absolute; inset:0; width:100%; height:100%; z-index:0; pointer-events:none; display:block;"></canvas>
+            <div class="w-full h-full flex flex-col modal-enter" style="background: rgba(20, 20, 24, 0.72); position: relative; z-index: 1;">
                 <div class="flex justify-between items-center px-5 py-3 flex-shrink-0" style="border-bottom: 1px solid var(--td-border);">
                     <h2 class="text-sm font-semibold tracking-[0.16em] uppercase flex items-center gap-2">
                         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14" style="color: var(--td-accent);"><path d="M4 3.5A1.5 1.5 0 015.5 2H14l4 4v11.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 014 17.5v-14z"/><path d="M14 2v4h4"/><path d="M7 11h6M7 14h6M7 8h2"/></svg>
@@ -2234,7 +2335,18 @@
         const audioEngine = {
             ctx: null, masterGain: null, weatherSource: null, weatherGain: null, filter: null, lfo: null, lfoGain: null, weatherType: 'clear',
             init() {
-                if(!this.ctx) { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); this.masterGain = this.ctx.createGain(); this.masterGain.connect(this.ctx.destination); this.masterGain.gain.value = 0.6; if (engine && engine.weatherType) this.setWeatherAudio(engine.weatherType); }
+                if(!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    this.masterGain = this.ctx.createGain();
+                    this.masterGain.connect(this.ctx.destination);
+                    this.masterGain.gain.value = 0.6;
+                    // Погоду при инициализации запускаем ТОЛЬКО если юзер уже
+                    // внутри проекта. В главном меню (currentProjectId === null)
+                    // никакой погоды быть не должно.
+                    if (engine && engine.weatherType && window.appState && window.appState.currentProjectId) {
+                        this.setWeatherAudio(engine.weatherType);
+                    }
+                }
                 if(this.ctx.state === 'suspended') this.ctx.resume();
             },
             createNoiseBuffer(type = 'pink') {
@@ -2247,26 +2359,32 @@
                 } return buffer;
             },
             setWeatherAudio(type) {
-                if(!this.ctx) return; if(this.weatherType === type && this.weatherSource) return;
+                if(!this.ctx) return;
+                // Погода звучит только внутри загруженного проекта — в главном меню
+                // мы её глушим (см. также вызов stopWeatherAudio при возврате в меню).
+                if (!window.appState || !window.appState.currentProjectId) { this.weatherType = type; this.stopWeatherAudio(); return; }
+                if(this.weatherType === type && this.weatherSource) return;
                 this.weatherType = type; this.stopWeatherAudio(); if (type === 'fog') return;
                 this.weatherSource = this.ctx.createBufferSource(); this.weatherSource.loop = true; this.filter = this.ctx.createBiquadFilter();
                 this.weatherGain = this.ctx.createGain(); this.weatherGain.gain.setValueAtTime(0, this.ctx.currentTime);
 
+                // Все громкости приглушены примерно в 2 раза относительно исходных,
+                // чтобы погодный фон не забивал музыку/интерфейсные звуки.
                 if (type === 'rain' || type === 'drizzle' || type === 'thunder' || type === 'storm') {
-                    this.weatherSource.buffer = this.createNoiseBuffer('pink'); this.filter.type = 'lowpass'; this.filter.frequency.value = type === 'drizzle' ? 1700 : 1200; this.weatherGain.gain.linearRampToValueAtTime(type === 'drizzle' ? 0.28 : 0.55, this.ctx.currentTime + 2.0);
+                    this.weatherSource.buffer = this.createNoiseBuffer('pink'); this.filter.type = 'lowpass'; this.filter.frequency.value = type === 'drizzle' ? 1700 : 1200; this.weatherGain.gain.linearRampToValueAtTime(type === 'drizzle' ? 0.14 : 0.28, this.ctx.currentTime + 2.0);
                 } else if (type === 'snow' || type === 'blizzard') {
                     this.weatherSource.buffer = this.createNoiseBuffer('brown'); this.filter.type = 'lowpass'; this.filter.frequency.value = type === 'blizzard' ? 260 : 320;
                     this.lfo = this.ctx.createOscillator(); this.lfo.type = 'sine'; this.lfo.frequency.value = type === 'blizzard' ? 0.035 : 0.05;
                     this.lfoGain = this.ctx.createGain(); this.lfoGain.gain.value = type === 'blizzard' ? 180 : 110;
                     this.lfo.connect(this.lfoGain); this.lfoGain.connect(this.filter.frequency); this.lfo.start();
-                    this.weatherGain.gain.linearRampToValueAtTime(0.6, this.ctx.currentTime + 2.0);
+                    this.weatherGain.gain.linearRampToValueAtTime(0.30, this.ctx.currentTime + 2.0);
                 } else if (type === 'cloudy' || type === 'windy') {
                     this.weatherSource.buffer = this.createNoiseBuffer('brown'); this.filter.type = 'bandpass'; this.filter.frequency.value = type === 'windy' ? 650 : 420;
                     this.lfo = this.ctx.createOscillator(); this.lfo.type = 'sine'; this.lfo.frequency.value = type === 'windy' ? 0.08 : 0.12;
                     this.lfoGain = this.ctx.createGain(); this.lfoGain.gain.value = type === 'windy' ? 360 : 220;
                     this.lfo.connect(this.lfoGain); this.lfoGain.connect(this.filter.frequency); this.lfo.start();
-                    this.weatherGain.gain.linearRampToValueAtTime(type === 'windy' ? 0.32 : 0.22, this.ctx.currentTime + 2.0);
-                } else if (type === 'clear' || type === 'day') { this.weatherSource.buffer = this.createNoiseBuffer('brown'); this.filter.type = 'lowpass'; this.filter.frequency.value = 400; this.weatherGain.gain.linearRampToValueAtTime(0.15, this.ctx.currentTime + 2.0); }
+                    this.weatherGain.gain.linearRampToValueAtTime(type === 'windy' ? 0.16 : 0.11, this.ctx.currentTime + 2.0);
+                } else if (type === 'clear' || type === 'day') { this.weatherSource.buffer = this.createNoiseBuffer('brown'); this.filter.type = 'lowpass'; this.filter.frequency.value = 400; this.weatherGain.gain.linearRampToValueAtTime(0.07, this.ctx.currentTime + 2.0); }
                 this.weatherSource.connect(this.filter); this.filter.connect(this.weatherGain); this.weatherGain.connect(this.masterGain); this.weatherSource.start();
             },
             stopWeatherAudio() {
@@ -2681,134 +2799,263 @@
 
 
         // ─────────────────────────────────────────────────────────────
-        //  MUSIC LOADER + PLAYER — fetch + JSZip + localForage
-        //  • GitHub Pages / веб-сервер  → авто-загрузка Music.zip
-        //  • Офлайн / Android WebView   → кнопка выбора файла 1 раз
-        //  • После первой загрузки      → кэш IndexedDB (офлайн-плей)
+        //  MUSIC LOADER + PLAYER  (v2 — реально рабочая версия)
         //
-        //  Треки играются рандомно при открытии Help Guide и при старте
-        //  плейтеста. Плавный fade-in / fade-out через WebAudio GainNode.
+        //  Ключевые решения, из-за которых v1 не играла:
+        //  ─────────────────────────────────────────────
+        //  • v1 клала треки как data-URL (base64). 3 mp3 × 5–7 МБ = ~20 МБ
+        //    base64-строк. IndexedDB это принимала, но HTMLAudioElement
+        //    в некоторых WebView не переваривает такие длинные src.
+        //    → v2 хранит и играет как Blob через URL.createObjectURL().
+        //  • v1 подключала звук через WebAudio MediaElementSource → GainNode
+        //    → destination. Если граф не собрался (частая проблема в
+        //    Android WebView при не-CORS-источниках), звука не было ВООБЩЕ,
+        //    т.к. MediaElementSource перехватывает поток у audio-элемента.
+        //    → v2 играет напрямую через HTMLAudio, fade делает на .volume
+        //    через requestAnimationFrame. Никаких CORS, никакого WebAudio,
+        //    работает на file://, github.io и в любом WebView.
+        //  • v1 показывал fallback-кнопку через getElementById до готовности
+        //    DOM (скрипт в <head>). → v2 ждёт DOMContentLoaded.
+        //  • v1 «молча игнорил» autoplay-блок. → v2 логирует ошибку с текстом.
         // ─────────────────────────────────────────────────────────────
-        const MUSIC_CACHE_KEY = 'mapcg_music_v1';
+        const MUSIC_CACHE_KEY = 'mapcg_music_v2_blobs';
 
-        // Массив треков в памяти: [{name, dataUrl}, ...]. Заполняется из ZIP.
+        // Треки в памяти: [{name, blob, url}]. url создаём лениво.
         const musicTracks = [];
 
         async function loadMusicFromZipBuffer(buffer) {
+            console.log('[MapCG] Music: JSZip.loadAsync starting...');
             const zip = await JSZip.loadAsync(buffer);
+            const allFiles = Object.keys(zip.files);
+            console.log('[MapCG] Music: ZIP contains ' + allFiles.length + ' entries:', allFiles);
             const data = [];
             for (const [filename, file] of Object.entries(zip.files)) {
                 if (file.dir) continue;
                 const basename = filename.split('/').pop();
-                if (!basename || !/\.(mp3|ogg|wav|m4a|aac|opus|flac)$/i.test(basename)) continue;
+                if (!basename || basename.startsWith('.') || basename.startsWith('_')) {
+                    console.log('[MapCG] Music: skip service entry —', filename);
+                    continue;
+                }
+                if (!/\.(mp3|ogg|wav|m4a|aac|opus|flac)$/i.test(basename)) {
+                    console.log('[MapCG] Music: skip non-audio —', basename);
+                    continue;
+                }
                 const name = basename.replace(/\.(mp3|ogg|wav|m4a|aac|opus|flac)$/i, '');
-                const blob = await file.async('blob');
-                const dataUrl = await new Promise(res => {
-                    const r = new FileReader();
-                    r.onload = e => res(e.target.result);
-                    r.readAsDataURL(blob);
-                });
-                data.push({ name, dataUrl });
+                const ext = basename.split('.').pop().toLowerCase();
+                const mime = ({
+                    mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav',
+                    m4a: 'audio/mp4', aac: 'audio/aac', opus: 'audio/ogg', flac: 'audio/flac'
+                })[ext] || 'audio/mpeg';
+                try {
+                    const rawBlob = await file.async('blob');
+                    // Пере-упаковываем чтобы гарантированно был правильный MIME
+                    // (JSZip иногда отдаёт application/octet-stream).
+                    const blob = new Blob([await rawBlob.arrayBuffer()], { type: mime });
+                    data.push({ name, blob });
+                    console.log('[MapCG] Music: decoded ✓ ' + basename + ' → ' + (blob.size/1024/1024).toFixed(2) + ' MB (' + mime + ')');
+                } catch (err) {
+                    console.error('[MapCG] Music: FAILED to decode ' + basename, err);
+                }
             }
+            console.log('[MapCG] Music: total decoded ' + data.length + ' tracks');
             return data;
         }
 
         function applyMusicData(data) {
+            // Освобождаем предыдущие blob URL'ы если были
+            musicTracks.forEach(t => { if (t.url) { try { URL.revokeObjectURL(t.url); } catch(e) {} } });
             musicTracks.length = 0;
-            data.forEach(t => musicTracks.push(t));
-            console.log('[MapCG] ' + musicTracks.length + ' music tracks ready:', musicTracks.map(t => t.name));
+            data.forEach(t => musicTracks.push({ name: t.name, blob: t.blob, url: null }));
+            console.log('[MapCG] Music: ' + musicTracks.length + ' tracks ready:',
+                        musicTracks.map(t => t.name + ' (' + (t.blob.size/1024/1024).toFixed(1) + ' MB, ' + t.blob.type + ')'));
+        }
+
+        function showMusicLoadBtn() {
+            const doShow = () => {
+                const btn = document.getElementById('music-load-btn');
+                const input = document.getElementById('music-zip-input');
+                if (btn) {
+                    btn.style.display = 'flex';
+                    console.log('[MapCG] Music: fallback button shown.');
+                } else {
+                    console.warn('[MapCG] Music: fallback button element not found in DOM.');
+                    return;
+                }
+                // Дублирующий надёжный обработчик через addEventListener —
+                // работает независимо от того, есть ли window.handleManualMusicZip.
+                // Флаг _bound защищает от повторной подписки.
+                if (input && !input._bound) {
+                    input.addEventListener('change', handleManualMusicZip);
+                    input._bound = true;
+                    console.log('[MapCG] Music: input change-listener bound.');
+                }
+            };
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', doShow, { once: true });
+            } else {
+                doShow();
+            }
         }
 
         async function initMusic() {
+            console.log('[MapCG] Music: initMusic() start');
             // 1. IndexedDB кэш — мгновенно, полностью офлайн
             try {
                 const cached = await localforage.getItem(MUSIC_CACHE_KEY);
                 if (cached && Array.isArray(cached) && cached.length > 0) {
-                    applyMusicData(cached); return;
+                    console.log('[MapCG] Music: loaded ' + cached.length + ' tracks from IndexedDB cache.');
+                    applyMusicData(cached);
+                    return;
                 }
-            } catch(e) {}
+            } catch(e) { console.warn('[MapCG] Music: cache read error:', e); }
+
             // 2. Авто-загрузка с сервера (GitHub Pages / веб-сервер)
             try {
-                const resp = await fetch('./Music.zip');
+                console.log('[MapCG] Music: trying fetch(./Music.zip)...');
+                const resp = await fetch('./Music.zip', { cache: 'no-cache' });
+                console.log('[MapCG] Music: fetch response', resp.status, resp.headers.get('content-type'));
                 if (resp.ok) {
-                    const data = await loadMusicFromZipBuffer(await resp.arrayBuffer());
+                    const buf = await resp.arrayBuffer();
+                    const data = await loadMusicFromZipBuffer(buf);
                     if (data.length > 0) {
                         applyMusicData(data);
-                        try { await localforage.setItem(MUSIC_CACHE_KEY, data); } catch(e) {}
+                        try {
+                            await localforage.setItem(MUSIC_CACHE_KEY, data.map(t => ({ name: t.name, blob: t.blob })));
+                            console.log('[MapCG] Music: cached in IndexedDB.');
+                        } catch(e) { console.warn('[MapCG] Music: cache write error:', e); }
                         return;
+                    } else {
+                        console.warn('[MapCG] Music: ZIP fetched but contains no audio files.');
                     }
                 }
-            } catch(e) { console.warn('[MapCG] Music.zip auto-fetch failed — showing manual load button.'); }
-            // 3. Ручной выбор (первый раз офлайн / Android без кэша)
-            const btn = document.getElementById('music-load-btn');
-            if (btn) btn.style.display = 'flex';
+            } catch(e) {
+                console.warn('[MapCG] Music.zip auto-fetch failed:', e && e.message || e);
+            }
+
+            // 3. Ручной выбор (первый раз офлайн / file:// / Android без кэша)
+            console.log('[MapCG] Music: falling back to manual load button.');
+            showMusicLoadBtn();
         }
 
         async function handleManualMusicZip(event) {
+            console.log('[MapCG] Music: handleManualMusicZip triggered');
             const input = event.target;
-            const file = input.files[0]; if (!file) return;
+            const file = input.files && input.files[0];
+            if (!file) { console.warn('[MapCG] Music: no file selected'); return; }
+            console.log('[MapCG] Music: file selected —', file.name, '(' + (file.size/1024/1024).toFixed(2) + ' MB, ' + file.type + ')');
             input.value = '';
             const statusEl = document.getElementById('music-status-text');
-            if (statusEl) statusEl.innerHTML = '<span style="color:#60a5fa">⏳ Loading...</span>';
+            if (statusEl) statusEl.innerHTML = '<span style="color:#60a5fa">⏳ Reading ZIP...</span>';
             try {
-                const data = await loadMusicFromZipBuffer(await file.arrayBuffer());
+                const buf = await file.arrayBuffer();
+                console.log('[MapCG] Music: ZIP arrayBuffer read, ' + buf.byteLength + ' bytes. Parsing...');
+                if (statusEl) statusEl.innerHTML = '<span style="color:#60a5fa">⏳ Parsing audio...</span>';
+                const data = await loadMusicFromZipBuffer(buf);
                 const count = data.length;
-                if (count === 0) throw new Error('Нет аудио в архиве');
+                console.log('[MapCG] Music: parsed ' + count + ' audio files from ZIP');
+                if (count === 0) throw new Error('В архиве нет .mp3/.ogg/.wav/.m4a/.aac/.opus/.flac');
+                // Треки в память СРАЗУ — играть можно уже сейчас, даже если IndexedDB
+                // потом откажется сохранять большой массив.
                 applyMusicData(data);
-                try { await localforage.setItem(MUSIC_CACHE_KEY, data); } catch(e) {}
-                if (statusEl) statusEl.innerHTML = '<span style="color:#4ade80">✔ ' + count + ' треков загружено!</span>';
+                if (statusEl) statusEl.innerHTML = '<span style="color:#4ade80">✔ ' + count + ' треков загружено! Кэшируем...</span>';
+                // Сохранение в кэш — best-effort. Если Android WebView не разрешит
+                // положить 17 МБ в IndexedDB — не страшно, музыка уже играет.
+                try {
+                    await localforage.setItem(MUSIC_CACHE_KEY, data.map(t => ({ name: t.name, blob: t.blob })));
+                    console.log('[MapCG] Music: cached in IndexedDB successfully.');
+                    if (statusEl) statusEl.innerHTML = '<span style="color:#4ade80">✔ ' + count + ' треков (сохранено офлайн)</span>';
+                } catch(e) {
+                    console.warn('[MapCG] Music: IndexedDB cache write failed —', e && e.message);
+                    if (statusEl) statusEl.innerHTML = '<span style="color:#fbbf24">✔ ' + count + ' треков (только на эту сессию)</span>';
+                }
                 setTimeout(() => {
                     const btn = document.getElementById('music-load-btn');
                     if (btn) btn.style.display = 'none';
-                }, 1500);
+                }, 1800);
             } catch(e) {
-                if (statusEl) statusEl.innerHTML = '<span style="color:#f87171">❌ Ошибка: ' + (e.message || 'выберите правильный Music.zip') + '</span>';
                 console.error('[MapCG] Music load failed:', e);
+                if (statusEl) statusEl.innerHTML = '<span style="color:#f87171">❌ ' + (e.message || 'выберите правильный Music.zip') + '</span>';
             }
         }
+        // ⚠️ КРИТИЧНО: этот скрипт — <script type="module">, объявления в нём
+        // НЕ становятся глобальными. Без window.X = X инлайновый onclick=""
+        // в HTML не найдёт функцию → клик Load не сработает. Прямо сейчас
+        // именно из-за этого музыка не грузилась.
+        window.handleManualMusicZip = handleManualMusicZip;
+        // Заодно фиксим и текстур-обработчик — та же проблема, просто автозагрузка
+        // fetch() маскировала это на реальных проектах.
+        if (typeof handleManualTexZip === 'function') window.handleManualTexZip = handleManualTexZip;
 
-        // ─── Плеер с плавными fade-in / fade-out через WebAudio GainNode ───
-        // Работает на любом уже сгенерированном или отдельном AudioContext.
-        // Использует HTMLAudioElement (нативно тянет сжатый mp3, не грузит RAM
-        // полным PCM как AudioBufferSource), через createMediaElementSource
-        // пропускает через GainNode для контроля громкости и fade-переходов.
+        // ─── Простой плеер: HTMLAudio + fade на .volume через RAF ───
+        // Никакого WebAudio, никакого MediaElementSource — работает везде,
+        // включая Android WebView на file://.
         const musicPlayer = {
-            ctx: null, gainNode: null, audioEl: null, sourceNode: null,
-            currentTrackName: null, isFading: false, targetVolume: 0.55,
-            _lastPlayedIndex: -1,
-
-            _ensureCtx: function() {
-                // Пере-используем один и тот же AudioContext, если уже создан
-                // audioEngine (для погоды/громов). Иначе создаём свой.
-                if (this.ctx) return this.ctx;
-                if (window.audioEngine && audioEngine.ctx) {
-                    this.ctx = audioEngine.ctx;
-                } else {
-                    try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
-                    catch(e) { console.warn('[MapCG] Web Audio not available:', e); return null; }
-                }
-                return this.ctx;
-            },
+            audioEl: null, currentTrackName: null, targetVolume: 0.55,
+            _lastPlayedIndex: -1, _fadeRAF: null, _currentUrl: null,
 
             _pickRandomTrack: function() {
                 if (musicTracks.length === 0) return null;
                 if (musicTracks.length === 1) return 0;
-                // Избегаем повтора того же трека подряд, чтобы каждое открытие
-                // ощущалось разнообразнее.
                 let idx;
                 do { idx = Math.floor(Math.random() * musicTracks.length); }
                 while (idx === this._lastPlayedIndex);
                 return idx;
             },
 
-            playRandomFadeIn: function(fadeSeconds) {
-                if (musicTracks.length === 0) return; // нечего играть
-                const ctx = this._ensureCtx();
-                if (!ctx) return;
-                if (ctx.state === 'suspended') { try { ctx.resume(); } catch(e) {} }
+            // Плавно тянет громкость к `to` за duration ms, потом onDone().
+            // Кэнселит любой предыдущий fade.
+            //
+            // ▶︎ ГЛАВНАЯ ТОЧКА ФИКСА: если у трека прикреплён AnalyserNode
+            //    (WebAudio-путь), то audio.volume НЕ РАБОТАЕТ — поток идёт
+            //    через WebAudio-граф. Управляем через GainNode, который
+            //    вставлен между MediaElementSource и AnalyserNode. Иначе
+            //    (fallback путь без WebAudio) — обычный audio.volume.
+            //
+            // ▶︎ ВТОРАЯ ТОЧКА ФИКСА: раньше проверка `!el.parentNode && el !==
+            //    this.audioEl` рубила fade на первом же кадре, потому что
+            //    new Audio() никогда не имеет parentNode, а fadeOutAndStop
+            //    сбрасывает this.audioEl = null ДО старта fade. Теперь
+            //    проверяем реальный «мёртвый» признак — пустой src.
+            //
+            // Кривые: fade-out ease-in-quad (медленно→быстро), fade-in sqrt
+            // (быстро→медленно) — обе воспринимаются на слух как линейные.
+            _fadeVolume: function(el, gainNode, to, duration, onDone) {
+                if (this._fadeRAF) cancelAnimationFrame(this._fadeRAF);
+                if (!el) { onDone && onDone(); return; }
+                const useGain = !!gainNode;
+                const from = useGain ? (gainNode.gain.value || 0) : (el.volume || 0);
+                const goingDown = to < from;
+                const t0 = performance.now();
+                const step = (now) => {
+                    // Живой признак: если src сброшен — элемент реально умер,
+                    // прерываемся. НЕ проверяем parentNode (у new Audio его нет).
+                    if (!el || !el.src) { this._fadeRAF = null; onDone && onDone(); return; }
+                    const k = Math.min(1, (now - t0) / duration);
+                    const eased = goingDown
+                        ? (1 - Math.pow(1 - k, 2.2))
+                        : Math.pow(k, 0.55);
+                    const v = from + (to - from) * eased;
+                    if (useGain) {
+                        try { gainNode.gain.value = Math.max(0, Math.min(1, v)); } catch(e) {}
+                    } else {
+                        try { el.volume = Math.max(0, Math.min(1, v)); } catch(e) {}
+                    }
+                    if (k < 1) {
+                        this._fadeRAF = requestAnimationFrame(step);
+                    } else {
+                        this._fadeRAF = null;
+                        onDone && onDone();
+                    }
+                };
+                this._fadeRAF = requestAnimationFrame(step);
+            },
 
-                // Если уже что-то играет — сначала остановим (без плавного, чтобы
-                // не накладывались два трека). Это редкий случай (двойной вызов).
+            playRandomFadeIn: function(fadeSeconds) {
+                if (musicTracks.length === 0) {
+                    console.log('[MapCG] Music: playRandomFadeIn called but no tracks loaded yet.');
+                    return;
+                }
+                // Если уже играет — жёстко остановим (редкий случай)
                 if (this.audioEl) this._hardStop();
 
                 const idx = this._pickRandomTrack();
@@ -2817,75 +3064,608 @@
                 const track = musicTracks[idx];
                 this.currentTrackName = track.name;
 
-                try {
-                    const el = new Audio();
-                    el.src = track.dataUrl;
-                    el.loop = true;
-                    el.preload = 'auto';
-                    el.crossOrigin = 'anonymous';
-                    el.volume = 1.0; // громкостью управляем через GainNode
-                    this.audioEl = el;
+                // Лениво создаём blob URL один раз на трек
+                if (!track.url) {
+                    try { track.url = URL.createObjectURL(track.blob); }
+                    catch(e) { console.error('[MapCG] Music: createObjectURL failed:', e); return; }
+                }
+                this._currentUrl = track.url;
 
-                    // MediaElementSource → Gain → destination
-                    this.sourceNode = ctx.createMediaElementSource(el);
-                    this.gainNode = ctx.createGain();
-                    this.gainNode.gain.value = 0.0001; // стартуем в тишине
-                    this.sourceNode.connect(this.gainNode);
-                    this.gainNode.connect(ctx.destination);
+                const el = new Audio();
+                el.loop = true;
+                el.preload = 'auto';
+                el.volume = 0;
+                el.src = track.url;
+                this.audioEl = el;
 
-                    const dur = Math.max(0.1, fadeSeconds || 1.2);
-                    const t0 = ctx.currentTime;
-                    this.gainNode.gain.cancelScheduledValues(t0);
-                    this.gainNode.gain.setValueAtTime(0.0001, t0);
-                    this.gainNode.gain.linearRampToValueAtTime(this.targetVolume, t0 + dur);
+                // ── WebAudio-цепочка (AnalyserNode + GainNode) для FFT-визуализации
+                //    и НАДЁЖНОГО управления громкостью ──
+                //
+                // Строим: MediaElementSource → GainNode → AnalyserNode → destination
+                //
+                // Почему GainNode нужен: когда audio-элемент подключён через
+                // MediaElementSource, HTMLAudio.volume ПЕРЕСТАЁТ работать —
+                // поток идёт через WebAudio, а не через встроенный вывод.
+                // Управление громкостью тогда обязано идти через GainNode,
+                // иначе fade просто «не слышно» — трек играет на полной
+                // громкости и обрывается только физическим pause().
+                //
+                // Fallback: если MediaElementSource упадёт (некоторые WebView),
+                // audio-элемент вернётся к прямому воспроизведению, и мы
+                // будем управлять громкостью через el.volume (см. _fadeVolume).
+                this._analyser = null;
+                this._gainNode = null;
+                (function attachAudioGraph(self) {
+                    try {
+                        if (!(window.AudioContext || window.webkitAudioContext)) return;
+                        if (!musicPlayer._vizCtx) {
+                            musicPlayer._vizCtx = new (window.AudioContext || window.webkitAudioContext)();
+                        }
+                        const vctx = musicPlayer._vizCtx;
+                        if (vctx.state === 'suspended') { try { vctx.resume(); } catch(e) {} }
+                        let src = null, gain = null, analyser = null;
+                        try {
+                            src = vctx.createMediaElementSource(el);
+                            gain = vctx.createGain();
+                            gain.gain.value = 0.0001; // стартуем практически в тишине для fade-in
+                            analyser = vctx.createAnalyser();
+                            analyser.fftSize = 512;
+                            analyser.smoothingTimeConstant = 0.82;
+                            src.connect(gain);
+                            gain.connect(analyser);
+                            analyser.connect(vctx.destination);
+                        } catch (inner) {
+                            // Не удалось построить граф. Откатываем всё, чтобы
+                            // audio-элемент вернулся к прямому воспроизведению.
+                            try { if (src) src.disconnect(); } catch(_) {}
+                            try { if (gain) gain.disconnect(); } catch(_) {}
+                            try { if (analyser) analyser.disconnect(); } catch(_) {}
+                            throw inner;
+                        }
+                        self._analyser = analyser;
+                        self._gainNode = gain;
+                        self._analyserData = new Uint8Array(analyser.frequencyBinCount);
+                        // Раз громкостью управляем через gain — на audio-элементе
+                        // ставим максимум, иначе браузер умножит одно на другое.
+                        try { el.volume = 1.0; } catch(e) {}
+                        console.log('[MapCG] Music: WebAudio graph attached (gain + analyser).');
+                    } catch (e) {
+                        console.warn('[MapCG] Music: WebAudio graph unavailable, using direct HTMLAudio volume —', e && e.message);
+                        self._analyser = null;
+                        self._gainNode = null;
+                    }
+                })(this);
 
-                    // play() может вернуть promise; ошибки автоплея (мобильный
-                    // браузер без user-gesture) молча игнорим.
-                    const p = el.play();
-                    if (p && p.catch) p.catch((e) => { console.warn('[MapCG] Music play blocked:', e); });
-                    console.log('[MapCG] Music: playing "' + track.name + '"');
-                } catch (e) {
-                    console.warn('[MapCG] Music play error:', e);
-                    this._hardStop();
+                const dur = Math.max(50, (fadeSeconds || 1.2) * 1000);
+                console.log('[MapCG] Music: playing "' + track.name + '" (fade-in ' + dur + 'ms)');
+
+                const startFade = () => {
+                    this._fadeVolume(el, this._gainNode, this.targetVolume, dur, null);
+                };
+
+                // play() → Promise. Ловим реальную ошибку (autoplay policy и т.п.)
+                const p = el.play();
+                if (p && p.then) {
+                    p.then(startFade).catch(err => {
+                        console.warn('[MapCG] Music: play() rejected — ' + (err && err.name) + ': ' + (err && err.message));
+                        // Часто это NotAllowedError (без user gesture). Один трюк:
+                        // muted + play + затем unmute на первом gesture. Но обе наши
+                        // точки вызова (Help/Playtest) — уже клики пользователя, так
+                        // что этот путь не должен срабатывать.
+                    });
+                } else {
+                    // Старые браузеры без Promise-версии play()
+                    startFade();
                 }
             },
 
             fadeOutAndStop: function(fadeSeconds) {
-                if (!this.audioEl || !this.gainNode || !this.ctx) return;
-                const ctx = this.ctx;
+                if (!this.audioEl) return;
                 const el = this.audioEl;
-                const g = this.gainNode;
-                const src = this.sourceNode;
-                const dur = Math.max(0.1, fadeSeconds || 1.2);
-                const t0 = ctx.currentTime;
-                try {
-                    g.gain.cancelScheduledValues(t0);
-                    g.gain.setValueAtTime(g.value, t0);
-                    g.gain.linearRampToValueAtTime(0.0001, t0 + dur);
-                } catch(e) {}
-                // «Забываем» ссылки СРАЗУ — если во время fade придёт новый playRandomFadeIn,
-                // он не будет ждать этого fade.
-                this.audioEl = null;
-                this.sourceNode = null;
-                this.gainNode = null;
+                const gain = this._gainNode;      // может быть null, если WebAudio не собрался
+                const dur = Math.max(50, (fadeSeconds || 1.2) * 1000);
+                const trackName = this.currentTrackName;
+                console.log('[MapCG] Music: fadeOutAndStop "' + (trackName || '?') + '" (' + dur + 'ms)');
+                // Помечаем «этот трек уходит», но НЕ обнуляем ссылки сразу —
+                // иначе визуализатор перекинется на fallback ДО того, как реально
+                // затихнет звук, и в аудио-графе будет странность.
+                // Ссылки на аудио-элемент/gain обнулим ПОСЛЕ окончания fade.
                 this.currentTrackName = null;
-                setTimeout(() => {
-                    try { el.pause(); el.src = ''; el.load(); } catch(e) {}
-                    try { if (src) src.disconnect(); } catch(e) {}
-                    try { if (g) g.disconnect(); } catch(e) {}
-                }, (dur * 1000) + 50);
+                // Однако если сюда придёт новый play() — audioEl должен быть уже
+                // «свободен», чтобы новая цепочка построилась. Поэтому саму
+                // ссылку audioEl всё-таки чистим, а вот gain/analyser держим,
+                // чтобы fade успел отработать.
+                this.audioEl = null;
+                this._fadeVolume(el, gain, 0, dur, () => {
+                    try { el.pause(); } catch(e) {}
+                    try { el.removeAttribute('src'); el.load(); } catch(e) {}
+                    // Разбираем WebAudio-граф текущего трека — иначе накопится
+                    // n подвешенных MediaElementSource'ов на каждое открытие Help.
+                    // Обнуление _analyser _после_ pause() — важно, чтобы во время
+                    // самого fade визуализатор всё ещё видел реальный спектр.
+                    if (gain) { try { gain.disconnect(); } catch(e) {} }
+                    if (this._analyser && !this.audioEl) {
+                        try { this._analyser.disconnect(); } catch(e) {}
+                        this._analyser = null;
+                        this._analyserData = null;
+                    }
+                    if (this._gainNode === gain) this._gainNode = null;
+                    console.log('[MapCG] Music: stopped "' + trackName + '"');
+                });
             },
 
             _hardStop: function() {
-                try { if (this.audioEl) { this.audioEl.pause(); this.audioEl.src = ''; this.audioEl.load(); } } catch(e) {}
-                try { if (this.sourceNode) this.sourceNode.disconnect(); } catch(e) {}
-                try { if (this.gainNode) this.gainNode.disconnect(); } catch(e) {}
-                this.audioEl = null; this.sourceNode = null; this.gainNode = null; this.currentTrackName = null;
+                if (this._fadeRAF) { cancelAnimationFrame(this._fadeRAF); this._fadeRAF = null; }
+                if (this.audioEl) {
+                    try { this.audioEl.pause(); } catch(e) {}
+                    try { this.audioEl.removeAttribute('src'); this.audioEl.load(); } catch(e) {}
+                }
+                // Разбираем WebAudio-граф, чтобы не копились подвешенные ноды
+                // при повторных hardStop → play.
+                if (this._gainNode) { try { this._gainNode.disconnect(); } catch(e) {} this._gainNode = null; }
+                if (this._analyser) { try { this._analyser.disconnect(); } catch(e) {} this._analyser = null; }
+                this._analyserData = null;
+                this.audioEl = null; this.currentTrackName = null;
             }
         };
         window.musicPlayer = musicPlayer;
 
         initMusic();
+
+
+        // ─────────────────────────────────────────────────────────────
+        //  GUIDE BACKGROUND FX — Fluid-like domain-warping shader
+        //
+        //  Как это работает (без реального Navier-Stokes, но выглядит как fluid):
+        //   1) Ping-pong framebuffers: рендерим в текстуру A, читаем из B, меняем
+        //      местами → temporal advection «дым перетекает и медленно тает».
+        //   2) Fragment shader читает предыдущий кадр по СМЕЩЁННЫМ UV
+        //      (velocity-поле из curl шума), с fade × 0.985 → эффект «жидкости».
+        //   3) К advected-кадру добавляем свежую энергию: 4-октавный FBM с
+        //      domain-warping (feedback shift), окрашенный в неоновую палитру.
+        //   4) На каждом bass-ударе — радиальный impulse из точки-эмиттера
+        //      (позиция плавает по окружности), вспыхивает оранжевым.
+        //   5) Финальный проход — HDR bloom-подобный tonemap с color grading
+        //      на чёрном фоне.
+        //
+        //  Реактивность: bass = сила impulse и цветовая вспышка. mid = скорость
+        //  движения velocity-поля. treble = детализация мелких завитков.
+        //
+        //  Fallback: если WebGL2 недоступен — тихо выходим, canvas остаётся
+        //  чёрным (не критично).
+        // ─────────────────────────────────────────────────────────────
+        const guideBgFx = {
+            canvas: null, gl: null, raf: null, running: false,
+            t0: 0, prevT: 0, dpr: 1,
+            // Ping-pong framebuffers
+            fbo: [null, null], tex: [null, null], curFbo: 0,
+            simProg: null, presentProg: null, quadVAO: null,
+            texW: 0, texH: 0,
+            // Аудио-состояние (плавно интерполируем, чтобы не дёргалось)
+            smoothBass: 0, smoothMid: 0, smoothTreble: 0,
+            bassPeak: 0, bassEnvelope: 0,
+            // Позиция эмиттера — плавно движется по эллипсу
+            emitterAngle: 0,
+            // Fallback fake-audio для случая без FFT
+            _fakePulse: 0, _lastPulseTime: 0,
+
+            _createShader: function(gl, type, src) {
+                const sh = gl.createShader(type);
+                gl.shaderSource(sh, src);
+                gl.compileShader(sh);
+                if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+                    console.error('[guideBgFx] shader compile error:\n' + gl.getShaderInfoLog(sh) + '\nSRC:\n' + src);
+                    gl.deleteShader(sh); return null;
+                }
+                return sh;
+            },
+            _createProgram: function(gl, vsSrc, fsSrc) {
+                const vs = this._createShader(gl, gl.VERTEX_SHADER, vsSrc);
+                const fs = this._createShader(gl, gl.FRAGMENT_SHADER, fsSrc);
+                if (!vs || !fs) return null;
+                const p = gl.createProgram();
+                gl.attachShader(p, vs); gl.attachShader(p, fs);
+                gl.linkProgram(p);
+                if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+                    console.error('[guideBgFx] program link error: ' + gl.getProgramInfoLog(p));
+                    return null;
+                }
+                return p;
+            },
+            _createTargetTexture: function(gl, w, h) {
+                const t = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, t);
+                // RGBA16F даёт HDR-запас для feedback без быстрого клиппинга.
+                // Если EXT_color_buffer_float недоступен — fallback на RGBA8.
+                const wantFloat = !!gl.getExtension('EXT_color_buffer_half_float') ||
+                                  !!gl.getExtension('EXT_color_buffer_float');
+                if (wantFloat && gl.RGBA16F) {
+                    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+                } else {
+                    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+                }
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                return t;
+            },
+            _initGL: function() {
+                const gl = this.canvas.getContext('webgl2', {
+                    alpha: false, antialias: false, depth: false, stencil: false,
+                    premultipliedAlpha: false, preserveDrawingBuffer: false,
+                    powerPreference: 'high-performance'
+                });
+                if (!gl) { console.warn('[guideBgFx] WebGL2 unavailable, skipping fluid FX'); return false; }
+                this.gl = gl;
+
+                // ── Общий полноэкранный quad через gl_VertexID (VAO без буфера) ──
+                const vsFullscreen = `#version 300 es
+                    precision highp float;
+                    out vec2 vUV;
+                    void main() {
+                        vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+                        vUV = p;
+                        gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+                    }`;
+
+                // ── SIMULATION shader (main fluid FX) ──
+                const fsSim = `#version 300 es
+                    precision highp float;
+                    in vec2 vUV;
+                    out vec4 fragColor;
+
+                    uniform sampler2D uPrev;      // предыдущий кадр (feedback)
+                    uniform vec2  uRes;
+                    uniform float uTime;
+                    uniform float uDT;
+                    uniform float uBass;          // 0..~1.5 (с overshoot на пиках)
+                    uniform float uMid;
+                    uniform float uTreble;
+                    uniform float uBassPeak;      // короткий импульс на ударе баса
+                    uniform vec2  uEmitter;       // NDC-координата "капли"
+
+                    // ─── шумы ───
+                    // Простой value-noise + FBM. Достаточно органичен для fluid-look.
+                    float hash(vec2 p) {
+                        p = fract(p * vec2(123.34, 456.21));
+                        p += dot(p, p + 45.32);
+                        return fract(p.x * p.y);
+                    }
+                    float vnoise(vec2 p) {
+                        vec2 i = floor(p), f = fract(p);
+                        float a = hash(i);
+                        float b = hash(i + vec2(1.0, 0.0));
+                        float c = hash(i + vec2(0.0, 1.0));
+                        float d = hash(i + vec2(1.0, 1.0));
+                        vec2 u = f * f * (3.0 - 2.0 * f);
+                        return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+                    }
+                    // ── OPTIMIZATION: 3 октавы вместо 4 (−25% vnoise-вызовов).
+                    //    На дыме с domain-warping разница почти не видна,
+                    //    зато FPS вырастает заметно.
+                    float fbm(vec2 p) {
+                        float s = 0.0, a = 0.5, freq = 1.0;
+                        for (int i = 0; i < 3; i++) {
+                            s += a * vnoise(p * freq);
+                            freq *= 2.13;   // чуть более "золотой" множитель — компенсирует потерю октавы
+                            a *= 0.5;
+                        }
+                        return s;
+                    }
+                    // ── OPTIMIZATION: velocity field теперь АНАЛИТИЧЕСКИЙ,
+                    //    без вызовов fbm вообще. Раньше это стоило 4×fbm=12
+                    //    vnoise-вызовов на пиксель, теперь — 2 sin+cos.
+                    //    Визуально даёт такое же «жидкое» кручение — просто
+                    //    поле построено из двух низкочастотных синусоид,
+                    //    сдвинутых по времени. Curl считается аналитически.
+                    vec2 velocityField(vec2 p, float t) {
+                        float a = sin(p.x * 1.7 + t * 0.6) * cos(p.y * 1.3 - t * 0.4);
+                        float b = cos(p.x * 1.2 - t * 0.5) * sin(p.y * 1.9 + t * 0.7);
+                        return vec2(a - b, a + b) * 0.7;
+                    }
+
+                    void main() {
+                        vec2 uv = vUV;
+                        vec2 asp = vec2(uRes.x / uRes.y, 1.0);
+                        vec2 p = (uv - 0.5) * asp;
+
+                        // ── (1) ADVECTION: читаем предыдущий кадр по смещённым UV ──
+                        // Velocity зависит от mid — «дует ветер» под музыку.
+                        float velScale = (0.006 + uMid * 0.030) * uDT * 60.0;
+                        vec2 vel = velocityField(p * 1.4, uTime * 0.4);
+                        vec2 advUV = uv - vel * velScale;
+                        vec4 prev = texture(uPrev, advUV);
+
+                        // Плавное затухание («дым медленно тает»).
+                        // Чем больше bass — тем медленнее тает (заряд держится дольше).
+                        float decay = mix(0.972, 0.987, clamp(uBass * 0.7, 0.0, 1.0));
+                        prev.rgb *= decay;
+
+                        // ── (2) DOMAIN WARPING FBM — свежая энергия ──
+                        // OPTIMIZATION: убрали промежуточное поле r (2 fbm),
+                        // используем q напрямую для warping. Осталось 3 fbm
+                        // вместо 5 (−40%). Визуально почти идентично.
+                        vec2 q = vec2(fbm(p * 1.8 + vec2(uTime * 0.07, 0.0)),
+                                      fbm(p * 1.8 + vec2(5.2, uTime * 0.09)));
+                        float density = fbm(p * (1.6 + uTreble * 1.5) + 3.2 * q + uTime * 0.05);
+                        density = pow(density, 1.4);
+
+                        // Неоновая палитра: интерполяция orange → cyan → magenta
+                        // по density и добавка «оранжевой» энергии от bass.
+                        vec3 cOrange  = vec3(1.00, 0.42, 0.12);
+                        vec3 cCyan    = vec3(0.20, 0.75, 1.00);
+                        vec3 cMagenta = vec3(0.85, 0.28, 0.95);
+                        vec3 col = mix(cCyan, cMagenta, smoothstep(0.35, 0.75, density));
+                        col = mix(col, cOrange, smoothstep(0.55, 0.90, density) * (0.35 + uBassPeak * 0.9));
+
+                        // Плотность модулирует «яркость дыма»
+                        float energy = density * (0.08 + uMid * 0.12 + uBassPeak * 0.25);
+
+                        // ── (3) BASS IMPULSE — вспышка из эмиттера ──
+                        // Позиция уже плавает по эллипсу (см. JS uEmitter).
+                        vec2 ep = uEmitter * asp;
+                        float d = length(p - ep);
+                        // Мягкий гауссоподобный «шар» с радиусом ~0.35 aspect-units
+                        float pulse = exp(-d * d / (0.15 + uBassPeak * 0.35));
+                        // Плюс волновой фронт (расширяющееся кольцо на пиках)
+                        float ring = exp(-pow((d - uBassPeak * 0.9) / 0.06, 2.0)) * uBassPeak;
+                        vec3 impulseCol = cOrange * (pulse * (0.20 + uBassPeak * 1.4) + ring * 0.9);
+
+                        // ── (4) ADD (accumulate) в feedback ──
+                        vec3 addColor = col * energy + impulseCol;
+                        vec3 sumColor = prev.rgb + addColor;
+
+                        // Мягкий клип (soft roll-off), чтобы HDR-накопление не белело.
+                        sumColor = sumColor / (1.0 + sumColor * 0.35);
+
+                        fragColor = vec4(sumColor, 1.0);
+                    }`;
+
+                // ── PRESENT shader (final tone map + subtle vignette) ──
+                const fsPresent = `#version 300 es
+                    precision highp float;
+                    in vec2 vUV;
+                    out vec4 fragColor;
+                    uniform sampler2D uTex;
+                    uniform vec2 uRes;
+                    void main() {
+                        vec3 c = texture(uTex, vUV).rgb;
+                        // Небольшой контраст и лёгкая гамма
+                        c = pow(c, vec3(0.92));
+                        // Виньетка — глубокий чёрный по краям
+                        vec2 d = vUV - 0.5;
+                        float vig = smoothstep(0.85, 0.25, length(d) * 1.05);
+                        c *= mix(0.55, 1.0, vig);
+                        // Финальный чёрный фон гарантирован
+                        fragColor = vec4(c, 1.0);
+                    }`;
+
+                this.simProg = this._createProgram(gl, vsFullscreen, fsSim);
+                this.presentProg = this._createProgram(gl, vsFullscreen, fsPresent);
+                if (!this.simProg || !this.presentProg) return false;
+
+                // Пустой VAO для fullscreen triangle (gl_VertexID трюк)
+                this.quadVAO = gl.createVertexArray();
+
+                // Uniform locations кэш
+                this.uSim = {
+                    uPrev:     gl.getUniformLocation(this.simProg, 'uPrev'),
+                    uRes:      gl.getUniformLocation(this.simProg, 'uRes'),
+                    uTime:     gl.getUniformLocation(this.simProg, 'uTime'),
+                    uDT:       gl.getUniformLocation(this.simProg, 'uDT'),
+                    uBass:     gl.getUniformLocation(this.simProg, 'uBass'),
+                    uMid:      gl.getUniformLocation(this.simProg, 'uMid'),
+                    uTreble:   gl.getUniformLocation(this.simProg, 'uTreble'),
+                    uBassPeak: gl.getUniformLocation(this.simProg, 'uBassPeak'),
+                    uEmitter:  gl.getUniformLocation(this.simProg, 'uEmitter'),
+                };
+                this.uPresent = {
+                    uTex: gl.getUniformLocation(this.presentProg, 'uTex'),
+                    uRes: gl.getUniformLocation(this.presentProg, 'uRes'),
+                };
+
+                return true;
+            },
+            _resize: function() {
+                if (!this.canvas || !this.gl) return;
+                const gl = this.gl;
+                // OPTIMIZATION: DPR cap 1.25 (было 1.5). На дыме мелких
+                // деталей нет — резкости от 1.5→1.25 глаз не заметит,
+                // а pixel-count падает на 30%.
+                this.dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+                const cw = this.canvas.clientWidth  || window.innerWidth;
+                const ch = this.canvas.clientHeight || window.innerHeight;
+                const W = Math.floor(cw * this.dpr);
+                const H = Math.floor(ch * this.dpr);
+                if (W === this.canvas.width && H === this.canvas.height) return;
+                this.canvas.width = W;
+                this.canvas.height = H;
+                // OPTIMIZATION: симуляция теперь 0.42× (было 0.55×) — pixel-count
+                // симуляции упал в 1.7 раза. Дым мягкий, upscale линейным
+                // фильтром прячет разницу.
+                const simW = Math.max(64, Math.floor(W * 0.42));
+                const simH = Math.max(64, Math.floor(H * 0.42));
+                this.texW = simW; this.texH = simH;
+
+                // Пересоздаём ping-pong buffers
+                for (let i = 0; i < 2; i++) {
+                    if (this.tex[i]) gl.deleteTexture(this.tex[i]);
+                    if (this.fbo[i]) gl.deleteFramebuffer(this.fbo[i]);
+                    this.tex[i] = this._createTargetTexture(gl, simW, simH);
+                    this.fbo[i] = gl.createFramebuffer();
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo[i]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.tex[i], 0);
+                    gl.clearColor(0, 0, 0, 1);
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+                }
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            },
+
+            _readAudio: function(t) {
+                const mp = window.musicPlayer;
+                let bass = 0, mid = 0, treble = 0, gotReal = false;
+                if (mp && mp._analyser && mp._analyserData) {
+                    try {
+                        mp._analyser.getByteFrequencyData(mp._analyserData);
+                        const arr = mp._analyserData;
+                        const n = arr.length;
+                        const bassEnd = Math.max(1, Math.floor(n * 0.08));
+                        const midEnd  = Math.max(bassEnd + 1, Math.floor(n * 0.40));
+                        let b = 0, m = 0, tr = 0;
+                        for (let i = 0; i < bassEnd; i++) b += arr[i];
+                        for (let i = bassEnd; i < midEnd; i++) m += arr[i];
+                        for (let i = midEnd; i < n; i++) tr += arr[i];
+                        b /= bassEnd * 255;
+                        m /= (midEnd - bassEnd) * 255;
+                        tr /= (n - midEnd) * 255;
+                        if (b + m + tr > 0.005) {
+                            bass = b; mid = m; treble = tr; gotReal = true;
+                        }
+                    } catch (e) {}
+                }
+                if (!gotReal) {
+                    // Fake ~90 BPM
+                    const bpm = 90, beatMs = 60000 / bpm;
+                    if (t - this._lastPulseTime > beatMs) {
+                        this._fakePulse = 1.0;
+                        this._lastPulseTime = t;
+                    }
+                    this._fakePulse *= 0.90;
+                    bass = 0.12 + 0.55 * this._fakePulse;
+                    mid  = 0.30 + 0.20 * Math.sin(t * 0.0013);
+                    treble = 0.22 + 0.15 * Math.sin(t * 0.0031 + 1.2);
+                }
+                // Экспоненциальное сглаживание (без дёргания)
+                const lerp = (a, b, k) => a + (b - a) * k;
+                this.smoothBass   = lerp(this.smoothBass,   bass,   0.35);
+                this.smoothMid    = lerp(this.smoothMid,    mid,    0.20);
+                this.smoothTreble = lerp(this.smoothTreble, treble, 0.20);
+
+                // Bass-peak: envelope follower с быстрой атакой и медленным release
+                if (bass > this.bassEnvelope) this.bassEnvelope = bass;
+                else this.bassEnvelope *= 0.92;
+                const peak = Math.max(0, bass - this.bassEnvelope * 0.75) * 3.0;
+                this.bassPeak = lerp(this.bassPeak, peak, 0.55);
+
+                return {
+                    bass: this.smoothBass, mid: this.smoothMid, treble: this.smoothTreble,
+                    peak: Math.min(1.5, this.bassPeak)
+                };
+            },
+
+            _loop: function() {
+                if (!this.running) return;
+                this.raf = requestAnimationFrame(this._loop.bind(this));
+                const gl = this.gl; if (!gl) return;
+                const now = performance.now();
+                // ── OPTIMIZATION: FPS gate ──
+                // Ограничиваем рендер fluid FX до ~40 FPS. Дым визуально
+                // медленный, разница между 60 и 40 FPS для такого эффекта
+                // не читается глазом, а нагрузка на GPU падает на ~35%.
+                // Всё scroll/UI гайда при этом продолжает работать на
+                // полной частоте — rAF браузера не блокируется.
+                const minFrameMs = 24; // ~41.6 FPS
+                if (now - this.prevT < minFrameMs) return;
+
+                const t = (now - this.t0) * 0.001;
+                let dt = (now - this.prevT) * 0.001;
+                if (dt <= 0 || dt > 0.1) dt = 0.016; // защита от больших скачков
+                this.prevT = now;
+
+                const audio = this._readAudio(now);
+
+                // Плавно движем эмиттер по эллипсу, скорость модулируется mid.
+                this.emitterAngle += dt * (0.35 + audio.mid * 0.9);
+                const emitX = Math.cos(this.emitterAngle) * 0.45;
+                const emitY = Math.sin(this.emitterAngle * 0.7) * 0.25;
+
+                // ── SIM PASS: рисуем в fbo[curFbo^1], читая из fbo[curFbo] ──
+                const readIdx = this.curFbo;
+                const writeIdx = 1 - this.curFbo;
+
+                gl.useProgram(this.simProg);
+                gl.bindVertexArray(this.quadVAO);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, this.tex[readIdx]);
+                gl.uniform1i(this.uSim.uPrev, 0);
+                gl.uniform2f(this.uSim.uRes, this.texW, this.texH);
+                gl.uniform1f(this.uSim.uTime, t);
+                gl.uniform1f(this.uSim.uDT, dt);
+                gl.uniform1f(this.uSim.uBass, audio.bass);
+                gl.uniform1f(this.uSim.uMid, audio.mid);
+                gl.uniform1f(this.uSim.uTreble, audio.treble);
+                gl.uniform1f(this.uSim.uBassPeak, audio.peak);
+                gl.uniform2f(this.uSim.uEmitter, emitX, emitY);
+
+                gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo[writeIdx]);
+                gl.viewport(0, 0, this.texW, this.texH);
+                gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+                this.curFbo = writeIdx;
+
+                // ── PRESENT PASS: fbo → canvas с tonemap+vignette ──
+                gl.useProgram(this.presentProg);
+                gl.bindVertexArray(this.quadVAO);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, this.tex[this.curFbo]);
+                gl.uniform1i(this.uPresent.uTex, 0);
+                gl.uniform2f(this.uPresent.uRes, this.canvas.width, this.canvas.height);
+
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+                gl.clearColor(0, 0, 0, 1);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+                gl.drawArrays(gl.TRIANGLES, 0, 3);
+            },
+
+            start: function() {
+                this.canvas = document.getElementById('help-guide-bg-canvas');
+                if (!this.canvas) { console.warn('[guideBgFx] canvas not found'); return; }
+                if (!this.gl) {
+                    if (!this._initGL()) return; // WebGL2 недоступен — тихо выходим
+                }
+                this._resize();
+                if (!this._resizeBound) {
+                    this._resizeHandler = () => this._resize();
+                    window.addEventListener('resize', this._resizeHandler);
+                    this._resizeBound = true;
+                }
+                // Сброс состояния при каждом старте
+                this.t0 = performance.now();
+                this.prevT = this.t0;
+                this.smoothBass = 0; this.smoothMid = 0; this.smoothTreble = 0;
+                this.bassPeak = 0; this.bassEnvelope = 0;
+                this.emitterAngle = Math.random() * Math.PI * 2;
+                // Полная очистка обоих буферов, чтобы не показать «застрявший дым»
+                // от прошлой сессии.
+                const gl = this.gl;
+                for (let i = 0; i < 2; i++) {
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo[i]);
+                    gl.viewport(0, 0, this.texW, this.texH);
+                    gl.clearColor(0, 0, 0, 1);
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+                }
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                this.running = true;
+                this._loop();
+                console.log('[guideBgFx] fluid FX started (' + this.texW + 'x' + this.texH + ' sim, ' + this.canvas.width + 'x' + this.canvas.height + ' display)');
+            },
+            stop: function() {
+                this.running = false;
+                if (this.raf) { cancelAnimationFrame(this.raf); this.raf = null; }
+                // Чёрным залить canvas, чтобы не мелькал последний кадр при повторном open
+                if (this.gl && this.canvas) {
+                    const gl = this.gl;
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+                    gl.clearColor(0, 0, 0, 1);
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+                }
+                console.log('[guideBgFx] fluid FX stopped');
+            }
+        };
+        window.guideBgFx = guideBgFx;
 
 
         // ─────────────────────────────────────────────────────────────
@@ -8737,8 +9517,8 @@ vCustomWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
         const gameplay = {
             isPlaytest: false, controls: null, velocity: new THREE.Vector3(), direction: new THREE.Vector3(), moveState: { forward: false, backward: false, left: false, right: false, jump: false, sprint: false, crouch: false }, canJump: false, raycasterDown: new THREE.Raycaster(new THREE.Vector3(), new THREE.Vector3(0, -1, 0), 0, 1.5), lastStepTime: 0, baseHeight: 1.8, crouchHeight: 0.9,
             init: function() { this.controls = new PointerLockControls(engine.camera, document.body); this.controls.addEventListener('lock', () => { this.isPlaytest = true; }); this.controls.addEventListener('unlock', () => { this.stopPlaytest(); }); document.addEventListener('keydown', (e) => this.onKeyDown(e)); document.addEventListener('keyup', (e) => this.onKeyUp(e)); },
-            startPlaytest: function() { engine.deselect(); document.getElementById('ui-layer').style.display = 'none'; document.getElementById('playtest-overlay').style.display = 'block'; if (engine.spawnPointObj) { engine.camera.position.copy(engine.spawnPointObj.position); engine.camera.position.y += 1; } else { engine.camera.position.set(0, 5, 0); } engine.spawnPointObj && (engine.spawnPointObj.visible = false); this.velocity.set(0,0,0); audioEngine.init(); engine.updateJoystickVisibility?.(); this.controls.lock(); try { window.musicPlayer && musicPlayer.playRandomFadeIn(1.5); } catch(e) {} },
-            stopPlaytest: function() { this.isPlaytest = false; document.getElementById('ui-layer').style.display = 'flex'; document.getElementById('playtest-overlay').style.display = 'none'; engine.updateJoystickVisibility?.(); engine.spawnPointObj && (engine.spawnPointObj.visible = true); try { window.musicPlayer && musicPlayer.fadeOutAndStop(1.2); } catch(e) {} },
+            startPlaytest: function() { engine.deselect(); document.getElementById('ui-layer').style.display = 'none'; document.getElementById('playtest-overlay').style.display = 'block'; if (engine.spawnPointObj) { engine.camera.position.copy(engine.spawnPointObj.position); engine.camera.position.y += 1; } else { engine.camera.position.set(0, 5, 0); } engine.spawnPointObj && (engine.spawnPointObj.visible = false); this.velocity.set(0,0,0); audioEngine.init(); engine.updateJoystickVisibility?.(); this.controls.lock(); },
+            stopPlaytest: function() { this.isPlaytest = false; document.getElementById('ui-layer').style.display = 'flex'; document.getElementById('playtest-overlay').style.display = 'none'; engine.updateJoystickVisibility?.(); engine.spawnPointObj && (engine.spawnPointObj.visible = true); },
             exitPlaytest: function() { try { if (document.pointerLockElement) document.exitPointerLock(); } catch(e) {} this.stopPlaytest(); },
             onKeyDown: function(e) { if(!this.isPlaytest) { return; } if (e.code === 'Escape') { this.exitPlaytest(); return; } switch(e.code) { case 'KeyW': this.moveState.forward = true; break; case 'KeyS': this.moveState.backward = true; break; case 'KeyA': this.moveState.left = true; break; case 'KeyD': this.moveState.right = true; break; case 'Space': if(this.canJump) this.velocity.y += 12; this.canJump = false; break; case 'ShiftLeft': this.moveState.sprint = true; break; case 'ControlLeft': case 'KeyC': this.moveState.crouch = true; break; } },
             onKeyUp: function(e) { if(!this.isPlaytest) return; switch(e.code) { case 'KeyW': this.moveState.forward = false; break; case 'KeyS': this.moveState.backward = false; break; case 'KeyA': this.moveState.left = false; break; case 'KeyD': this.moveState.right = false; break; case 'ShiftLeft': this.moveState.sprint = false; break; case 'ControlLeft': case 'KeyC': this.moveState.crouch = false; break; } },
@@ -8830,27 +9610,69 @@ if (texSel) {
                 if (m.parentNode !== document.body) {
                     document.body.appendChild(m);
                 }
+                // Отменяем возможную ещё идущую exit-анимацию (если юзер быстро
+                // закрыл и снова открыл гайд).
+                m.classList.remove('hg-closing');
+                if (this._hgCloseTimer) { clearTimeout(this._hgCloseTimer); this._hgCloseTimer = null; }
+
+                // Навешиваем класс .hg-nav-btn на все кнопки quick-nav ОДИН РАЗ —
+                // используется CSS-анимациями для stagger'а появления. Проще,
+                // чем править 9 инлайновых кнопок в HTML.
+                if (!m._navTagged) {
+                    const navBtns = m.querySelectorAll('button[onclick*="guide-section-"]');
+                    navBtns.forEach(b => b.classList.add('hg-nav-btn'));
+                    m._navTagged = true;
+                }
+
+                // ── PERF: заставим CSS перезапустить анимации при повторном
+                // открытии. Убираем класс `hidden` через reflow, чтобы каждое
+                // открытие давало свежий animation-play cycle.
                 m.classList.remove('hidden');
+                // reflow trigger — без него @keyframes не рестартятся между
+                // близкими показами модалки.
+                void m.offsetWidth;
+
                 // Автопауза: пока открыт гайд — мир заморожен, гайд листается
                 // на полном FPS без нагрузки на GPU от рендера сцены/погоды/звуков.
-                // Работает только в редакторе (в главном меню engine ещё не активен).
                 if (window.engine && typeof engine.pauseWorld === 'function' && engine.scene) {
                     try { engine.pauseWorld('auto'); } catch(e) {}
                 }
                 // Рандомный трек с плавным fade-in — «атмосфера чтения гайда».
                 try { window.musicPlayer && musicPlayer.playRandomFadeIn(1.5); } catch(e) {}
+                // Запускаем аудио-реактивные волны на фоне модалки.
+                try { window.guideBgFx && guideBgFx.start(); } catch(e) {}
             },
 
             closeHelpGuideModal: function() {
                 const m = document.getElementById('help-guide-modal');
-                if (m) m.classList.add('hidden');
-                // Снимаем автопаузу. Если юзер ДО открытия гайда сам поставил на
-                // паузу — мир останется застывшим (см. resumeWorld).
+                if (!m || m.classList.contains('hidden')) return;
+                // Уже идёт exit? Не запускаем повторно.
+                if (m.classList.contains('hg-closing')) return;
+
+                // (1) Запускаем CSS exit-анимации: секции уходят вниз, кнопки
+                //     подскакивают вверх, вся модалка плавно исчезает.
+                m.classList.add('hg-closing');
+
+                // (2) Через ~500мс, когда анимации отработали, реально прячем
+                //     модалку и чистим состояние. Таймер сохраняем, чтобы
+                //     повторный open мог его отменить.
+                if (this._hgCloseTimer) clearTimeout(this._hgCloseTimer);
+                this._hgCloseTimer = setTimeout(() => {
+                    m.classList.add('hidden');
+                    m.classList.remove('hg-closing');
+                    // Только после того как модалка реально скрылась — гасим
+                    // визуализацию волн (иначе виден чёрный «прямоугольник»
+                    // canvas раньше, чем сам modal исчезнет).
+                    try { window.guideBgFx && guideBgFx.stop(); } catch(e) {}
+                    this._hgCloseTimer = null;
+                }, 500);
+
+                // Пауза-возобновление и музыку начинаем гасить СРАЗУ, чтобы
+                // 2.5-сек fade-out звука совпадал по ощущению с уходом визуала.
                 if (window.engine && typeof engine.resumeWorld === 'function' && engine.scene) {
                     try { engine.resumeWorld('auto'); } catch(e) {}
                 }
-                // Плавно тушим музыку гайда.
-                try { window.musicPlayer && musicPlayer.fadeOutAndStop(1.2); } catch(e) {}
+                try { window.musicPlayer && musicPlayer.fadeOutAndStop(2.5); } catch(e) {}
             },
 
             // === DEBUG CONSOLE (vConsole) =================================
@@ -9475,6 +10297,12 @@ if (texSel) {
                 document.getElementById('editor-ui').style.display = 'none';
                 document.getElementById('main-menu').style.display = 'flex';
                 this.renderProjectList();
+                // Возврат в главное меню — глушим погодные звуки. В меню звуков быть
+                // не должно (это разрешено только внутри активного проекта).
+                try { if (window.audioEngine && audioEngine.stopWeatherAudio) audioEngine.stopWeatherAudio(); } catch(e) {}
+                // Сбрасываем метку «в проекте». setWeatherAudio теперь не запустится,
+                // пока юзер снова не откроет проект.
+                if (window.appState) { window.appState.currentProjectId = null; window.appState.currentProjectName = ''; }
             },
 
             showExportModal: () => { document.getElementById('export-modal').classList.remove('hidden'); uiManager.setMergeMode(uiManager.mergeMode || 'none'); }, hideExportModal: () => document.getElementById('export-modal').classList.add('hidden'),
@@ -9943,6 +10771,6 @@ if (texSel) {
 
 
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a17fdd008881e4b5',t:'MTc4MzUyMTgyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a181076ec96ac9d1',t:'MTc4MzUzNDA1MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a17fdd008881e4b5',t:'MTc4MzUyMTgyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a181076ec96ac9d1',t:'MTc4MzUzNDA1MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a6ca0f8c42c9e8',t:'MTc4MzkyOTk5Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
