@@ -5059,6 +5059,7 @@ const engine = {
     _renderSkipFrames: 0,
     orbit: null,
     transformControl: null,
+    isTransformDragging: false,
     raycaster: null,
     mouse: null,
     blocks: [],
@@ -5779,7 +5780,8 @@ const engine = {
         this.transformControl = new TransformControls(this.camera, this.renderer.domElement);
         this.transformControl.size = 1;
         this.transformControl.addEventListener("dragging-changed", event => {
-            this.orbit.enabled = !event.value;
+            this.isTransformDragging = !!event.value;
+            if (this.orbit) this.orbit.enabled = !event.value;
             if (event.value) {
                 this.touchLook.active = false;
                 this.touchLook.pointerId = null;
@@ -9790,7 +9792,7 @@ const engine = {
             if (this.orbit && this.orbit.enabled) this.orbit.enabled = false;
             gameplay.update(dt);
         } else {
-            if (this.orbit && !this.orbit.enabled) this.orbit.enabled = true;
+            if (this.orbit && !this.orbit.enabled && !this.isTransformDragging && !(this.transformControl && this.transformControl.dragging)) this.orbit.enabled = true;
             const moveSpeedMult = this.cameraMoveSpeed || 1;
             const camSpeed = this.keysPressed["ShiftLeft"] ? 45 * moveSpeedMult * dt : 15 * moveSpeedMult * dt;
             const direction = new THREE.Vector3;
