@@ -601,6 +601,57 @@
             padding: 12px 18px; border-top: 1px solid var(--td-border); flex-shrink: 0;
             display: flex; gap: 8px;
         }
+
+        /* ===== AI Builder ===== */
+        .ai-modal { width: min(94vw, 620px); }
+        .ai-modal-title { color: #cbb8ff; }
+        .ai-modal-body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+        .ai-prompt-input {
+            width: 100%; min-height: 72px; resize: vertical;
+            background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text);
+            padding: 10px 12px; font-size: 13px; line-height: 1.5; outline: none; font-family: inherit;
+        }
+        .ai-prompt-input:focus { border-color: #b79dff; }
+        .ai-prompt-input:disabled { opacity: 0.5; }
+        .ai-quick-row { display: flex; flex-wrap: wrap; gap: 6px; }
+        .ai-quick-chip {
+            font-size: 11px; padding: 5px 10px; cursor: pointer;
+            background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text-dim);
+            transition: all 0.12s; letter-spacing: 0.02em;
+        }
+        .ai-quick-chip:hover { border-color: #b79dff; color: #cbb8ff; }
+        .ai-build-btn {
+            padding: 12px 16px; font-size: 12px; font-weight: 700;
+            letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer;
+            border: 1px solid rgba(160,120,255,0.5); background: rgba(160,120,255,0.12); color: #cbb8ff;
+            transition: all 0.12s; display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .ai-build-btn:hover:not(:disabled) { background: rgba(160,120,255,0.22); }
+        .ai-build-btn:disabled { opacity: 0.45; cursor: default; }
+        .ai-status-line {
+            font-size: 11.5px; color: var(--td-text-dim); min-height: 16px;
+            display: flex; align-items: center; gap: 8px; letter-spacing: 0.02em;
+        }
+        .ai-status-line.error { color: var(--td-danger, #ff6b6b); }
+        .ai-status-line.ok { color: var(--td-ok, #5ec46e); }
+        .ai-spinner {
+            width: 12px; height: 12px; border-radius: 50%;
+            border: 2px solid rgba(183,157,255,0.25); border-top-color: #b79dff;
+            animation: aiSpin 0.7s linear infinite; flex-shrink: 0;
+        }
+        @keyframes aiSpin { to { transform: rotate(360deg); } }
+        .ai-progress-wrap {
+            height: 4px; background: var(--td-bg-2); border: 1px solid var(--td-border); overflow: hidden; display: none;
+        }
+        .ai-progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #7c5cff, #b79dff); transition: width 0.15s linear; }
+        .ai-ref-line { font-size: 10.5px; color: var(--td-text-dim); opacity: 0.75; letter-spacing: 0.03em; }
+        .ai-history-hint { font-size: 10.5px; color: var(--td-text-dim); opacity: 0.6; text-align: center; padding-top: 2px; }
+        .ai-cancel-btn {
+            padding: 12px 14px; font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+            cursor: pointer; border: 1px solid var(--td-border-strong); background: transparent; color: var(--td-text-dim);
+            transition: all 0.12s;
+        }
+        .ai-cancel-btn:hover { border-color: var(--td-danger, #ff6b6b); color: var(--td-danger, #ff6b6b); }
         .collection-btn-select, .collection-btn-spawn {
             flex: 1; padding: 10px 14px; font-size: 12px; font-weight: 600;
             letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer;
@@ -1548,6 +1599,10 @@
                                     <button onclick="uiManager.triggerGLBImport()" data-i18n="shapeImportGLB" class="shape-btn col-span-2 px-2 py-2 text-xs transition uppercase tracking-[0.08em]" style="background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text);" onmouseover="this.style.borderColor='var(--td-accent)'; this.style.color='var(--td-accent)'" onmouseout="this.style.borderColor='var(--td-border)'; this.style.color='var(--td-text)'">Import 3D (OBJ/GLB)</button>
                                     <input type="file" id="import-glb-model" accept=".glb,.gltf,.obj" class="hidden" onchange="uiManager.importGLBModel(event)">
                                     <button onclick="uiManager.openCollectionModal()" data-i18n="collectionBtn" class="shape-btn col-span-2 px-2 py-2 text-xs transition uppercase tracking-[0.08em]" style="background: rgba(255,138,61,0.08); border: 1px solid rgba(255,138,61,0.3); color: var(--td-accent);" onmouseover="this.style.background='rgba(255,138,61,0.16)'" onmouseout="this.style.background='rgba(255,138,61,0.08)'">✦ Collection</button>
+                                    <button onclick="uiManager.openAIBuilderModal()" data-i18n="aiBuilderBtn" class="shape-btn col-span-2 px-2 py-2 text-xs transition uppercase tracking-[0.08em] flex items-center justify-center gap-1.5" style="background: rgba(160,120,255,0.10); border: 1px solid rgba(160,120,255,0.35); color: #b79dff;" onmouseover="this.style.background='rgba(160,120,255,0.2)'" onmouseout="this.style.background='rgba(160,120,255,0.10)'">
+                                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><path d="M10 2l1.8 4.7L16.5 8.5 11.8 10.3 10 15l-1.8-4.7L3.5 8.5l4.7-1.8L10 2z"/></svg>
+                                        AI Builder
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -6929,6 +6984,108 @@ const engine = {
             setTimeout(() => ind.remove(), 300);
         }, 2500);
     },
+    createSingleGoreBoxCube: function(cubeDef, origin, groupId, extraUserData = {}) {
+        const mapped = mapGoreBoxCubeToProjectBlock({
+            name: cubeDef.name || "MapCube",
+            tag: cubeDef.tag || "Concrete",
+            tileMode: typeof cubeDef.tileMode === "number" ? cubeDef.tileMode : cubeDef.tileMode === "xy" ? 0 : cubeDef.tileMode === "yx" ? 1 : cubeDef.tileMode === "stretch" ? 2 : 1,
+            visible: cubeDef.visible !== false,
+            collisions: cubeDef.collisions !== false,
+            physics: !!cubeDef.physics,
+            materialName: cubeDef.materialName || "grid",
+            position: cubeDef.position || { x: 0, y: 0, z: 0 },
+            rotation: cubeDef.rotation || { x: 0, y: 0, z: 0 },
+            scale: cubeDef.scale || { x: 1, y: 1, z: 1 }
+        });
+        const matName = mapped.userData.materialName || cubeDef.materialName || "grid";
+        const matT = mapped.userData.materialType || cubeDef.tag || "Concrete";
+        const tex = mapped.userData.texture || matName;
+        const col = mapped.userData.colorHex || "#ffffff";
+        const tMode = mapped.userData.tilingMode || "stretch";
+        const preset = MATERIAL_PRESETS[matT] || MATERIAL_PRESETS.Concrete;
+        const initialReflect = preset.envMapIntensity;
+        const initialBlur = preset.roughness;
+        const mat = this.acquireCubeMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur });
+        const mesh = new THREE.Mesh(createBlockGeometry(tex, matT), mat);
+        mesh.castShadow = !isWaterLike(tex, matT);
+        mesh.receiveShadow = true;
+        mesh.position.set(origin.x + (mapped.pos?.x || 0), origin.y + (mapped.pos?.y || 0), origin.z + (mapped.pos?.z || 0));
+        if (mapped.quat && Number.isFinite(mapped.quat.w)) {
+            mesh.quaternion.set(mapped.quat.x || 0, mapped.quat.y || 0, mapped.quat.z || 0, mapped.quat.w).normalize();
+        } else {
+            mesh.quaternion.copy(unityEulerDegToThreeQuaternion(cubeDef.rotation || { x: 0, y: 0, z: 0 }));
+        }
+        mesh.scale.set(mapped.scl?.x || 1, mapped.scl?.y || 1, mapped.scl?.z || 1);
+        const isVisible = mapped.userData.visible !== false;
+        if (!isVisible) {
+            this.releaseCubeMaterial(mesh.material);
+            mesh.material = this.acquireCubeMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur }, false);
+            mesh.castShadow = false;
+        }
+        mesh.userData = {
+            type: "cube",
+            visible: isVisible,
+            collisions: mapped.userData.collisions !== false,
+            texture: tex,
+            materialType: matT,
+            colorHex: col,
+            tilingMode: tMode,
+            materialName: matName,
+            sourceTag: mapped.userData.sourceTag || matT,
+            skyboxReflectivity: initialReflect,
+            skyboxBlur: initialBlur,
+            groupId: groupId,
+            shapeType: "ai_build",
+            shapePart: true,
+            ...extraUserData
+        };
+        this.updateCubeUVs(mesh);
+        this.scene.add(mesh);
+        this.blocks.push(mesh);
+        this.registerCullable(mesh);
+        this.updateCullingAround(mesh);
+        return mesh;
+    },
+    /**
+     * Строит объект из массива кубов (формат GoreBox: name/tag/tileMode/materialName/position/rotation/scale)
+     * по одному кубу за раз, с задержкой между ними, чтобы был виден процесс постройки.
+     * onProgress(index, total, mesh) вызывается после добавления каждого куба.
+     * Возвращает { cancel() } — вызов cancel() останавливает добавление оставшихся кубов.
+     */
+    buildFromCubesAnimated: async function(cubes, options = {}) {
+        const { delayMs = 55, buildName = "AI Object", onProgress = null, onDone = null } = options;
+        const origin = this.getShapeOrigin(6);
+        const groupId = this.makeShapeGroupId("ai_build");
+        const created = [];
+        let cancelled = false;
+        const state = { cancel: () => { cancelled = true; } };
+        this.selectedBlocks = [];
+        (async () => {
+            for (let i = 0; i < cubes.length; i++) {
+                if (cancelled) break;
+                const mesh = this.createSingleGoreBoxCube(cubes[i], origin, groupId, { aiBuildName: buildName });
+                created.push(mesh);
+                audioEngine.playSpawn && audioEngine.playSpawn();
+                if (onProgress) {
+                    try { onProgress(i + 1, cubes.length, mesh); } catch (e) {}
+                }
+                if (delayMs > 0 && i < cubes.length - 1) {
+                    await new Promise(res => setTimeout(res, delayMs));
+                }
+            }
+            if (created.length) {
+                this.selectedBlocks = created;
+                this.buildTransformGroup();
+                this.updateUIFromObject();
+                this.updateSelectionPanels();
+                if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
+            }
+            if (onDone) {
+                try { onDone(created, cancelled); } catch (e) {}
+            }
+        })();
+        return state;
+    },
     addVoxelShape: function(shapeType, voxelData, worldScale = 1) {
         const origin = this.getShapeOrigin();
         const basis = {
@@ -11422,6 +11579,45 @@ window.uiManager = {
             } catch (e) {}
         }
     },
+    openAIBuilderModal: function() {
+        const overlay = document.getElementById("ai-builder-modal-overlay");
+        if (!overlay) return;
+        overlay.classList.remove("hidden");
+        if (typeof initSubjectsCollection === "function") initSubjectsCollection();
+        if (window.aiBuilder) {
+            aiBuilder._setStatus("", "");
+            aiBuilder._setRefLine("");
+            aiBuilder._setProgress(null);
+        }
+        const panel = document.getElementById("shapes-panel");
+        if (panel) {
+            panel.classList.remove("open");
+            engine.shapesPanelOpen = false;
+            const arrow = document.getElementById("btn-shapes-toggle");
+            if (arrow) arrow.classList.remove("open");
+        }
+        if (window.engine && typeof engine.pauseWorld === "function" && engine.scene) {
+            try {
+                engine.pauseWorld("auto");
+            } catch (e) {}
+        }
+        setTimeout(() => {
+            const ta = document.getElementById("ai-builder-prompt");
+            if (ta) ta.focus();
+        }, 50);
+    },
+    closeAIBuilderModal: function() {
+        if (window.aiBuilder && aiBuilder.isRunning) return;
+        const overlay = document.getElementById("ai-builder-modal-overlay");
+        if (!overlay) return;
+        const wasOpen = !overlay.classList.contains("hidden");
+        overlay.classList.add("hidden");
+        if (wasOpen && window.engine && typeof engine.resumeWorld === "function" && engine.scene) {
+            try {
+                engine.resumeWorld("auto");
+            } catch (e) {}
+        }
+    },
     collectionSelectItem: function() {
         if (this._collectionSelected === null) return;
         const item = this._collectionData[this._collectionSelected];
@@ -12312,8 +12508,317 @@ document.addEventListener("pointerdown", e => {
     const btn = e.target.closest('button, .gbox-sidebar-btn, .shape-btn, [role="button"]');
     if (btn) audioEngine.playUIClick();
 }, true);
+
+window.aiBuilder = {
+    isRunning: false,
+    _cancelHandle: null,
+    // ВАЖНО: замени этот адрес на свой после деплоя Cloudflare Worker (см. worker.js).
+    // Пока тут стоит placeholder — генерация не заработает, пока не вписан реальный адрес.
+    ENDPOINT: "https://red-lake-ffec.sh1rka-4-200.workers.dev",
+
+    _setStatus: function(text, kind) {
+        const el = document.getElementById("ai-status-line");
+        if (!el) return;
+        el.className = "ai-status-line" + (kind ? " " + kind : "");
+        el.innerHTML = text;
+    },
+    _setRefLine: function(text) {
+        const el = document.getElementById("ai-ref-line");
+        if (el) el.innerText = text || "";
+    },
+    _setProgress: function(frac) {
+        const wrap = document.getElementById("ai-progress-wrap");
+        const bar = document.getElementById("ai-progress-bar");
+        if (!wrap || !bar) return;
+        if (frac === null) {
+            wrap.style.display = "none";
+            return;
+        }
+        wrap.style.display = "block";
+        bar.style.width = Math.max(0, Math.min(100, frac * 100)) + "%";
+    },
+    _setRunningUI: function(running) {
+        this.isRunning = running;
+        const btn = document.getElementById("ai-build-btn");
+        const cancelBtn = document.getElementById("ai-cancel-btn");
+        const ta = document.getElementById("ai-builder-prompt");
+        if (btn) {
+            btn.disabled = running;
+            btn.innerHTML = running ? '<span class="ai-spinner"></span> Строю...' : "✦ Построить";
+        }
+        if (cancelBtn) cancelBtn.style.display = running ? "flex" : "none";
+        if (ta) ta.disabled = running;
+    },
+
+    /**
+     * Подбирает 2-3 наиболее похожих объекта из коллекции (uiManager._collectionData)
+     * по пересечению ключевых слов с промптом пользователя, чтобы дать модели
+     * реальные эталонные примеры GoreBox-геометрии.
+     */
+    _pickReferenceItems: function(promptText, maxItems = 3) {
+        const data = (window.uiManager && Array.isArray(uiManager._collectionData)) ? uiManager._collectionData : [];
+        if (!data.length) return [];
+        const norm = s => (s || "").toLowerCase()
+            .replace(/[^\p{L}\p{N}\s]/gu, " ")
+            .split(/\s+/).filter(Boolean);
+        const promptWords = new Set(norm(promptText));
+        // Небольшой словарь синонимов рус/eng, чтобы «мост» находил "Bridge" и т.п.
+        const synonyms = {
+            "мост": ["bridge"], "бочка": ["barrel"], "ящик": ["pallet", "crate"],
+            "поддон": ["pallet"], "плита": ["slab", "roofing", "slate"],
+            "черепица": ["roofing", "slate"], "кровля": ["roofing", "slate"],
+            "компьютер": ["computer"], "часы": ["clock"], "клумба": ["planter"],
+            "кадка": ["planter"], "куб": ["cube", "rubik"], "рубик": ["rubik"]
+        };
+        promptWords.forEach(w => {
+            if (synonyms[w]) synonyms[w].forEach(s => promptWords.add(s));
+        });
+        const scored = data.map(item => {
+            const nameWords = new Set(norm(item.name));
+            let score = 0;
+            nameWords.forEach(w => {
+                promptWords.forEach(pw => {
+                    if (w === pw || w.includes(pw) || pw.includes(w)) score += 1;
+                });
+            });
+            return { item, score };
+        });
+        scored.sort((a, b) => b.score - a.score);
+        const withScore = scored.filter(s => s.score > 0).slice(0, maxItems);
+        if (withScore.length > 0) return withScore.map(s => s.item);
+        // Если ничего явно не совпало — берём разнообразные примеры (маленький + средний + большой объект),
+        // чтобы модель всё равно видела реальный стиль геометрии проекта.
+        const bySize = [...data].sort((a, b) => (a.cubeCount || 0) - (b.cubeCount || 0));
+        const picks = [];
+        if (bySize.length) picks.push(bySize[0]);
+        if (bySize.length > 2) picks.push(bySize[Math.floor(bySize.length / 2)]);
+        if (bySize.length > 1) picks.push(bySize[bySize.length - 1]);
+        return picks.slice(0, maxItems);
+    },
+
+    /** Собирает список реально доступных в проекте materialName из селекта текстур. */
+    _getAvailableTextureNames: function() {
+        const sel = document.getElementById("sel-texture");
+        if (!sel) return ["grid"];
+        const names = Array.from(sel.options).map(o => o.value).filter(Boolean);
+        return names.length ? names : ["grid"];
+    },
+
+    _buildSystemPrompt: function(referenceItems, availableTextures) {
+        const tagList = "Concrete, Grass, Dirt, Sand, Metal, Snow, Wood, Carpet, Water";
+        const texSample = availableTextures.slice(0, 60).join(", ");
+        const refBlock = referenceItems.map(item => {
+            const cubesJson = JSON.stringify(item.cubes.map(c => ({
+                name: c.name, tag: c.tag, tileMode: c.tileMode, materialName: c.materialName,
+                position: c.position, rotation: c.rotation, scale: c.scale
+            })));
+            return `### Пример: "${item.name}" (${item.cubeCount} кубов)\n${cubesJson}`;
+        }).join("\n\n");
+
+        return `Ты — эксперт-архитектор внутри редактора карт для игры GoreBox (MAPCG). Твоя задача: по текстовому описанию сгенерировать 3D-объект/постройку как массив кубов (JSON), которые движок соберёт в сцене.
+
+ФОРМАТ КАЖДОГО КУБА (строго):
+{
+  "name": "MapCube",
+  "tag": одно из [${tagList}],
+  "tileMode": 0 | 1 | 2  (0=xy тайлинг, 1=yx тайлинг, 2=растянуть на всю грань — используй 2 для больших плоских панелей, 0 или 1 для мелких повторяющихся текстур типа кирпича/дерева),
+  "visible": true,
+  "collisions": true,
+  "physics": false,
+  "materialName": одно из реально доступных имён текстур проекта (см. список ниже) — выбирай максимально подходящее по смыслу и по tag,
+  "position": {"x":0,"y":0,"z":0},
+  "rotation": {"x":0,"y":0,"z":0}  (градусы, оси Unity: Y — поворот вокруг вертикали, X/Z — наклоны),
+  "scale": {"x":1,"y":1,"z":1}  (масштаб куба по каждой оси, единица = примерно 1 метр)
+}
+
+ДОСТУПНЫЕ ТЕКСТУРЫ (materialName), используй ТОЛЬКО эти значения, выбирай ближайшее по смыслу к материалу и к tag:
+${texSample}
+
+СИСТЕМА КООРДИНАТ И ГЕОМЕТРИИ:
+- position — это смещение куба ОТНОСИТЕЛЬНО общего центра объекта (0,0,0 = точка, куда игрок поставил объект). НЕ используй абсолютные мировые координаты, всегда считай от локального центра постройки.
+- Ось Y — вверх. Постройка растёт от Y=0 (низ) вверх. Не уводи объект в минус по Y без причины (он окажется под полом).
+- Куб — это ЕДИНИЧНЫЙ кубик с центром в position, растянутый на scale по каждой оси. Например тонкая доска: scale {x:2, y:0.08, z:0.3}. Толстая стена: scale {x:3, y:2.5, z:0.15}.
+- rotation.y используется для поворота вокруг вертикальной оси (например радиальная симметрия — сегменты бочки на 0/45/90/135° и т.д.), rotation.x/z — для наклонов (скатные крыши, наклонные балки моста, лестницы).
+- Собирай объект из МНОГИХ мелких/средних кубов, а не из 2-3 огромных — так выглядит качественно и детализировано, как ручная работа. Ориентируйся на 20-80 кубов для среднего объекта, для простых объектов (забор, одна бочка) можно 10-30, для сложных построек (дом, мост, вышка) 50-150.
+- Всегда включай базовую структуру (фундамент/пол, если это здание), несущие элементы, и декоративные детали (обшивка, мелкие акценты) — это то, что отличает качественный объект от примитивного.
+- Материалы подбирай по смыслу: дерево → tag "Wood" + деревянная текстура из списка; камень/бетон → tag "Concrete"; металл → tag "Metal"; и т.д. Не смешивай случайные текстуры не по смыслу.
+- Для симметричных объектов (мосты, башни, заборы) соблюдай точную симметрию координат — это выглядит профессионально, асимметрия по ошибке выглядит криво.
+
+Ниже — РЕАЛЬНЫЕ примеры качественных объектов из этого же проекта (сделаны вручную автором). Изучи их: как используются position/rotation/scale, как достигается радиальная симметрия, наклонные элементы, слоистые конструкции, какие масштабы разумны. Копируй этот стиль и уровень детализации, а не выдумывай координаты с нуля.
+
+${refBlock || "(релевантных примеров не найдено, ориентируйся только на правила выше)"}
+
+ОТВЕТ: верни ТОЛЬКО валидный JSON-объект вида {"cubes": [ ... ]}, где "cubes" — массив кубов в описанном выше формате. Никаких пояснений, никакого текста до или после, никакой markdown-разметки. Первый символ ответа должен быть { и последний — }.`;
+    },
+
+    run: async function() {
+        if (this.isRunning) return;
+        const ta = document.getElementById("ai-builder-prompt");
+        const promptText = (ta?.value || "").trim();
+        if (!promptText) {
+            this._setStatus("Сначала опиши, что построить.", "error");
+            return;
+        }
+
+        this._setRunningUI(true);
+        this._setStatus('<span class="ai-spinner"></span> Подбираю референсы и отправляю запрос...', "");
+        this._setProgress(0);
+        this._setRefLine("");
+
+        try {
+            const refs = this._pickReferenceItems(promptText, 3);
+            if (refs.length) {
+                this._setRefLine("Референсы: " + refs.map(r => r.name).join(", "));
+            }
+            const availableTextures = this._getAvailableTextureNames();
+            const systemPrompt = this._buildSystemPrompt(refs, availableTextures);
+
+            if (!this.ENDPOINT || this.ENDPOINT.includes("YOUR-SUBDOMAIN")) {
+                throw new Error("AI Builder ещё не настроен: не указан адрес прокси-сервера. Автору проекта нужно задеплоить worker.js на Cloudflare Workers и вписать адрес в aiBuilder.ENDPOINT.");
+            }
+
+            const response = await fetch(this.ENDPOINT, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    messages: [
+                        { role: "system", content: systemPrompt },
+                        { role: "user", content: `Построй: ${promptText}. Ответь строго JSON-объектом {"cubes": [...]}.` }
+                    ],
+                    temperature: 0.5,
+                    max_tokens: 7000
+                })
+            });
+
+            if (!response.ok) {
+                let msg = "Сервер вернул ошибку (" + response.status + ")";
+                try {
+                    const errJson = await response.json();
+                    if (errJson?.error) msg = typeof errJson.error === "string" ? errJson.error : (errJson.error.message || msg);
+                } catch (e) {}
+                if (response.status === 429) msg = "Слишком много запросов подряд. Подожди минуту и попробуй снова.";
+                throw new Error(msg);
+            }
+
+            const data = await response.json();
+            const content = data?.choices?.[0]?.message?.content;
+            if (!content || typeof content !== "string" || !content.trim()) {
+                throw new Error("Модель вернула пустой ответ. Попробуй ещё раз.");
+            }
+            let raw = content.trim();
+            raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+
+            let parsed;
+            try {
+                parsed = JSON.parse(raw);
+            } catch (e) {
+                const match = raw.match(/\{[\s\S]*\}/) || raw.match(/\[[\s\S]*\]/);
+                if (match) {
+                    parsed = JSON.parse(match[0]);
+                } else {
+                    throw new Error("Модель вернула невалидный JSON");
+                }
+            }
+            // Модель просили вернуть {cubes:[...]}, но на всякий случай принимаем и голый массив
+            let cubes = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.cubes) ? parsed.cubes : null);
+            if (!cubes || !cubes.length) {
+                throw new Error("Пустой результат от модели");
+            }
+            // Базовая санитизация каждого куба перед постройкой
+            cubes = cubes.filter(c => c && typeof c === "object").map(c => ({
+                name: "MapCube",
+                tag: typeof c.tag === "string" ? c.tag : "Concrete",
+                tileMode: typeof c.tileMode === "number" ? c.tileMode : 2,
+                materialName: typeof c.materialName === "string" ? c.materialName : "grid",
+                visible: c.visible !== false,
+                collisions: c.collisions !== false,
+                physics: !!c.physics,
+                position: {
+                    x: Number.isFinite(+c.position?.x) ? +c.position.x : 0,
+                    y: Number.isFinite(+c.position?.y) ? +c.position.y : 0,
+                    z: Number.isFinite(+c.position?.z) ? +c.position.z : 0
+                },
+                rotation: {
+                    x: Number.isFinite(+c.rotation?.x) ? +c.rotation.x : 0,
+                    y: Number.isFinite(+c.rotation?.y) ? +c.rotation.y : 0,
+                    z: Number.isFinite(+c.rotation?.z) ? +c.rotation.z : 0
+                },
+                scale: {
+                    x: Number.isFinite(+c.scale?.x) && +c.scale.x > 0 ? +c.scale.x : 1,
+                    y: Number.isFinite(+c.scale?.y) && +c.scale.y > 0 ? +c.scale.y : 1,
+                    z: Number.isFinite(+c.scale?.z) && +c.scale.z > 0 ? +c.scale.z : 1
+                }
+            }));
+            if (!cubes.length) throw new Error("После проверки не осталось валидных кубов");
+
+            this._setStatus(`Строю: 0 / ${cubes.length} кубов...`, "");
+            this._setProgress(0);
+
+            const buildName = promptText.slice(0, 40);
+            const handle = await engine.buildFromCubesAnimated(cubes, {
+                delayMs: cubes.length > 80 ? 25 : cubes.length > 40 ? 40 : 60,
+                buildName: buildName,
+                onProgress: (i, total) => {
+                    this._setStatus(`Строю: ${i} / ${total} кубов...`, "");
+                    this._setProgress(i / total);
+                },
+                onDone: (created, wasCancelled) => {
+                    this._setRunningUI(false);
+                    this._cancelHandle = null;
+                    if (wasCancelled) {
+                        this._setStatus(`Остановлено пользователем (${created.length} из ${cubes.length} кубов построено).`, "");
+                    } else {
+                        this._setStatus(`✓ Готово — построено ${created.length} кубов.`, "ok");
+                    }
+                    this._setProgress(null);
+                }
+            });
+            this._cancelHandle = handle;
+
+        } catch (err) {
+            console.error("[AI Builder]", err);
+            const base = err?.message || "Не удалось построить объект.";
+            this._setStatus("✕ " + base, "error");
+            this._setRunningUI(false);
+            this._setProgress(null);
+        }
+    },
+
+    cancel: function() {
+        if (this._cancelHandle && typeof this._cancelHandle.cancel === "function") {
+            this._cancelHandle.cancel();
+        }
+    }
+};
     </script>
 
+
+        <div id="ai-builder-modal-overlay" class="collection-modal-overlay hidden" onclick="if(event.target===this && !aiBuilder.isRunning)uiManager.closeAIBuilderModal()">
+            <div class="collection-modal ai-modal">
+                <div class="collection-modal-header">
+                    <span class="collection-modal-title ai-modal-title">✦ AI Builder</span>
+                    <button class="collection-modal-close" onclick="uiManager.closeAIBuilderModal()">✕</button>
+                </div>
+                <div class="ai-modal-body">
+                    <textarea id="ai-builder-prompt" class="ai-prompt-input" placeholder="Опиши, что построить: например «деревянный мост через реку» или «бочка с ржавым металлом»..."></textarea>
+                    <div class="ai-quick-row">
+                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Простой деревянный дом с двускатной крышей'">Дом</span>
+                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Каменный мост через реку с аркой'">Мост</span>
+                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Металлическая бочка'">Бочка</span>
+                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Деревянный забор'">Забор</span>
+                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Сторожевая вышка из дерева'">Вышка</span>
+                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Каменная лестница с перилами'">Лестница</span>
+                    </div>
+                    <div class="ai-progress-wrap" id="ai-progress-wrap"><div class="ai-progress-bar" id="ai-progress-bar"></div></div>
+                    <div class="ai-status-line" id="ai-status-line"></div>
+                    <div class="ai-ref-line" id="ai-ref-line"></div>
+                </div>
+                <div class="collection-modal-footer">
+                    <button class="ai-cancel-btn" id="ai-cancel-btn" style="display:none" onclick="aiBuilder.cancel()">Стоп</button>
+                    <button class="ai-build-btn" id="ai-build-btn" style="flex:1" onclick="aiBuilder.run()">✦ Построить</button>
+                </div>
+            </div>
+        </div>
 
         <div id="collection-modal-overlay" class="collection-modal-overlay hidden" onclick="if(event.target===this)uiManager.closeCollectionModal()">
             <div class="collection-modal">
