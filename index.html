@@ -12731,8 +12731,8 @@ window.aiBuilder = {
 
     _buildSystemPrompt: function(referenceItems, availableTextures) {
         const tagList = "Concrete, Grass, Dirt, Sand, Metal, Snow, Wood, Carpet, Water";
-        const texSample = availableTextures.slice(0, 25).join(", ");
-        const MAX_CUBES_PER_REF = 14;
+        const texSample = availableTextures.slice(0, 60).join(", ");
+        const MAX_CUBES_PER_REF = 30;
         const refBlock = referenceItems.map(item => {
             const trimmedCubes = item.cubes.slice(0, MAX_CUBES_PER_REF);
             const cubesJson = JSON.stringify(trimmedCubes.map(c => ({
@@ -12814,7 +12814,7 @@ ${refBlock || "(релевантных примеров не найдено, о�
                 this._setStatus('<span class="ai-spinner"></span> Подбираю референсы и отправляю запрос...', "");
             }
 
-            const refs = this._pickReferenceItems(promptText, 2);
+            const refs = this._pickReferenceItems(promptText, 4);
             if (refs.length) {
                 this._setRefLine("Референсы: " + refs.map(r => r.name).join(", "));
             }
@@ -12838,7 +12838,7 @@ ${refBlock || "(релевантных примеров не найдено, о�
                         { role: "user", content: userContent }
                     ],
                     temperature: 0.5,
-                    max_tokens: 4500
+                    max_tokens: 8000
                 })
             });
 
