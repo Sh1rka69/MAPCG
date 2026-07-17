@@ -1,26 +1,7 @@
 {
   "version": 2,
-  "buildCommand": null,
-  "outputDirectory": "public",
-  "installCommand": null,
-  "functions": {
-    "api/gemini.js": {
-      "memory": 256,
-      "maxDuration": 120
-    }
-  },
   "rewrites": [
     { "source": "/api/gemini", "destination": "/api/gemini.js" },
     { "source": "/(.*)", "destination": "/index.html" }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
-      ]
-    }
   ]
 }
