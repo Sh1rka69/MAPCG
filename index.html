@@ -12824,11 +12824,16 @@ window.aiBuilder = {
     _cancelHandle: null,
     _imageBase64: null,   // "data:image/...;base64,...." прandкреплёнbutй картandнкand, if есть
     _imageMediaType: null,
-    // ВАЖНО: заменand этот адрес on сintoой byсле деплоя Cloudflare Worker (см. worker.js).
-    // Пока тут стоandт placeholder — геnotрацandя not зарабоfades, byка not intoпandсан реальный адрес.
-    // Адрес Vercel API (работает на том же домене, что и фронтенд).
-    // После деплоя замени на свой домен, если нужно:
-    ENDPOINT: "/api/gemini",
+    // Автоопределение эндпоинта: работает и с GitHub Pages, и с Vercel.
+    ENDPOINT: (function(){
+      var h = window.location.hostname;
+      if (h.indexOf('github.io') !== -1 || h.indexOf('githubusercontent.com') !== -1) {
+        // Открыто с GitHub — шлём запросы на Vercel (полный URL)
+        return 'https://mapcg.vercel.app/api/gemini';
+      }
+      // Открыто с Vercel или другого домена — относительный путь
+      return '/api/gemini';
+    })(),
 
     _setStatus: function(text, kind) {
         const el = document.getElementById("ai-status-line");
@@ -13254,9 +13259,9 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
             const availableTextures = this._getAvailableTextureNames();
             const systemPrompt = this._buildSystemPrompt(refs, availableTextures);
 
-            if (!this.ENDPOINT || this.ENDPOINT.includes("YOUR-SUBDOMAIN")) {
-                this._log("ENDPOINT not set — no Worker's address.", "error");
-                throw new Error("AI Builder not configured yet: Vercel API endpoint is missing. Deploy the project to Vercel first (see README.md).");
+            if (!this.ENDPOINT || this.ENDPOINT === '') {
+                this._log("ENDPOINT not set.", "error");
+                throw new Error("⚠️ AI Builder не работает с GitHub Pages!\n\nОткрой редактор через Vercel:\n👉 https://mapcg.vercel.app\n\nИли укажи свой домен Vercel в настройках ENDPOINT.");
             }
 
             const userContent = imageDescription
