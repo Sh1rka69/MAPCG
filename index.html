@@ -1284,6 +1284,144 @@
             outline: 1px solid var(--td-accent);
             outline-offset: 1px;
         }
+
+        /* ===== AI Builder: floating generation status (top-left of editor) ===== */
+        /* Compact, flat, zero backdrop-filter: cheap on FPS. Matches the editor's square thin-border style. */
+        .ai-gen-toast {
+            --aigt-acc: #b79dff;
+            position: absolute;
+            top: 52px;
+            left: 8px;
+            z-index: 45;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            max-width: min(320px, 60vw);
+            padding: 7px 9px 9px;
+            background: rgba(14, 14, 17, 0.93);
+            border: 1px solid var(--td-border-strong);
+            border-left: 2px solid var(--aigt-acc);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+            pointer-events: auto;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-8px);
+            transition:
+                opacity 0.18s ease,
+                transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1),
+                visibility 0s linear 0.24s;
+            font-size: 12px;
+            line-height: 1.35;
+            letter-spacing: 0.02em;
+            color: var(--td-text);
+        }
+        .ai-gen-toast.aigt-show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+            transition:
+                opacity 0.22s ease,
+                transform 0.3s cubic-bezier(0.18, 1.2, 0.35, 1),
+                visibility 0s;
+        }
+
+        .aigt-ic-wrap {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--aigt-acc);
+        }
+        .aigt-ic { display: none; }
+        .ai-gen-toast[data-state="running"]   .aigt-ic-spinner   { display: block; }
+        .ai-gen-toast[data-state="done"]      .aigt-ic-done      { display: block; }
+        .ai-gen-toast[data-state="error"]     .aigt-ic-error     { display: block; }
+        .ai-gen-toast[data-state="cancelled"] .aigt-ic-cancelled { display: block; }
+        /* same border-spinner look as the AI Builder modal's own .ai-spinner */
+        .aigt-ic-spinner {
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            border: 2px solid rgba(183, 157, 255, 0.25);
+            border-top-color: var(--aigt-acc);
+            animation: aigtRot 0.75s linear infinite;
+        }
+        @keyframes aigtRot { to { transform: rotate(360deg); } }
+
+        .aigt-check-mark { stroke-dasharray: 22; stroke-dashoffset: 22; }
+        .ai-gen-toast.aigt-show[data-state="done"] .aigt-check-mark {
+            animation: aigtDash 0.35s 0.1s ease forwards;
+        }
+        @keyframes aigtDash { to { stroke-dashoffset: 0; } }
+        .ai-gen-toast.aigt-show[data-state="error"] {
+            animation: aigtErrShake 0.35s ease 0.05s;
+        }
+        @keyframes aigtErrShake {
+            0%, 100% { transform: translate(0, 0); }
+            25% { transform: translate(-4px, 0); }
+            55% { transform: translate(3px, 0); }
+            80% { transform: translate(-2px, 0); }
+        }
+
+        .aigt-msg {
+            min-width: 0;
+            overflow: hidden;
+            max-height: 33px;
+            color: var(--td-text);
+            word-break: break-word;
+        }
+
+        .aigt-btn {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--td-text-dim);
+            cursor: pointer;
+            padding: 0;
+            transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+        }
+        .aigt-btn:hover {
+            color: #fff;
+            border-color: var(--td-border-strong);
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .aigt-btn svg { width: 11px; height: 11px; display: block; }
+
+        .aigt-bar {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.06);
+            overflow: hidden;
+        }
+        .aigt-bar-fill {
+            display: block;
+            height: 100%;
+            width: 0%;
+            background: var(--aigt-acc);
+            transition: width 0.3s linear;
+        }
+
+        .ai-gen-toast[data-state="done"]      { --aigt-acc: var(--td-ok); }
+        .ai-gen-toast[data-state="error"]     { --aigt-acc: var(--td-danger); }
+        .ai-gen-toast[data-state="cancelled"] { --aigt-acc: var(--td-warn); }
+        .ai-gen-toast[data-state="done"]  .aigt-msg { color: var(--td-ok); }
+        .ai-gen-toast[data-state="error"] .aigt-msg { color: #ff8484; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .ai-gen-toast { transition: none; }
+            .ai-gen-toast.aigt-show[data-state="error"] { animation: none; }
+        }
+
 </style>
 
     <script type="importmap">
@@ -1533,6 +1671,23 @@
         </div>
 
         <div id="ui-layer" class="ui-scale-layer">
+
+            <div id="ai-gen-toast" class="ai-gen-toast" data-state="running" role="status" aria-live="polite">
+                <span class="aigt-ic-wrap" aria-hidden="true">
+                    <span class="aigt-ic aigt-ic-spinner"></span>
+                    <svg class="aigt-ic aigt-ic-done" viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path class="aigt-check-mark" d="M4.5 10.5l3.4 3.3L15.5 6.2"/></svg>
+                    <svg class="aigt-ic aigt-ic-error" viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L18 17H2L10 3zM10 8.2v4M10 15h.01"/></svg>
+                    <svg class="aigt-ic aigt-ic-cancelled" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"/><rect x="7.2" y="7.2" width="5.6" height="5.6" rx="1"/></svg>
+                </span>
+                <span class="aigt-msg" id="ai-gen-toast-msg">Generation in progress…</span>
+                <button class="aigt-btn" title="Open AI Builder" aria-label="Open AI Builder" onclick="uiManager.openAIBuilderModal()">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14L14 6M7.5 6H14v6.5"/></svg>
+                </button>
+                <button class="aigt-btn" title="Hide" aria-label="Hide" onclick="aiGenToast.dismiss()">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l10 10M15 5L5 15"/></svg>
+                </button>
+                <span class="aigt-bar"><span class="aigt-bar-fill" id="ai-gen-toast-progress"></span></span>
+            </div>
 
             <div id="fps-counter" class="hidden absolute top-2 left-2 z-50 px-2 py-1 text-xs font-semibold pointer-events-none select-none mono" style="background: rgba(0,0,0,0.6); border: 1px solid var(--td-border); color: var(--td-ok);">FPS: 0</div>
 
@@ -4256,7 +4411,7 @@ async function loadSubjectsFromZipBuffer(buffer) {
             const trimmed = g.cubesRaw.trim().replace(/,\s*$/, "");
             rawArr = JSON.parse(trimmed.startsWith("[") ? trimmed : "[" + trimmed + "]");
         } catch (e) {
-            console.warn('[MapCG] Not managed parse JSON model "' + name + '":', e);
+            console.warn('[MapCG] Failed to parse JSON model "' + name + '":', e);
             continue;
         }
         const cubes = parseSubjectCubes(rawArr);
@@ -4306,7 +4461,7 @@ async function initSubjectsCollection() {
             }
         }
     } catch (e) {
-        console.warn('[MapCG] CollectionOfSubjects.zip notдоступен (offline/local launch) — andсbyльзуйте кbutпку "+ ADD COLLECTION".');
+        console.warn('[MapCG] CollectionOfSubjects.zip is unavailable (offline/local launch) — use the "+ ADD COLLECTION" button.');
     } finally {
         subjectsNetworkLoading = false;
     }
@@ -4762,7 +4917,7 @@ function parseGbmapLegacyTextFormat(text) {
     const lines = text.split(/\r\n|\n/);
     let idx = 0;
     const next = () => {
-        if (idx >= lines.length) throw new Error("Notожandданный коnotц файла .gbmap");
+        if (idx >= lines.length) throw new Error("Unexpected end of .gbmap file");
         return lines[idx++];
     };
     const nextNum = () => {
@@ -4776,7 +4931,7 @@ function parseGbmapLegacyTextFormat(text) {
     const nextBool = () => next() === "True";
     const expectSep = () => {
         const v = next();
-        if (v !== "§") throw new Error('File .gbmap damaged: ожandдался разделandтель "§"');
+        if (v !== "§") throw new Error('Invalid .gbmap file: expected delimiter "§"');
     };
     next();
     const name = next();
@@ -4904,14 +5059,14 @@ function parseGbmapFile(text) {
         try {
             data = JSON.parse(trimmed);
         } catch (e) {
-            throw new Error("File .gbmap damaged andлand not яintoляется корректным JSON");
+            throw new Error("Invalid .gbmap file, or it is not valid JSON");
         }
         return data;
     }
     try {
         return parseGbmapLegacyTextFormat(trimmed);
     } catch (e) {
-        throw new Error("Not managed расbyзonть формат .gbmap: " + (e.message || e));
+        throw new Error("Failed to parse .gbmap format: " + (e.message || e));
     }
 }
 
@@ -11633,6 +11788,7 @@ window.uiManager = {
         const overlay = document.getElementById("ai-builder-modal-overlay");
         if (!overlay) return;
         overlay.classList.remove("hidden");
+        if (window.aiGenToast) aiGenToast.onModalOpened();
         if (typeof initSubjectsCollection === "function") initSubjectsCollection();
         if (window.aiBuilder) {
             aiBuilder._setStatus("", "");
@@ -11657,11 +11813,13 @@ window.uiManager = {
         }, 50);
     },
     closeAIBuilderModal: function() {
-        if (window.aiBuilder && aiBuilder.isRunning) return;
+        // Closing is always allowed — even while a build is running.
+        // The floating status panel (aiGenToast) keeps the user informed in that case.
         const overlay = document.getElementById("ai-builder-modal-overlay");
         if (!overlay) return;
         const wasOpen = !overlay.classList.contains("hidden");
         overlay.classList.add("hidden");
+        if (window.aiGenToast) aiGenToast.onModalClosed();
         if (wasOpen && window.engine && typeof engine.resumeWorld === "function" && engine.scene) {
             try {
                 engine.resumeWorld("auto");
@@ -11962,7 +12120,7 @@ window.uiManager = {
             if (!file) return;
             const text = await file.text();
             const rawMapData = parseGbmapFile(text);
-            if (!rawMapData || !Array.isArray(rawMapData.mapCubes)) throw new Error("В файле .gbmap not onйден mapCubes");
+            if (!rawMapData || !Array.isArray(rawMapData.mapCubes)) throw new Error("mapCubes not found in the .gbmap file");
             const importedData = mapGbmapFormatToProjectData(rawMapData);
             const enteredName = (document.getElementById("new-map-name").value || "").trim();
             const gbmapBaseName = normalizeTextureKey(file.name);
@@ -12084,6 +12242,7 @@ window.uiManager = {
     },
     backToHub: function() {
         engine.deselect();
+        if (window.aiGenToast) aiGenToast.dismiss();
         if (engine.transformControl) engine.transformControl.enabled = true;
         document.getElementById("editor-ui").style.display = "none";
         document.getElementById("main-menu").style.display = "flex";
@@ -12559,6 +12718,107 @@ document.addEventListener("pointerdown", e => {
     if (btn) audioEngine.playUIClick();
 }, true);
 
+/**
+ * Floating generation status panel (top-left of the editor viewport).
+ * Lets the user close the AI Builder modal while a build is running:
+ * the panel keeps showing "generation in progress", then a green "done"
+ * on success or the real error text in red on failure.
+ */
+window.aiGenToast = {
+    _state: null,          // "running" | "done" | "error" | "cancelled"
+    _msg: "",
+    _dismissed: true,      // start hidden until the first status update
+    _autoHideTimer: null,
+    _leaveTimer: null,
+
+    _el: function() { return document.getElementById("ai-gen-toast"); },
+    _isModalOpen: function() {
+        const o = document.getElementById("ai-builder-modal-overlay");
+        return !!(o && !o.classList.contains("hidden"));
+    },
+    _isEditorVisible: function() {
+        const e = document.getElementById("editor-ui");
+        return !!(e && e.style.display !== "none");
+    },
+    _shouldShow: function() {
+        if (!this._state || this._dismissed) return false;
+        if (this._isModalOpen()) return false;       // modal itself already shows the status
+        if (!this._isEditorVisible()) return false;  // don't float over the main menu
+        return true;
+    },
+
+    /** Main entry: called by aiBuilder on every generation state change. */
+    update: function(state, msg) {
+        this._state = state;
+        this._msg = msg || "";
+        this._dismissed = false;
+        if (this._autoHideTimer) { clearTimeout(this._autoHideTimer); this._autoHideTimer = null; }
+        this._render(true);
+        if (state === "done" || state === "cancelled") {
+            this._autoHideTimer = setTimeout(() => this.dismiss(), state === "done" ? 6500 : 4500);
+        }
+        // "error" stays on screen until the user dismisses it, so the message can be read
+    },
+
+    /** Progress ticks during the build phase (0..1). Never un-dismisses the toast. */
+    setProgress: function(frac) {
+        if (this._state !== "running") return;
+        if (typeof frac !== "number" || !isFinite(frac)) return;
+        const fill = document.getElementById("ai-gen-toast-progress");
+        if (fill) fill.style.width = Math.max(0, Math.min(100, frac * 100)) + "%";
+    },
+
+    /** Manual close (✕) or auto-hide after a terminal state. */
+    dismiss: function() {
+        this._dismissed = true;
+        if (this._autoHideTimer) { clearTimeout(this._autoHideTimer); this._autoHideTimer = null; }
+        this._render(false);
+    },
+
+    onModalOpened: function() { this._render(false); },
+    onModalClosed: function() { this._render(false); },
+
+    _applyStateToDom: function() {
+        const el = this._el();
+        if (!el) return;
+        const prevState = el.dataset.state || "";
+        el.dataset.state = this._state || "running";
+        const msgEl = document.getElementById("ai-gen-toast-msg");
+        if (msgEl) { msgEl.textContent = this._msg; msgEl.title = this._msg; }
+        const fill = document.getElementById("ai-gen-toast-progress");
+        if (fill) {
+            if (this._state === "done") fill.style.width = "100%";
+            else if (this._state === "running" && prevState !== "running") fill.style.width = "6%";
+            else if (this._state !== "running") fill.style.width = "100%";
+        }
+    },
+
+    _render: function(replayEntrance) {
+        const el = this._el();
+        if (!el) return;
+        const should = this._shouldShow();
+        const shown = el.classList.contains("aigt-show");
+        if (should) {
+            if (this._leaveTimer) { clearTimeout(this._leaveTimer); this._leaveTimer = null; }
+            el.classList.remove("aigt-leaving");
+            this._applyStateToDom();
+            if (!shown || replayEntrance) {
+                el.classList.remove("aigt-show");
+                void el.offsetWidth; // restart the entrance animation
+                el.classList.add("aigt-show");
+            }
+        } else if (shown) {
+            el.classList.remove("aigt-show");
+            el.classList.add("aigt-leaving");
+            if (this._leaveTimer) clearTimeout(this._leaveTimer);
+            this._leaveTimer = setTimeout(() => {
+                el.classList.remove("aigt-leaving");
+                this._leaveTimer = null;
+            }, 480);
+        }
+    }
+};
+
 window.aiBuilder = {
     isRunning: false,
     _cancelHandle: null,
@@ -12566,7 +12826,9 @@ window.aiBuilder = {
     _imageMediaType: null,
     // ВАЖНО: заменand этот адрес on сintoой byсле деплоя Cloudflare Worker (см. worker.js).
     // Пока тут стоandт placeholder — геnotрацandя not зарабоfades, byка not intoпandсан реальный адрес.
-    ENDPOINT: "https://red-lake-ffec.sh1rka-4-200.workers.dev",
+    // Адрес Vercel API (работает на том же домене, что и фронтенд).
+    // После деплоя замени на свой домен, если нужно:
+    ENDPOINT: "/api/gemini",
 
     _setStatus: function(text, kind) {
         const el = document.getElementById("ai-status-line");
@@ -12747,12 +13009,12 @@ window.aiBuilder = {
         const file = event?.target?.files?.[0];
         if (!file) return;
         if (!file.type || !file.type.startsWith("image/")) {
-            this._setStatus("File долsameн быть картandнкой.", "error");
+            this._setStatus("The selected file must be an image.", "error");
             return;
         }
         const MAX_BYTES = 8 * 1024 * 1024; // 8 МБ — с запасом byд лandмandт Groq (20 МБ) and разумbut for мобandльbutго трафandка
         if (file.size > MAX_BYTES) {
-            this._setStatus("Картandнка слandшком большая (макс. 8 МБ).", "error");
+            this._setStatus("Image is too large (max 8 MB).", "error");
             return;
         }
         const reader = new FileReader();
@@ -12767,7 +13029,7 @@ window.aiBuilder = {
             if (attachBtn) attachBtn.style.display = "none";
         };
         reader.onerror = () => {
-            this._setStatus("Not managed прочandтать картandнку.", "error");
+            this._setStatus("Could not read the image file.", "error");
         };
         reader.readAsDataURL(file);
     },
@@ -12819,7 +13081,7 @@ Write in English, concisely, by points, without introduction or conclusion — o
         });
 
         if (!response.ok) {
-            let msg = "Not managed проаonлandзandроintoать картandнку (" + response.status + ")";
+            let msg = "Failed to analyze the image (" + response.status + ")";
             try {
                 const errJson = await response.json();
                 if (errJson?.error) msg = typeof errJson.error === "string" ? errJson.error : (errJson.error.message || msg);
@@ -12830,7 +13092,7 @@ Write in English, concisely, by points, without introduction or conclusion — o
         const data = await response.json();
         const content = data?.choices?.[0]?.message?.content;
         if (!content || typeof content !== "string" || !content.trim()) {
-            throw new Error("Модель not смогла опandсать картandнку. Попробуй другое фото.");
+            throw new Error("The model could not describe the image. Try another photo.");
         }
         return content.trim();
     },
@@ -12846,9 +13108,9 @@ Write in English, concisely, by points, without introduction or conclusion — o
                 position: c.position, rotation: c.rotation, scale: c.scale
             })));
             const note = item.cubes.length > MAX_CUBES_PER_REF
-                ? ` — byказаны перintoые ${MAX_CUBES_PER_REF} andз ${item.cubeCount} кубоinto, for прandмера стandля`
+                ? ` — showing the first ${MAX_CUBES_PER_REF} of ${item.cubeCount} cubes as a style sample`
                 : "";
-            return `### Прandмер: "${item.name}" (${item.cubeCount} кубоinto${note})\n${cubesJson}`;
+            return `### Example: "${item.name}" (${item.cubeCount} cubes${note})\n${cubesJson}`;
         }).join("\n\n");
 
         return `You are an expert architect inside the GoreBox (MAPCG) map editor. Your task: from a text description, generate a 3D object/building as an array of cubes (JSON) that the engine will assemble in the scene.
@@ -12861,7 +13123,7 @@ CUBE FORMAT (strict):
   "visible": true,
   "collisions": true,
   "physics": false,
-  "materialName": one of the реальbut available texture names from the project (see list below) — pick the closest by meaning and by tag,
+  "materialName": one of the actually available texture names from the project (see list below) — pick the closest by meaning and by tag,
   "position": {"x":0,"y":0,"z":0},
   "rotation": {"x":0,"y":0,"z":0}  (degrees, Unity axes: Y = rotation around vertical, X/Z = tilts),
   "scale": {"x":1,"y":1,"z":1}  (cube scale per axis, unit = approx. 1 meter)
@@ -12874,7 +13136,7 @@ COORDINATE SYSTEM AND GEOMETRY:
 - position — cube offset RELATIVE to the object center (0,0,0 = where the player placed the object). DO NOT use absolute world coordinates; always count from the local build center.
 - Y axis — up. The build grows from Y=0 (bottom) upward. Do not push the object into negative Y without reason (it will be under the floor).
 - Cube — a SINGLE cube centered at position, stretched by scale on each axis. Example thin plank: scale {x:2, y:0.08, z:0.3}. Thick wall: scale {x:3, y:2.5, z:0.15}.
-- rotation.y andсbyльзуется for bygate intoокруг intoертandкальbutй осand, rotation.x/z — for onклоbutinto (скатные крышand, onклонные балкand моста, лестнandцы).
+- rotation.y is used to rotate around the vertical axis; rotation.x/z — for tilts (sloped roofs, inclined bridge beams, stairs).
 
 CYLINDRICAL / ROUNDED SHAPE TECHNIQUE (car bodies, barrels, pipes, wheel arches, domes, columns) — use ALWAYS when the object has anything round or curved, not only for obvious cylinders:
 One cube gives only a rectangular (voxel) shape. To get a cylinder / rounding, place a RING of N narrow cubes around the common center (X0, Z0) at one height Y, each shifted by radius R from center and rotated so it "looks" outward.
@@ -12933,7 +13195,7 @@ A sphere is built as a STACK of horizontal rings (like the cylinder ring above),
 
 Below — REAL examples of quality objects from this same project (handmade by the author). Study them: how position/rotation/scale are used, how radial symmetry, inclined elements, layered structures are achieved, what scales are reasonable. Copy this style and level of detail, do not invent coordinates from scratch.
 
-${refBlock || "(релеintoантных прandмероinto not onйдеbut, орandентandруйся только on праintoandла intoыше)"}
+${refBlock || "(no relevant examples found — rely on the rules above only)"}
 
 MANDATORY WORKFLOW (this is critical for result quality):
 Before writing cube coordinates, you must FIRST mentally design the object and write this plan into the text field "plan". The plan must be BRIEF (3-6 short sentences, no fluff) and list by points:
@@ -12957,11 +13219,12 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         }
 
         this._setRunningUI(true);
+        if (window.aiGenToast) aiGenToast.update("running", "Generation in progress…");
         this._setStatus('<span class="ai-spinner"></span> Picking references and sending request...', "");
         this._setProgress(0);
         this._setRefLine("");
         this._clearConsole();
-        this._log("Request: «" + promptText + "»" + (this._imageBase64 ? " (+ image)" : ""));
+        this._log("Request: \"" + promptText + "\"" + (this._imageBase64 ? " (+ image)" : ""));
         const planWrapEl = document.getElementById("ai-plan-wrap");
         if (planWrapEl) planWrapEl.style.display = "none";
 
@@ -12983,7 +13246,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
 
             const refs = this._pickReferenceItems(promptText, 4);
             if (refs.length) {
-                this._setRefLine("Референсы: " + refs.map(r => r.name).join(", "));
+                this._setRefLine("References: " + refs.map(r => r.name).join(", "));
                 this._log("References picked from collection: " + refs.map(r => r.name).join(", "));
             } else {
                 this._log("No suitable references found in collection — working from text rules only.", "warn");
@@ -12993,7 +13256,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
 
             if (!this.ENDPOINT || this.ENDPOINT.includes("YOUR-SUBDOMAIN")) {
                 this._log("ENDPOINT not set — no Worker's address.", "error");
-                throw new Error("AI Builder not configured yet: proxy server address is missing. The project author needs to deploy worker.js to Cloudflare Workers and insert the address into aiBuilder.ENDPOINT.");
+                throw new Error("AI Builder not configured yet: Vercel API endpoint is missing. Deploy the project to Vercel first (see README.md).");
             }
 
             const userContent = imageDescription
@@ -13013,30 +13276,80 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                 this._log((attempt > 1 ? "Retry attempt " + attempt + ": " : "Sending model request...") + (attempt > 1 ? lastRepairNote : ""));
                 const reqStart = performance.now();
 
-                const response = await fetch(this.ENDPOINT, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        messages: [
-                            { role: "system", content: systemPrompt + (attempt > 1 ? "\n\nIMPORTANT: the previous response did not fit within the limit and was truncated. This time be more compact — use slightly fewer cubes (simplify small decorative details, keep the main structure) and a shorter plan, so it is guaranteed to fit within the token limit." : "") },
-                            { role: "user", content: userContent }
-                        ],
-                        temperature: 0.5,
-                        max_tokens: 24000
-                    })
-                });
+                // Transient failures — HTTP 429 (rate limit), 502/503/504 (provider
+                // overloaded / gateway hiccup) or a dropped network connection —
+                // are retried automatically with backoff before giving up, because
+                // "high demand" spikes usually clear within a short while. The Worker
+                // itself already rotates keys/models internally on 429/502/503, so by
+                // the time we see one of these here it means that already failed too —
+                // give it a longer, patient backoff rather than a quick single retry.
+                const TRANSIENT_STATUS = [429, 502, 503, 504];
+                const MAX_NET_ATTEMPTS = 5;
+                let response = null;
+                let lastNetError = null;
+                let serverRetryAfterSec = null;
+                for (let netAttempt = 1; netAttempt <= MAX_NET_ATTEMPTS; netAttempt++) {
+                    try {
+                        response = await fetch(this.ENDPOINT, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                messages: [
+                                    { role: "system", content: systemPrompt + (attempt > 1 ? "\n\nIMPORTANT: the previous response did not fit within the limit and was truncated. This time be more compact — use slightly fewer cubes (simplify small decorative details, keep the main structure) and a shorter plan, so it is guaranteed to fit within the token limit." : "") },
+                                    { role: "user", content: userContent }
+                                ],
+                                temperature: 0.5,
+                                max_tokens: 24000
+                            })
+                        });
+                        lastNetError = null;
+                    } catch (netErr) {
+                        lastNetError = netErr;
+                        response = null;
+                    }
+                    serverRetryAfterSec = null;
+                    if (response && TRANSIENT_STATUS.includes(response.status)) {
+                        try {
+                            const cloned = response.clone();
+                            const errJson = await cloned.json();
+                            if (errJson?._debug?.retryAfterSec) serverRetryAfterSec = errJson._debug.retryAfterSec;
+                        } catch (e) {}
+                    }
+                    const isTransient = !!lastNetError || (response && TRANSIENT_STATUS.includes(response.status));
+                    if (isTransient && netAttempt < MAX_NET_ATTEMPTS) {
+                        const waitSec = serverRetryAfterSec || Math.min(6 * netAttempt, 20);
+                        const reason = lastNetError ? "network error" : "server busy (" + response.status + ")";
+                        this._log("Server busy (" + reason + ") — auto-retry " + netAttempt + "/" + (MAX_NET_ATTEMPTS - 1) + " in " + waitSec + "s...", "warn");
+                        this._setStatus('<span class="ai-spinner"></span> Server busy (' + reason + ") — retrying in " + waitSec + "s...", "");
+                        if (window.aiGenToast) aiGenToast.update("running", "Server busy (" + reason + ") — retrying…");
+                        await new Promise(r => setTimeout(r, waitSec * 1000));
+                        continue;
+                    }
+                    break;
+                }
+
+                if (lastNetError) {
+                    const nmsg = "Network error: " + (lastNetError?.message || String(lastNetError));
+                    this._log(nmsg, "error");
+                    throw new Error(nmsg + ". Check your internet connection and try again.");
+                }
 
                 const elapsedMs = Math.round(performance.now() - reqStart);
 
                 if (!response.ok) {
                     let msg = "Server returned error (" + response.status + ")";
-                    let debugInfo = null;
+                    let hasServerMsg = false;
                     try {
                         const errJson = await response.json();
-                        if (errJson?.error) msg = typeof errJson.error === "string" ? errJson.error : (errJson.error.message || msg);
-                        debugInfo = errJson?._debug;
+                        if (errJson?.error) {
+                            msg = typeof errJson.error === "string" ? errJson.error : (errJson.error.message || msg);
+                            hasServerMsg = true;
+                        }
                     } catch (e) {}
-                    if (response.status === 429) msg = "Too many requests in a row. Wait a minute and try again.";
+                    if (!hasServerMsg) {
+                        if (response.status === 429) msg = "Rate limit reached — wait about a minute and try again.";
+                        else if (response.status >= 500) msg += " — the AI provider is temporarily overloaded. Wait a minute and press Build again.";
+                    }
                     this._log("Response error (" + response.status + ") after " + elapsedMs + " ms: " + msg, "error");
                     throw new Error(msg);
                 }
@@ -13045,9 +13358,9 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                 const content = data?.choices?.[0]?.message?.content;
                 const debug = data?._debug;
                 if (debug) {
-                    this._log(`Response received in ${elapsedMs} мс — model: ${debug.model}, finish reason: ${debug.finishReason}, characters: ${debug.outputChars}.`, debug.finishReason === "STOP" ? "ok" : "warn");
+                    this._log(`Response received in ${elapsedMs} ms — model: ${debug.model}, finish reason: ${debug.finishReason}, characters: ${debug.outputChars}.`, debug.finishReason === "STOP" ? "ok" : "warn");
                 } else {
-                    this._log(`Response received in ${elapsedMs} мс.`, "ok");
+                    this._log(`Response received in ${elapsedMs} ms.`, "ok");
                 }
 
                 if (!content || typeof content !== "string" || !content.trim()) {
@@ -13086,7 +13399,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                     if (wasTruncated && attempt < MAX_ATTEMPTS) {
                         // We give model another one chance on full, not truncated result,
                         // but we keep current partial result on case if and second attempt not works.
-                        lastRepairNote = "предыдущandй отintoет обрубandлся on " + extractedCubes.length + " кубах.";
+                        lastRepairNote = "the previous response was truncated at " + extractedCubes.length + " cubes.";
                         this._log("Partial result (truncated) — trying to get full version again before using this.", "warn");
                         continue;
                     }
@@ -13145,16 +13458,19 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                 onProgress: (i, total) => {
                     this._setStatus(`Building: ${i} / ${total} cubes...`, "");
                     this._setProgress(i / total);
+                    if (window.aiGenToast) aiGenToast.setProgress(i / total);
                 },
                 onDone: (created, wasCancelled) => {
                     this._setRunningUI(false);
                     this._cancelHandle = null;
                     if (wasCancelled) {
-                        this._log("Stopped by user at " + created.length + " andз " + cubes.length + " cubes.", "warn");
-                        this._setStatus(`Stopped by user (${created.length} andз ${cubes.length} cubes built).`, "");
+                        this._log("Stopped by user at " + created.length + " of " + cubes.length + " cubes.", "warn");
+                        this._setStatus(`Stopped by user (${created.length} of ${cubes.length} cubes built).`, "");
+                        if (window.aiGenToast) aiGenToast.update("cancelled", "Cancelled by user — built " + created.length + " of " + cubes.length + " cubes");
                     } else {
                         this._log("Build finished: " + created.length + " cubes.", "ok");
                         this._setStatus(`✓ Done — built ${created.length} cubes.`, "ok");
+                        if (window.aiGenToast) aiGenToast.update("done", "Done — built " + created.length + " cubes ✓");
                     }
                     this._setProgress(null);
                 }
@@ -13168,6 +13484,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
             this._setStatus("✕ " + base, "error");
             this._setRunningUI(false);
             this._setProgress(null);
+            if (window.aiGenToast) aiGenToast.update("error", base);
         }
     },
 
@@ -13237,8 +13554,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
 };
     </script>
 
-
-        <div id="ai-builder-modal-overlay" class="collection-modal-overlay hidden" onclick="if(event.target===this && !aiBuilder.isRunning)uiManager.closeAIBuilderModal()">
+        <div id="ai-builder-modal-overlay" class="collection-modal-overlay hidden" onclick="if(event.target===this)uiManager.closeAIBuilderModal()">
             <div class="collection-modal ai-modal">
                 <div class="collection-modal-header">
                     <span class="collection-modal-title ai-modal-title">✦ AI Builder</span>
@@ -13267,7 +13583,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                     <div class="ai-ref-line" id="ai-ref-line"></div>
                     <div class="ai-console-wrap" id="ai-console-wrap">
                         <div class="ai-console-header" onclick="aiBuilder.toggleConsole()">
-                            <span>&gt;_ Консоль</span>
+                            <span>&gt;_ Console</span>
                             <span class="ai-console-toggle" id="ai-console-toggle">▾</span>
                         </div>
                         <div class="ai-console-body" id="ai-console-body"></div>
@@ -13311,7 +13627,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         <span id="tex-status-text" style="color:#e8e8e8;font-weight:600;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;">&#128230; Select BaseTextures.zip</span>
         <button onclick="document.getElementById('tex-zip-input').click()" style="background:#ff8a3d;color:#000;border:none;padding:6px 14px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;margin-left:6px;">&#128194; Load</button>
         <input type="file" id="tex-zip-input" accept=".zip" style="display:none" onchange="handleManualTexZip(event)">
-        <button onclick="document.getElementById('tex-load-btn').style.display='none'" title="Закрыть" style="background:transparent;color:#8a8a90;border:none;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;margin-left:4px;padding:0;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#94a3b8'">&#10005;</button>
+        <button onclick="document.getElementById('tex-load-btn').style.display='none'" title="Close" style="background:transparent;color:#8a8a90;border:none;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;margin-left:4px;padding:0;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#94a3b8'">&#10005;</button>
     </div>
 
 
@@ -13319,10 +13635,11 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         <span id="music-status-text" style="color:#e8e8e8;font-weight:600;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;">&#127925; Select Music.zip</span>
         <button onclick="document.getElementById('music-zip-input').click()" style="background:#60a5fa;color:#000;border:none;padding:6px 14px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;margin-left:6px;">&#128194; Load</button>
         <input type="file" id="music-zip-input" accept=".zip" style="display:none" onchange="handleManualMusicZip(event)">
-        <button onclick="document.getElementById('music-load-btn').style.display='none'" title="Закрыть" style="background:transparent;color:#8a8a90;border:none;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;margin-left:4px;padding:0;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#94a3b8'">&#10005;</button>
+        <button onclick="document.getElementById('music-load-btn').style.display='none'" title="Close" style="background:transparent;color:#8a8a90;border:none;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;margin-left:4px;padding:0;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#94a3b8'">&#10005;</button>
     </div>
 
 
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1c97df0cce6dbdb',t:'MTc4NDI5Mzg4MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
