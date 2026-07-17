@@ -12645,6 +12645,19 @@ window.aiBuilder = {
      * by intersection of keywords with user prompt, so дать model
      * реальные эталонные examples GoreBox geometry.
      */
+    _roundnessScore: function(item) {
+        if (!item.cubes || !item.cubes.length) return 0;
+        let rotated = 0;
+        const angles = new Set();
+        item.cubes.forEach(c => {
+            const ry = c.rotation && typeof c.rotation.y === "number" ? Math.abs(c.rotation.y % 360) : 0;
+            if (ry > 1) { rotated++; angles.add(Math.round(ry / 5) * 5); }
+        });
+        const ratio = rotated / item.cubes.length;
+        const variety = Math.min(angles.size / 6, 1);
+        return ratio * 0.6 + variety * 0.4;
+    },
+
     _pickReferenceItems: function(promptText, maxItems = 3) {
         const data = (window.uiManager && Array.isArray(uiManager._collectionData)) ? uiManager._collectionData : [];
         if (!data.length) return [];
@@ -12652,7 +12665,6 @@ window.aiBuilder = {
             .replace(/[^\p{L}\p{N}\s]/gu, " ")
             .split(/\s+/).filter(Boolean);
         const promptWords = new Set(norm(promptText));
-        // Notбольшой слоintoарь сandbutнandмоinto рус/eng, so «мост» onходandл "Bridge" and т.п.
         const synonyms = {
             "мост": ["bridge"], "бочка": ["barrel"], "ящandк": ["pallet", "crate"],
             "byддон": ["pallet"], "плandта": ["slab", "roofing", "slate"],
@@ -12670,32 +12682,55 @@ window.aiBuilder = {
             "дрон": ["drone", "quadcopter"], "самолёт": ["plane", "aircraft"],
             "лодка": ["boat", "ship"], "яхта": ["yacht", "boat", "ship"],
             "машandon": ["car", "vehicle"], "фоonрь": ["lamp", "light"],
-            "лампа": ["lamp", "light"], "статуя": ["statue"], "gate": ["gate"]
+            "лампа": ["lamp", "light"], "статуя": ["statue"], "gate": ["gate"],
+            "шар": ["sphere", "ball", "globe", "planet"], "сфера": ["sphere", "ball", "globe"],
+            "мяч": ["ball", "sphere"], "гloboус": ["globe", "sphere", "planet"],
+            "планета": ["planet", "sphere", "globe"], "круглый": ["round", "sphere", "ball"],
+            "купол": ["dome", "sphere"],
+            "цandлandндр": ["cylinder", "pipe", "column"], "труба": ["pipe", "cylinder"],
+            "колонна": ["column", "pillar", "cylinder"], "колесо": ["wheel"]
         };
         promptWords.forEach(w => {
             if (synonyms[w]) synonyms[w].forEach(s => promptWords.add(s));
         });
+        const roundKeywords = ["sphere", "ball", "globe", "planet", "round", "dome", "cylinder", "pipe", "column", "pillar", "wheel", "barrel"];
+        const wantsRound = roundKeywords.some(k => promptWords.has(k));
+
         const scored = data.map(item => {
             const nameWords = new Set(norm(item.name));
             let score = 0;
             nameWords.forEach(w => {
                 promptWords.forEach(pw => {
-                    if (w === pw) score += 2; // точbutе соintoпаденandе слоintoа intoесandт more
-                    else if (w.length > 3 && pw.length > 3 && (w.includes(pw) || pw.includes(w))) score += 1; // частandчbutе — короткandе слоintoа not матчandм, so not лоintoandть caseные byдстрокand
+                    if (w === pw) score += 2;
+                    else if (w.length > 3 && pw.length > 3 && (w.includes(pw) || pw.includes(w))) score += 1;
                 });
             });
-            return { item, score };
+            const roundness = this._roundnessScore(item);
+            if (wantsRound) score += roundness * 3;
+            return { item, score, roundness };
         });
         scored.sort((a, b) => b.score - a.score);
-        const withScore = scored.filter(s => s.score > 0).slice(0, maxItems);
+        let withScore = scored.filter(s => s.score > 0).slice(0, maxItems);
+
+        if (wantsRound) {
+            const bestRound = [...scored].sort((a, b) => b.roundness - a.roundness)[0];
+            if (bestRound && bestRound.roundness > 0.25 &&
+                !withScore.some(s => s.item.name === bestRound.item.name)) {
+                withScore = [bestRound, ...withScore].slice(0, maxItems);
+            }
+        }
+
         if (withScore.length > 0) return withScore.map(s => s.item);
-        // Еслand нandчit яintobut not соintoпало — берём разbutобразные examples (маленькandй + среднandй + большой объект),
-        // so модель intoсё раintobut intoandдела реальный стandль геометрandand проекта.
         const bySize = [...data].sort((a, b) => (a.cubeCount || 0) - (b.cubeCount || 0));
         const picks = [];
         if (bySize.length) picks.push(bySize[0]);
         if (bySize.length > 2) picks.push(bySize[Math.floor(bySize.length / 2)]);
         if (bySize.length > 1) picks.push(bySize[bySize.length - 1]);
+        const bestRoundOverall = [...data].map(item => ({ item, r: this._roundnessScore(item) }))
+            .sort((a, b) => b.r - a.r)[0];
+        if (bestRoundOverall && bestRoundOverall.r > 0.3 && picks.length && !picks.some(p => p.name === bestRoundOverall.item.name)) {
+            picks[picks.length - 1] = bestRoundOverall.item;
+        }
         return picks.slice(0, maxItems);
     },
 
@@ -12874,10 +12909,27 @@ scale of each ring cube — narrow along tangent axis (usually scale.x, around 2
 For PARTIAL rounding (e.g. rounded corner, not a full pipe) take only several adjacent i from the table (the needed arc), not the whole table.
 Multi-layer height rounding (e.g. convex body, dome) — repeat the ring at several Y values with different radius R on each layer (decreasing R toward top/bottom), this gives volume, not just a flat tube.
 DO NOT build round / streamlined objects (car bodies, barrels, domes, columns, wheels) from only straight rectangular cubes without rotation — this gives a rough "brick" look that should be avoided. If the request clearly has rounded forms (car, drone with cylindrical body, dome, pipe, wheel) — apply this ring technique at least for the main volumes, not just small details.
-- Build the object from MANY small/medium cubes, not 2-3 huge ones — this looks high-quality and detailed, like handmade work. Target 20-80 cubes for a medium object, for simple objects (fence, single barrel) 10-30, for complex builds (house, bridge, tower) 50-150; if the object needs cube rings for roundings (see technique above), total cube count may be noticeably larger — this is normal and gives a better result.
-- Always include basic structure (foundation/floor if a building), load-bearing elements, and decorative details (cladding, small accents) — this is what distinguishes a quality object from a primitive one.
+
+SPHERE / BALL TECHNIQUE (planets, heads, round tanks, balls, domes that close at both top and bottom) — this is a SEPARATE technique from a plain cylinder ring, use it whenever the object is round in ALL directions, not just around one vertical axis:
+A sphere is built as a STACK of horizontal rings (like the cylinder ring above), one ring per latitude band, where the radius of each ring shrinks toward the top and bottom so the shape bulges at the equator and pinches to a point at the poles.
+1. Pick the sphere's total radius R and center height Yc, and use at least 5-7 latitude bands (more bands = smoother sphere, use at least 5 for anything the player will look at up close).
+2. Distribute band heights evenly from (Yc-R) at the bottom pole to (Yc+R) at the top pole. For each band, look up its radius_mult by its position fraction (0=bottom pole, 1=top pole) in this table:
+     fraction 0.00 (pole)    → radius_mult 0.00
+     fraction 0.15           → radius_mult 0.43
+     fraction 0.30           → radius_mult 0.74
+     fraction 0.50 (equator) → radius_mult 1.00
+     fraction 0.70           → radius_mult 0.74
+     fraction 0.85           → radius_mult 0.43
+     fraction 1.00 (pole)    → radius_mult 0.00
+   bandRadius = R * radius_mult.
+3. At each band with bandRadius > 0, place a horizontal ring of N cubes (use the N=8 or N=12 angle table from the cylinder technique above) at that band's Y, with position.x/z = center + bandRadius * x_mult/z_mult, rotation.y = angle, and cube scale sized to the LOCAL bandRadius (rings near the poles are much narrower than the equator ring — shrink cube scale on the tangent axis proportionally, do not reuse the equator cube size for every band).
+4. At the very top and bottom pole (radius_mult = 0.00), place ONE small cube instead of a ring, to close the sphere without a gap.
+5. NEVER approximate a sphere with a single big cube, a plain octagonal cylinder, or one ring only — a real sphere in this project always has at least 5 bands with shrinking radius toward the poles, plus 2 pole caps.
+- Build the object from MANY small/medium cubes, not 2-3 huge ones — this looks high-quality and detailed, like handmade work. Target 30-90 cubes for a medium object, for simple objects (fence, single barrel) 15-30, for complex builds (house, bridge, tower) 60-150; if the object needs cube rings/bands for roundings or spheres (see techniques above), total cube count may be noticeably larger — this is normal, expected, and gives a much better result than skimping on rings.
+- Always include basic structure (foundation/floor if a building), load-bearing elements, AND decorative details (cladding, trims, bolts/rivets/panel seams, small accent cubes, edge chamfers) — decoration is what separates a hand-crafted look from a cheap placeholder box. A response with no small decorative cubes at all is considered LOW QUALITY and should be avoided; budget at least a few cubes purely for surface detail even on simple objects.
+- Do not settle for the flattest/cheapest interpretation of a shape. If a part could reasonably be round, beveled, tapered, or layered instead of a plain rectangular block, prefer the more detailed version — plain boxes should be reserved for parts that are genuinely boxy in real life (crates, planks, panels).
 - Pick materials by meaning: wood → tag "Wood" + wood texture from list; stone/concrete → tag "Concrete"; metal → tag "Metal"; etc. Do not mix random textures out of meaning.
-- For symmetrical objects (bridges, towers, fences) keep exact coordinate symmetry — this looks professional, accidental asymmetry looks crooked.
+- For symmetrical objects (bridges, towers, fences, spheres) keep exact coordinate symmetry — this looks professional, accidental asymmetry looks crooked.
 
 Below — REAL examples of quality objects from this same project (handmade by the author). Study them: how position/rotation/scale are used, how radial symmetry, inclined elements, layered structures are achieved, what scales are reasonable. Copy this style and level of detail, do not invent coordinates from scratch.
 
@@ -12888,7 +12940,8 @@ Before writing cube coordinates, you must FIRST mentally design the object and w
 1. What physical parts the object consists of (e.g. for a drone: central body, 4 cross arms, 4 propellers at arm ends, camera/sensor below, landing legs).
 2. How these parts are positioned relative to each other in space (what is top/bottom, what is symmetrical, at what distance from center, at what angle).
 3. What sizes (scale) are reasonable for each part relative to others (e.g. "arms are long and thin: scale x:1.4 y:0.08 z:0.08", "body — flattened parallelepiped at center: scale x:0.6 y:0.25 z:0.6").
-4. Which parts are round / cylindrical / curved (body, dome, pipe, wheel, etc.) and will need a ring of rotated cubes (see technique above) instead of a simple rectangular cube — name them explicitly so you do not forget to apply the technique when generating cubes.
+4. Which parts are round / cylindrical / curved (body, dome, pipe, wheel, etc.) and will need the ring technique, and which parts are round in ALL directions (ball, planet, head, tank) and need the multi-band SPHERE technique instead — name each such part explicitly and say which of the two techniques applies to it, so you do not forget to apply it when generating cubes.
+5. At least 1-2 small decorative/accent details that are not strictly load-bearing (trim, seam, bolt, handle, accent stripe, etc.) — even a simple object should not be only bare structural cubes.
 The plan must be short, because the main response budget is needed for cubes. CRITICAL: EVERY part mentioned in the plan must get its cubes in the array "cubes" — do not drop cube generation in the middle of the plan parts list. If there are many parts, better make each part from fewer cubes than completely skip a plan part. Do not invent parts in cubes that are not in the plan, and do not skip plan parts when generating cubes.
 
 ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text", "cubes": [ ... ]}, where "plan" is a short reasoning string per points above, and "cubes" is the array of cubes in the format described above, built strictly according to this plan and covering ALL its parts. No explanations outside these two fields, no markdown formatting. The first character must be { and the last — }.`;
