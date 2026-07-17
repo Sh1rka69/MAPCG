@@ -242,7 +242,7 @@ module.exports = async (req, res) => {
 
   async function callGemini(modelName, apiKey) {
     const t0 = Date.now();
-    const { resp, text } = await httpsFetch(
+    const result = await httpsFetch(
       `${GEMINI_BASE}/${modelName}:generateContent`,
       {
         method: "POST",
@@ -256,7 +256,7 @@ module.exports = async (req, res) => {
         generationConfig: buildGenerationConfig(modelName),
       })
     );
-    return { resp: { status: resp.status }, text, elapsedMs: Date.now() - t0 };
+    return { resp: { status: result.status }, text: result.text, elapsedMs: Date.now() - t0 };
   }
 
   async function callWithKeyRotation(modelName) {
