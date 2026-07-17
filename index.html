@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -3478,18 +3478,18 @@ async function handleManualTexZip(event) {
     try {
         const data = await loadTexturesFromZipBuffer(await file.arrayBuffer());
         const count = Object.keys(data).length;
-        if (count === 0) throw new Error("Нет изображений в архиве");
+        if (count === 0) throw new Error("No images in archive");
         applyTextureData(data);
         try {
             await localforage.setItem(TEXTURE_CACHE_KEY, data);
         } catch (e) {}
-        if (statusEl) statusEl.innerHTML = '<span style="color:#4ade80">✔ ' + count + " текстур загружено!</span>";
+        if (statusEl) statusEl.innerHTML = '<span style="color:#4ade80">✔ ' + count + " textures loaded!</span>";
         setTimeout(() => {
             const btn = document.getElementById("tex-load-btn");
             if (btn) btn.style.display = "none";
         }, 1500);
     } catch (e) {
-        if (statusEl) statusEl.innerHTML = '<span style="color:#f87171">❌ Ошибка: ' + (e.message || "выберите правильный BaseTextures.zip") + "</span>";
+        if (statusEl) statusEl.innerHTML = '<span style="color:#f87171">❌ Error: ' + (e.message || "select correct BaseTextures.zip") + "</span>";
         console.error("[MapCG] Texture load failed:", e);
     }
 }
@@ -3659,19 +3659,19 @@ async function handleManualMusicZip(event) {
         const data = await loadMusicFromZipBuffer(buf);
         const count = data.length;
         console.log("[MapCG] Music: parsed " + count + " audio files from ZIP");
-        if (count === 0) throw new Error("В архиве нет .mp3/.ogg/.wav/.m4a/.aac/.opus/.flac");
+        if (count === 0) throw new Error("Archive has no .mp3/.ogg/.wav/.m4a/.aac/.opus/.flac");
         applyMusicData(data);
-        if (statusEl) statusEl.innerHTML = '<span style="color:#4ade80">✔ ' + count + " треков загружено! Кэшируем...</span>";
+        if (statusEl) statusEl.innerHTML = '<span style="color:#4ade80">✔ ' + count + " tracks loaded! Caching...</span>";
         try {
             await localforage.setItem(MUSIC_CACHE_KEY, data.map(t => ({
                 name: t.name,
                 blob: t.blob
             })));
             console.log("[MapCG] Music: cached in IndexedDB successfully.");
-            if (statusEl) statusEl.innerHTML = '<span style="color:#4ade80">✔ ' + count + " треков (сохранено офлайн)</span>";
+            if (statusEl) statusEl.innerHTML = '<span style="color:#4ade80">✔ ' + count + " tracks (saved offline)</span>";
         } catch (e) {
             console.warn("[MapCG] Music: IndexedDB cache write failed —", e && e.message);
-            if (statusEl) statusEl.innerHTML = '<span style="color:#fbbf24">✔ ' + count + " треков (только на эту сессию)</span>";
+            if (statusEl) statusEl.innerHTML = '<span style="color:#fbbf24">✔ ' + count + " tracks (this session only)</span>";
         }
         setTimeout(() => {
             const btn = document.getElementById("music-load-btn");
@@ -3679,7 +3679,7 @@ async function handleManualMusicZip(event) {
         }, 1800);
     } catch (e) {
         console.error("[MapCG] Music load failed:", e);
-        if (statusEl) statusEl.innerHTML = '<span style="color:#f87171">❌ ' + (e.message || "выберите правильный Music.zip") + "</span>";
+        if (statusEl) statusEl.innerHTML = '<span style="color:#f87171">❌ ' + (e.message || "select correct Music.zip") + "</span>";
     }
 }
 
@@ -3979,8 +3979,8 @@ const guideBgFx = {
         }
         this.gl = gl;
         const vsFullscreen = `#version 300 es\n                    precision highp float;\n                    out vec2 vUV;\n                    void main() {\n                        vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);\n                        vUV = p;\n                        gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);\n                    }`;
-        const fsSim = `#version 300 es\n                    precision highp float;\n                    in vec2 vUV;\n                    out vec4 fragColor;\n\n                    uniform sampler2D uPrev;      // предыдущий кадр (feedback)\n                    uniform vec2  uRes;\n                    uniform float uTime;\n                    uniform float uDT;\n                    uniform float uBass;          // 0..~1.5 (с overshoot на пиках)\n                    uniform float uMid;\n                    uniform float uTreble;\n                    uniform float uBassPeak;      // короткий импульс на ударе баса\n                    uniform vec2  uEmitter;       // NDC-координата "капли"\n\n                    // ─── шумы ───\n                    // Простой value-noise + FBM. Достаточно органичен для fluid-look.\n                    float hash(vec2 p) {\n                        p = fract(p * vec2(123.34, 456.21));\n                        p += dot(p, p + 45.32);\n                        return fract(p.x * p.y);\n                    }\n                    float vnoise(vec2 p) {\n                        vec2 i = floor(p), f = fract(p);\n                        float a = hash(i);\n                        float b = hash(i + vec2(1.0, 0.0));\n                        float c = hash(i + vec2(0.0, 1.0));\n                        float d = hash(i + vec2(1.0, 1.0));\n                        vec2 u = f * f * (3.0 - 2.0 * f);\n                        return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;\n                    }\n                    // ── OPTIMIZATION: 3 октавы вместо 4 (−25% vnoise-вызовов).\n                    //    На дыме с domain-warping разница почти не видна,\n                    //    зато FPS вырастает заметно.\n                    float fbm(vec2 p) {\n                        float s = 0.0, a = 0.5, freq = 1.0;\n                        for (int i = 0; i < 3; i++) {\n                            s += a * vnoise(p * freq);\n                            freq *= 2.13;   // чуть более "золотой" множитель — компенсирует потерю октавы\n                            a *= 0.5;\n                        }\n                        return s;\n                    }\n                    // ── OPTIMIZATION: velocity field теперь АНАЛИТИЧЕСКИЙ,\n                    //    без вызовов fbm вообще. Раньше это стоило 4×fbm=12\n                    //    vnoise-вызовов на пиксель, теперь — 2 sin+cos.\n                    //    Визуально даёт такое же «жидкое» кручение — просто\n                    //    поле построено из двух низкочастотных синусоид,\n                    //    сдвинутых по времени. Curl считается аналитически.\n                    vec2 velocityField(vec2 p, float t) {\n                        float a = sin(p.x * 1.7 + t * 0.6) * cos(p.y * 1.3 - t * 0.4);\n                        float b = cos(p.x * 1.2 - t * 0.5) * sin(p.y * 1.9 + t * 0.7);\n                        return vec2(a - b, a + b) * 0.7;\n                    }\n\n                    void main() {\n                        vec2 uv = vUV;\n                        vec2 asp = vec2(uRes.x / uRes.y, 1.0);\n                        vec2 p = (uv - 0.5) * asp;\n\n                        // ── (1) ADVECTION: читаем предыдущий кадр по смещённым UV ──\n                        // Velocity зависит от mid — «дует ветер» под музыку.\n                        float velScale = (0.006 + uMid * 0.030) * uDT * 60.0;\n                        vec2 vel = velocityField(p * 1.4, uTime * 0.4);\n                        vec2 advUV = uv - vel * velScale;\n                        vec4 prev = texture(uPrev, advUV);\n\n                        // Плавное затухание («дым медленно тает»).\n                        // Чем больше bass — тем медленнее тает (заряд держится дольше).\n                        float decay = mix(0.972, 0.987, clamp(uBass * 0.7, 0.0, 1.0));\n                        prev.rgb *= decay;\n\n                        // ── (2) DOMAIN WARPING FBM — свежая энергия ──\n                        // OPTIMIZATION: убрали промежуточное поле r (2 fbm),\n                        // используем q напрямую для warping. Осталось 3 fbm\n                        // вместо 5 (−40%). Визуально почти идентично.\n                        vec2 q = vec2(fbm(p * 1.8 + vec2(uTime * 0.07, 0.0)),\n                                      fbm(p * 1.8 + vec2(5.2, uTime * 0.09)));\n                        float density = fbm(p * (1.6 + uTreble * 1.5) + 3.2 * q + uTime * 0.05);\n                        density = pow(density, 1.4);\n\n                        // Неоновая палитра: интерполяция orange → cyan → magenta\n                        // по density и добавка «оранжевой» энергии от bass.\n                        vec3 cOrange  = vec3(1.00, 0.42, 0.12);\n                        vec3 cCyan    = vec3(0.20, 0.75, 1.00);\n                        vec3 cMagenta = vec3(0.85, 0.28, 0.95);\n                        vec3 col = mix(cCyan, cMagenta, smoothstep(0.35, 0.75, density));\n                        col = mix(col, cOrange, smoothstep(0.55, 0.90, density) * (0.35 + uBassPeak * 0.9));\n\n                        // Плотность модулирует «яркость дыма»\n                        float energy = density * (0.08 + uMid * 0.12 + uBassPeak * 0.25);\n\n                        // ── (3) BASS IMPULSE — вспышка из эмиттера ──\n                        // Позиция уже плавает по эллипсу (см. JS uEmitter).\n                        vec2 ep = uEmitter * asp;\n                        float d = length(p - ep);\n                        // Мягкий гауссоподобный «шар» с радиусом ~0.35 aspect-units\n                        float pulse = exp(-d * d / (0.15 + uBassPeak * 0.35));\n                        // Плюс волновой фронт (расширяющееся кольцо на пиках)\n                        float ring = exp(-pow((d - uBassPeak * 0.9) / 0.06, 2.0)) * uBassPeak;\n                        vec3 impulseCol = cOrange * (pulse * (0.20 + uBassPeak * 1.4) + ring * 0.9);\n\n                        // ── (4) ADD (accumulate) в feedback ──\n                        vec3 addColor = col * energy + impulseCol;\n                        vec3 sumColor = prev.rgb + addColor;\n\n                        // Мягкий клип (soft roll-off), чтобы HDR-накопление не белело.\n                        sumColor = sumColor / (1.0 + sumColor * 0.35);\n\n                        fragColor = vec4(sumColor, 1.0);\n                    }`;
-        const fsPresent = `#version 300 es\n                    precision highp float;\n                    in vec2 vUV;\n                    out vec4 fragColor;\n                    uniform sampler2D uTex;\n                    uniform vec2 uRes;\n                    void main() {\n                        vec3 c = texture(uTex, vUV).rgb;\n                        // Небольшой контраст и лёгкая гамма\n                        c = pow(c, vec3(0.92));\n                        // Виньетка — глубокий чёрный по краям\n                        vec2 d = vUV - 0.5;\n                        float vig = smoothstep(0.85, 0.25, length(d) * 1.05);\n                        c *= mix(0.55, 1.0, vig);\n                        // Финальный чёрный фон гарантирован\n                        fragColor = vec4(c, 1.0);\n                    }`;
+        const fsSim = `#version 300 es\n                    precision highp float;\n                    in vec2 vUV;\n                    out vec4 fragColor;\n\n                    uniform sampler2D uPrev;      // previous frame (feedback)\n                    uniform vec2  uRes;\n                    uniform float uTime;\n                    uniform float uDT;\n                    uniform float uBass;          // 0..~1.5 (with overshoot on peaks)\n                    uniform float uMid;\n                    uniform float uTreble;\n                    uniform float uBassPeak;      // short impulse on bass hit\n                    uniform vec2  uEmitter;       // NDC coordinate of "drop"\n\n                    // ─── noise ───\n                    // Simple value-noise + FBM. Organic enough for fluid look.\n                    float hash(vec2 p) {\n                        p = fract(p * vec2(123.34, 456.21));\n                        p += dot(p, p + 45.32);\n                        return fract(p.x * p.y);\n                    }\n                    float vnoise(vec2 p) {\n                        vec2 i = floor(p), f = fract(p);\n                        float a = hash(i);\n                        float b = hash(i + vec2(1.0, 0.0));\n                        float c = hash(i + vec2(0.0, 1.0));\n                        float d = hash(i + vec2(1.0, 1.0));\n                        vec2 u = f * f * (3.0 - 2.0 * f);\n                        return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;\n                    }\n                    // ── OPTIMIZATION: 3 octaves instead of 4 (−25% vnoise calls).\n                    //    On smoke with domain-warping the difference is barely visible,\n                    //    but FPS grows noticeably.\n                    float fbm(vec2 p) {\n                        float s = 0.0, a = 0.5, freq = 1.0;\n                        for (int i = 0; i < 3; i++) {\n                            s += a * vnoise(p * freq);\n                            freq *= 2.13;   // чуть более "золотой" multiplier — compensates lost octave\n                            a *= 0.5;\n                        }\n                        return s;\n                    }\n                    // ── OPTIMIZATION: velocity field is now ANALYTICAL,\n                    //    without any fbm calls. Previously it cost 4×fbm=12\n                    //    vnoise calls per pixel, now — 2 sin+cos.\n                    //    Visually gives the same "liquid" swirl — just\n                    //    field built from two low-frequency sinusoids,\n                    //    shifted in time. Curl computed analytically.\n                    vec2 velocityField(vec2 p, float t) {\n                        float a = sin(p.x * 1.7 + t * 0.6) * cos(p.y * 1.3 - t * 0.4);\n                        float b = cos(p.x * 1.2 - t * 0.5) * sin(p.y * 1.9 + t * 0.7);\n                        return vec2(a - b, a + b) * 0.7;\n                    }\n\n                    void main() {\n                        vec2 uv = vUV;\n                        vec2 asp = vec2(uRes.x / uRes.y, 1.0);\n                        vec2 p = (uv - 0.5) * asp;\n\n                        // ── (1) ADVECTION: чandтаем предыдущandй кадр by смanotherнным UV ──\n                        // Velocity depends on mid — "wind blows" to music.\n                        float velScale = (0.006 + uMid * 0.030) * uDT * 60.0;\n                        vec2 vel = velocityField(p * 1.4, uTime * 0.4);\n                        vec2 advUV = uv - vel * velScale;\n                        vec4 prev = texture(uPrev, advUV);\n\n                        // Smooth decay ("smoke slowly fades").\n                        // More bass — slower fade (charge lasts longer).\n                        float decay = mix(0.972, 0.987, clamp(uBass * 0.7, 0.0, 1.0));\n                        prev.rgb *= decay;\n\n                        // ── (2) DOMAIN WARPING FBM — fresh energy ──\n                        // OPTIMIZATION: removed intermediate field r (2 fbm),\n                        // use q directly for warping. Remaining 3 fbm\n                        // instead of 5 (−40%). Visually almost identical.\n                        vec2 q = vec2(fbm(p * 1.8 + vec2(uTime * 0.07, 0.0)),\n                                      fbm(p * 1.8 + vec2(5.2, uTime * 0.09)));\n                        float density = fbm(p * (1.6 + uTreble * 1.5) + 3.2 * q + uTime * 0.05);\n                        density = pow(density, 1.4);\n\n                        // Neon palette: interpolation orange → cyan → magenta\n                        // by density and addition of "orange" energy from bass.\n                        vec3 cOrange  = vec3(1.00, 0.42, 0.12);\n                        vec3 cCyan    = vec3(0.20, 0.75, 1.00);\n                        vec3 cMagenta = vec3(0.85, 0.28, 0.95);\n                        vec3 col = mix(cCyan, cMagenta, smoothstep(0.35, 0.75, density));\n                        col = mix(col, cOrange, smoothstep(0.55, 0.90, density) * (0.35 + uBassPeak * 0.9));\n\n                        // Density modulates "smoke brightness"\n                        float energy = density * (0.08 + uMid * 0.12 + uBassPeak * 0.25);\n\n                        // ── (3) BASS IMPULSE — flash from emitter ──\n                        // Position already floats on ellipse (see JS uEmitter).\n                        vec2 ep = uEmitter * asp;\n                        float d = length(p - ep);\n                        // Soft Gaussian-like "sphere" with radius ~0.35 aspect-units\n                        float pulse = exp(-d * d / (0.15 + uBassPeak * 0.35));\n                        // Plus wave front (expanding ring on peaks)\n                        float ring = exp(-pow((d - uBassPeak * 0.9) / 0.06, 2.0)) * uBassPeak;\n                        vec3 impulseCol = cOrange * (pulse * (0.20 + uBassPeak * 1.4) + ring * 0.9);\n\n                        // ── (4) ADD (accumulate) into feedback ──\n                        vec3 addColor = col * energy + impulseCol;\n                        vec3 sumColor = prev.rgb + addColor;\n\n                        // Soft clip (soft roll-off), so HDR accumulation does not bleach out.\n                        sumColor = sumColor / (1.0 + sumColor * 0.35);\n\n                        fragColor = vec4(sumColor, 1.0);\n                    }`;
+        const fsPresent = `#version 300 es\n                    precision highp float;\n                    in vec2 vUV;\n                    out vec4 fragColor;\n                    uniform sampler2D uTex;\n                    uniform vec2 uRes;\n                    void main() {\n                        vec3 c = texture(uTex, vUV).rgb;\n                        // Notбольшой контраст and лёгкая гамма\n                        c = pow(c, vec3(0.92));\n                        // Вandньетка — глубокandй чёрный by краям\n                        vec2 d = vUV - 0.5;\n                        float vig = smoothstep(0.85, 0.25, length(d) * 1.05);\n                        c *= mix(0.55, 1.0, vig);\n                        // Фandonльный чёрный фон гарантandроintoан\n                        fragColor = vec4(c, 1.0);\n                    }`;
         this.simProg = this._createProgram(gl, vsFullscreen, fsSim);
         this.presentProg = this._createProgram(gl, vsFullscreen, fsPresent);
         if (!this.simProg || !this.presentProg) return false;
@@ -4256,7 +4256,7 @@ async function loadSubjectsFromZipBuffer(buffer) {
             const trimmed = g.cubesRaw.trim().replace(/,\s*$/, "");
             rawArr = JSON.parse(trimmed.startsWith("[") ? trimmed : "[" + trimmed + "]");
         } catch (e) {
-            console.warn('[MapCG] Не удалось разобрать JSON модели "' + name + '":', e);
+            console.warn('[MapCG] Not managed parse JSON model "' + name + '":', e);
             continue;
         }
         const cubes = parseSubjectCubes(rawArr);
@@ -4306,7 +4306,7 @@ async function initSubjectsCollection() {
             }
         }
     } catch (e) {
-        console.warn('[MapCG] CollectionOfSubjects.zip недоступен (офлайн/локальный запуск) — используйте кнопку "+ ADD COLLECTION".');
+        console.warn('[MapCG] CollectionOfSubjects.zip notдоступен (offline/local launch) — andсbyльзуйте кbutпку "+ ADD COLLECTION".');
     } finally {
         subjectsNetworkLoading = false;
     }
@@ -4762,7 +4762,7 @@ function parseGbmapLegacyTextFormat(text) {
     const lines = text.split(/\r\n|\n/);
     let idx = 0;
     const next = () => {
-        if (idx >= lines.length) throw new Error("Неожиданный конец файла .gbmap");
+        if (idx >= lines.length) throw new Error("Notожandданный коnotц файла .gbmap");
         return lines[idx++];
     };
     const nextNum = () => {
@@ -4776,7 +4776,7 @@ function parseGbmapLegacyTextFormat(text) {
     const nextBool = () => next() === "True";
     const expectSep = () => {
         const v = next();
-        if (v !== "§") throw new Error('Файл .gbmap повреждён: ожидался разделитель "§"');
+        if (v !== "§") throw new Error('File .gbmap damaged: ожandдался разделandтель "§"');
     };
     next();
     const name = next();
@@ -4904,14 +4904,14 @@ function parseGbmapFile(text) {
         try {
             data = JSON.parse(trimmed);
         } catch (e) {
-            throw new Error("Файл .gbmap повреждён или не является корректным JSON");
+            throw new Error("File .gbmap damaged andлand not яintoляется корректным JSON");
         }
         return data;
     }
     try {
         return parseGbmapLegacyTextFormat(trimmed);
     } catch (e) {
-        throw new Error("Не удалось распознать формат .gbmap: " + (e.message || e));
+        throw new Error("Not managed расbyзonть формат .gbmap: " + (e.message || e));
     }
 }
 
@@ -5739,7 +5739,7 @@ const engine = {
                 }
             },
             vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-            fragmentShader: `\n                        precision highp float;\n                        uniform sampler2D tDiffuse;\n                        uniform sampler2D tDepth;\n                        uniform vec2      resolution;       /* full output size — aspect + IGN noise */\n                        uniform vec2      uDepthResolution; /* half-res depth texture — texel offsets */\n                        uniform float     intensity;\n                        uniform float     bias;\n                        uniform float     uFar;\n                        uniform float     uTanHalfFovX;\n                        uniform float     uTanHalfFovY;\n                        varying vec2 vUv;\n\n                        /* Распаковка линейной глубины из RGBA8 (кросс-платформенно, без аппаратных depth-текстур) */\n                        float unpackDepth(vec4 rgba) {\n                            const vec4 bitShifts = vec4(1.0/16777216.0, 1.0/65536.0, 1.0/256.0, 1.0);\n                            return dot(rgba, bitShifts);\n                        }\n                        /* .x = линейная глубина (view-space -Z, метры), .y = 1.0 если это «небо» (нет геометрии) */\n                        vec2 readDepth(vec2 uv) {\n                            vec4 raw = texture2D(tDepth, uv);\n                            if (raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);\n                            return vec2(unpackDepth(raw) * uFar, 0.0);\n                        }\n                        /* Reconstruct view-space position from UV + known linear depth */\n                        vec3 getViewPos(vec2 uv, float linZ) {\n                            vec2 ndc = uv * 2.0 - 1.0;\n                            return vec3(ndc.x * uTanHalfFovX * linZ, ndc.y * uTanHalfFovY * linZ, -linZ);\n                        }\n\n                        /* Interleaved Gradient Noise — temporally stable, no banding */\n                        float IGN(vec2 pix) {\n                            return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));\n                        }\n\n                        void main() {\n                            vec4  col  = texture2D(tDiffuse, vUv);\n                            vec2  centerD = readDepth(vUv);\n                            if (centerD.y > 0.5) { gl_FragColor = col; return; }\n                            \n                            // Safety: if AO intensity is very low, skip to avoid black screen\n                            if (intensity < 0.15) { gl_FragColor = col; return; }\n\n                            vec2  texel  = 1.0 / uDepthResolution; /* depth-tex res for correct neighbor offsets */\n                            float aspect = resolution.x / resolution.y;\n\n                            /* ── View-space position + depth ───────────────────────────────── */\n                            vec3  pos   = getViewPos(vUv, centerD.x);\n                            float depth = max(0.001, centerD.x);\n\n                            /* ── Stable normal reconstruction (view-space) ─────────────────────\n                               Previously used a hard if/else "best neighbour" pick based on which\n                               side had the smaller depth delta. On perfectly flat, coplanar seams\n                               (adjacent unit cubes sharing an edge) the L/R (or U/D) depth deltas\n                               are nearly identical — sub-pixel camera jitter between frames flips\n                               which side "wins" every frame, causing the reconstructed normal to\n                               jump discretely along cube seams. That produced moving dark bands\n                               that were not real corners. Fix: always use a symmetric central\n                               difference, but softly fall back toward the closer sample only when\n                               a real depth discontinuity (edge/corner) is detected, using a smooth\n                               weight instead of a hard branch — no more frame-to-frame flip. */\n                            vec2 dR  = readDepth(vUv + vec2( texel.x, 0.0));\n                            vec2 dL  = readDepth(vUv - vec2( texel.x, 0.0));\n                            vec2 dU  = readDepth(vUv + vec2(0.0,  texel.y));\n                            vec2 dDn = readDepth(vUv - vec2(0.0,  texel.y));\n\n                            vec3 pR = getViewPos(vUv + vec2( texel.x, 0.0), dR.x);\n                            vec3 pL = getViewPos(vUv - vec2( texel.x, 0.0), dL.x);\n                            vec3 pU = getViewPos(vUv + vec2(0.0,  texel.y), dU.x);\n                            vec3 pD = getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);\n\n                            /* Depth-discontinuity weight: 0 = hard edge (use single closer side),\n                               1 = flat / continuous (use symmetric central difference). A smooth\n                               transition between the two removes the per-frame flip entirely. */\n                            float edgeScale = max(0.001, centerD.x) * 0.06;\n                            float wx = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dR.x - dL.x));\n                            float wy = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dU.x - dDn.x));\n\n                            vec3 dXCentral = (pR - pL) * 0.5;\n                            vec3 dYCentral = (pU - pD) * 0.5;\n                            vec3 dXEdge = (abs(dR.x - centerD.x) < abs(centerD.x - dL.x)) ? (pR - pos) : (pos - pL);\n                            vec3 dYEdge = (abs(dU.x - centerD.x) < abs(centerD.x - dDn.x)) ? (pU - pos) : (pos - pD);\n\n                            vec3 dX = mix(dXEdge, dXCentral, wx);\n                            vec3 dY = mix(dYEdge, dYCentral, wy);\n\n                            vec3 N = normalize(cross(dX, dY));\n                            /* Ensure N points toward camera (+z in OpenGL view space) */\n                            if (N.z < 0.0) N = -N;\n\n                            /* ── Per-pixel rotation — IGN gives stable, uncorrelated noise ── */\n                            float rotA = IGN(floor(vUv * resolution)) * 6.28318530;\n\n                            /* ── RTX-style two-scale AO: tight contact pass (crisp corner darkening)\n                               + wide bounce pass (soft broad-range falloff, like GI occlusion in\n                               ray-traced renders). Combining a small tight radius with a larger soft\n                               radius makes corners read as dense, dark creases instead of a uniform\n                               grey haze — the hallmark of screen-space GI/AO in modern engines. */\n                            const float WRAD_TIGHT = 0.55;  /* crisp contact radius (units) — corners, seams */\n                            const float WRAD_WIDE  = 2.6;   /* broad soft radius (units) — room-scale occlusion */\n\n                            float screenRY_T = clamp(WRAD_TIGHT / (depth * uTanHalfFovY * 2.0), 0.003, 0.09);\n                            float screenRX_T = screenRY_T / aspect;\n                            float screenRY_W = clamp(WRAD_WIDE  / (depth * uTanHalfFovY * 2.0), 0.006, 0.16);\n                            float screenRX_W = screenRY_W / aspect;\n\n                            /* ── golden-angle hemisphere sampling, evaluated at two radii per ring ── */\n                            // Reduced from 16→8→6 samples: each pixel does 2 depth reads per sample\n                            // (tight+wide), so this is the AO pass's main cost. 6 is still enough\n                            // for a stable result since the tight/wide combine + smoothstep already\n                            // hides sampling noise.\n                            const int   S  = 6;\n                            const float GA = 2.39996322972865332;\n                            float aoTight = 0.0, aoWide = 0.0;\n                            float wTight  = 0.0, wWide  = 0.0;\n\n                            for (int i = 0; i < S; i++) {\n                                float fi    = float(i) + 0.5;\n                                float r     = sqrt(fi / float(S));\n                                float angle = rotA + fi * GA;\n                                vec2  dirT  = vec2(cos(angle) * r, sin(angle) * r);\n\n                                vec2 uvT = clamp(vUv + vec2(dirT.x * screenRX_T, dirT.y * screenRY_T), vec2(0.001), vec2(0.999));\n                                vec2 sDT = readDepth(uvT);\n                                if (sDT.y > 0.5) { wTight += 1.0; } else {\n                                    vec3  sPosT = getViewPos(uvT, sDT.x);\n                                    vec3  sVecT = sPosT - pos;\n                                    float sLenT = length(sVecT);\n                                    if (sLenT < 0.001) { wTight += 1.0; }\n                                    else {\n                                        float nDotT  = dot(N, sVecT / sLenT);\n                                        float rCheckT = 1.0 - smoothstep(0.0, WRAD_TIGHT, sLenT);\n                                        aoTight += max(0.0, nDotT - bias) * rCheckT;\n                                        wTight  += 1.0;\n                                    }\n                                }\n\n                                vec2 uvW = clamp(vUv + vec2(dirT.x * screenRX_W, dirT.y * screenRY_W), vec2(0.001), vec2(0.999));\n                                vec2 sDW = readDepth(uvW);\n                                if (sDW.y > 0.5) { wWide += 1.0; } else {\n                                    vec3  sPosW = getViewPos(uvW, sDW.x);\n                                    vec3  sVecW = sPosW - pos;\n                                    float sLenW = length(sVecW);\n                                    if (sLenW < 0.001) { wWide += 1.0; }\n                                    else {\n                                        float nDotW  = dot(N, sVecW / sLenW);\n                                        float rCheckW = 1.0 - smoothstep(0.0, WRAD_WIDE, sLenW);\n                                        aoWide += max(0.0, nDotW - bias * 0.5) * rCheckW;\n                                        wWide  += 1.0;\n                                    }\n                                }\n                            }\n\n                            if (wTight > 0.0) aoTight /= wTight;\n                            if (wWide  > 0.0) aoWide  /= wWide;\n\n                            aoTight = clamp(aoTight * intensity * 3.6, 0.0, 0.75);\n                            aoWide  = clamp(aoWide  * intensity * 2.0, 0.0, 0.55);\n                            aoTight = aoTight * aoTight * (3.0 - 2.0 * aoTight);\n                            aoWide  = aoWide  * aoWide  * (3.0 - 2.0 * aoWide);\n\n                            /* Combine: tight dominates in creases, wide fills in the rest. */\n                            float ao = 1.0 - (1.0 - aoTight) * (1.0 - aoWide * 0.6);\n                            ao = clamp(ao, 0.0, 0.88);\n\n                            /* Deep, punchy corner shadows (RTX-like) while still protecting midtones. */\n                            float aoFactor = 1.0 - ao * mix(0.35, 0.62, aoTight);\n                            gl_FragColor = vec4(col.rgb * aoFactor, col.a);\n                        }\n                    `
+            fragmentShader: `\n                        precision highp float;\n                        uniform sampler2D tDiffuse;\n                        uniform sampler2D tDepth;\n                        uniform vec2      resolution;       /* full output size — aspect + IGN noise */\n                        uniform vec2      uDepthResolution; /* half-res depth texture — texel offsets */\n                        uniform float     intensity;\n                        uniform float     bias;\n                        uniform float     uFar;\n                        uniform float     uTanHalfFovX;\n                        uniform float     uTanHalfFovY;\n                        varying vec2 vUv;\n\n                        /* Unpacking лandnotйbutй глубandны andз RGBA8 (кросс-платформенbut, without hardware depth-textures) */\n                        float unpackDepth(vec4 rgba) {\n                            const vec4 bitShifts = vec4(1.0/16777216.0, 1.0/65536.0, 1.0/256.0, 1.0);\n                            return dot(rgba, bitShifts);\n                        }\n                        /* .x = лandnotйonя глубandon (view-space -Z, метры), .y = 1.0 if это «notбо» (notт геометрandand) */\n                        vec2 readDepth(vec2 uv) {\n                            vec4 raw = texture2D(tDepth, uv);\n                            if (raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);\n                            return vec2(unpackDepth(raw) * uFar, 0.0);\n                        }\n                        /* Reconstruct view-space position from UV + known linear depth */\n                        vec3 getViewPos(vec2 uv, float linZ) {\n                            vec2 ndc = uv * 2.0 - 1.0;\n                            return vec3(ndc.x * uTanHalfFovX * linZ, ndc.y * uTanHalfFovY * linZ, -linZ);\n                        }\n\n                        /* Interleaved Gradient Noise — temporally stable, no banding */\n                        float IGN(vec2 pix) {\n                            return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));\n                        }\n\n                        void main() {\n                            vec4  col  = texture2D(tDiffuse, vUv);\n                            vec2  centerD = readDepth(vUv);\n                            if (centerD.y > 0.5) { gl_FragColor = col; return; }\n                            \n                            // Safety: if AO intensity is very low, skip to avoid black screen\n                            if (intensity < 0.15) { gl_FragColor = col; return; }\n\n                            vec2  texel  = 1.0 / uDepthResolution; /* depth-tex res for correct neighbor offsets */\n                            float aspect = resolution.x / resolution.y;\n\n                            /* ── View-space position + depth ───────────────────────────────── */\n                            vec3  pos   = getViewPos(vUv, centerD.x);\n                            float depth = max(0.001, centerD.x);\n\n                            /* ── Stable normal reconstruction (view-space) ─────────────────────\n                               Previously used a hard if/else "best neighbour" pick based on which\n                               side had the smaller depth delta. On perfectly flat, coplanar seams\n                               (adjacent unit cubes sharing an edge) the L/R (or U/D) depth deltas\n                               are nearly identical — sub-pixel camera jitter between frames flips\n                               which side "wins" every frame, causing the reconstructed normal to\n                               jump discretely along cube seams. That produced moving dark bands\n                               that were not real corners. Fix: always use a symmetric central\n                               difference, but softly fall back toward the closer sample only when\n                               a real depth discontinuity (edge/corner) is detected, using a smooth\n                               weight instead of a hard branch — no more frame-to-frame flip. */\n                            vec2 dR  = readDepth(vUv + vec2( texel.x, 0.0));\n                            vec2 dL  = readDepth(vUv - vec2( texel.x, 0.0));\n                            vec2 dU  = readDepth(vUv + vec2(0.0,  texel.y));\n                            vec2 dDn = readDepth(vUv - vec2(0.0,  texel.y));\n\n                            vec3 pR = getViewPos(vUv + vec2( texel.x, 0.0), dR.x);\n                            vec3 pL = getViewPos(vUv - vec2( texel.x, 0.0), dL.x);\n                            vec3 pU = getViewPos(vUv + vec2(0.0,  texel.y), dU.x);\n                            vec3 pD = getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);\n\n                            /* Depth-discontinuity weight: 0 = hard edge (use single closer side),\n                               1 = flat / continuous (use symmetric central difference). A smooth\n                               transition between the two removes the per-frame flip entirely. */\n                            float edgeScale = max(0.001, centerD.x) * 0.06;\n                            float wx = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dR.x - dL.x));\n                            float wy = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dU.x - dDn.x));\n\n                            vec3 dXCentral = (pR - pL) * 0.5;\n                            vec3 dYCentral = (pU - pD) * 0.5;\n                            vec3 dXEdge = (abs(dR.x - centerD.x) < abs(centerD.x - dL.x)) ? (pR - pos) : (pos - pL);\n                            vec3 dYEdge = (abs(dU.x - centerD.x) < abs(centerD.x - dDn.x)) ? (pU - pos) : (pos - pD);\n\n                            vec3 dX = mix(dXEdge, dXCentral, wx);\n                            vec3 dY = mix(dYEdge, dYCentral, wy);\n\n                            vec3 N = normalize(cross(dX, dY));\n                            /* Ensure N points toward camera (+z in OpenGL view space) */\n                            if (N.z < 0.0) N = -N;\n\n                            /* ── Per-pixel rotation — IGN gives stable, uncorrelated noise ── */\n                            float rotA = IGN(floor(vUv * resolution)) * 6.28318530;\n\n                            /* ── RTX-style two-scale AO: tight contact pass (crisp corner darkening)\n                               + wide bounce pass (soft broad-range falloff, like GI occlusion in\n                               ray-traced renders). Combining a small tight radius with a larger soft\n                               radius makes corners read as dense, dark creases instead of a uniform\n                               grey haze — the hallmark of screen-space GI/AO in modern engines. */\n                            const float WRAD_TIGHT = 0.55;  /* crisp contact radius (units) — corners, seams */\n                            const float WRAD_WIDE  = 2.6;   /* broad soft radius (units) — room-scale occlusion */\n\n                            float screenRY_T = clamp(WRAD_TIGHT / (depth * uTanHalfFovY * 2.0), 0.003, 0.09);\n                            float screenRX_T = screenRY_T / aspect;\n                            float screenRY_W = clamp(WRAD_WIDE  / (depth * uTanHalfFovY * 2.0), 0.006, 0.16);\n                            float screenRX_W = screenRY_W / aspect;\n\n                            /* ── golden-angle hemisphere sampling, evaluated at two radii per ring ── */\n                            // Reduced from 16→8→6 samples: each pixel does 2 depth reads per sample\n                            // (tight+wide), so this is the AO pass's main cost. 6 is still enough\n                            // for a stable result since the tight/wide combine + smoothstep already\n                            // hides sampling noise.\n                            const int   S  = 6;\n                            const float GA = 2.39996322972865332;\n                            float aoTight = 0.0, aoWide = 0.0;\n                            float wTight  = 0.0, wWide  = 0.0;\n\n                            for (int i = 0; i < S; i++) {\n                                float fi    = float(i) + 0.5;\n                                float r     = sqrt(fi / float(S));\n                                float angle = rotA + fi * GA;\n                                vec2  dirT  = vec2(cos(angle) * r, sin(angle) * r);\n\n                                vec2 uvT = clamp(vUv + vec2(dirT.x * screenRX_T, dirT.y * screenRY_T), vec2(0.001), vec2(0.999));\n                                vec2 sDT = readDepth(uvT);\n                                if (sDT.y > 0.5) { wTight += 1.0; } else {\n                                    vec3  sPosT = getViewPos(uvT, sDT.x);\n                                    vec3  sVecT = sPosT - pos;\n                                    float sLenT = length(sVecT);\n                                    if (sLenT < 0.001) { wTight += 1.0; }\n                                    else {\n                                        float nDotT  = dot(N, sVecT / sLenT);\n                                        float rCheckT = 1.0 - smoothstep(0.0, WRAD_TIGHT, sLenT);\n                                        aoTight += max(0.0, nDotT - bias) * rCheckT;\n                                        wTight  += 1.0;\n                                    }\n                                }\n\n                                vec2 uvW = clamp(vUv + vec2(dirT.x * screenRX_W, dirT.y * screenRY_W), vec2(0.001), vec2(0.999));\n                                vec2 sDW = readDepth(uvW);\n                                if (sDW.y > 0.5) { wWide += 1.0; } else {\n                                    vec3  sPosW = getViewPos(uvW, sDW.x);\n                                    vec3  sVecW = sPosW - pos;\n                                    float sLenW = length(sVecW);\n                                    if (sLenW < 0.001) { wWide += 1.0; }\n                                    else {\n                                        float nDotW  = dot(N, sVecW / sLenW);\n                                        float rCheckW = 1.0 - smoothstep(0.0, WRAD_WIDE, sLenW);\n                                        aoWide += max(0.0, nDotW - bias * 0.5) * rCheckW;\n                                        wWide  += 1.0;\n                                    }\n                                }\n                            }\n\n                            if (wTight > 0.0) aoTight /= wTight;\n                            if (wWide  > 0.0) aoWide  /= wWide;\n\n                            aoTight = clamp(aoTight * intensity * 3.6, 0.0, 0.75);\n                            aoWide  = clamp(aoWide  * intensity * 2.0, 0.0, 0.55);\n                            aoTight = aoTight * aoTight * (3.0 - 2.0 * aoTight);\n                            aoWide  = aoWide  * aoWide  * (3.0 - 2.0 * aoWide);\n\n                            /* Combine: tight dominates in creases, wide fills in the rest. */\n                            float ao = 1.0 - (1.0 - aoTight) * (1.0 - aoWide * 0.6);\n                            ao = clamp(ao, 0.0, 0.88);\n\n                            /* Deep, punchy corner shadows (RTX-like) while still protecting midtones. */\n                            float aoFactor = 1.0 - ao * mix(0.35, 0.62, aoTight);\n                            gl_FragColor = vec4(col.rgb * aoFactor, col.a);\n                        }\n                    `
         };
         this.ssaoPass = new ShaderPass(_aoShader);
         this.ssaoPass.material.depthTest = false;
@@ -5786,7 +5786,7 @@ const engine = {
                 }
             },
             vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-            fragmentShader: `\n                        precision highp float;\n                        uniform sampler2D tDiffuse;\n                        uniform sampler2D tDepth;\n                        uniform sampler2D tPrevFrame;\n                        uniform vec2      resolution;       /* full output size — IGN + edge fade */\n                        uniform vec2      uDepthResolution; /* half-res depth texture — texel offsets */\n                        uniform mat4      proj;\n                        uniform mat4      uPrevViewProj;     /* previous frame's world→clip matrix */\n                        uniform mat4      uInvView;          /* this frame's view→world matrix */\n                        uniform vec3      uCamPos;           /* this frame's world-space camera position */\n                        uniform float     uHistoryValid;     /* 0 = first frame / just resized, skip blend */\n                        uniform float     uCameraMoved;      /* 0..1 — larger camera motion → trust history less */\n                        uniform float     rtStrength;\n                        uniform float     uSharpness;\n                        uniform float     uFar;\n                        uniform float     uTanHalfFovX;\n                        uniform float     uTanHalfFovY;\n                        varying vec2 vUv;\n\n                        /* Распаковка линейной глубины из RGBA8 (кросс-платформенно, без аппаратных depth-текстур) */\n                        float unpackDepth(vec4 rgba) {\n                            const vec4 bitShifts = vec4(1.0/16777216.0, 1.0/65536.0, 1.0/256.0, 1.0);\n                            return dot(rgba, bitShifts);\n                        }\n                        /* .x = линейная глубина (view-space -Z, метры), .y = 1.0 если это «небо» (нет геометрии) */\n                        vec2 readDepth(vec2 uv) {\n                            vec4 raw = texture2D(tDepth, uv);\n                            if (raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);\n                            return vec2(unpackDepth(raw) * uFar, 0.0);\n                        }\n\n                        vec3 getViewPos(vec2 uv, float linZ) {\n                            vec2 ndc = uv * 2.0 - 1.0;\n                            return vec3(ndc.x * uTanHalfFovX * linZ, ndc.y * uTanHalfFovY * linZ, -linZ);\n                        }\n\n                        vec2 viewToUv(vec3 p) {\n                            vec4 clip = proj * vec4(p, 1.0);\n                            return (clip.xy / clip.w) * 0.5 + 0.5;\n                        }\n\n                        float IGN(vec2 pix) {\n                            return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));\n                        }\n\n                        /* Reads the reflection colour with a small roughness-weighted multi-tap\n                           blur. A single texel lookup at the hit point is what made reflections\n                           look blocky/pixelated at a distance (each screen pixel maps to a large\n                           world area). Averaging a few neighbouring taps softens that without\n                           costing extra rays. */\n                        vec3 resolveReflectionColor(vec2 hitUV, float roughness) {\n                            vec2 px = 1.0 / resolution;\n                            float r = 1.0 + roughness * 2.5;\n                            vec3 sum = texture2D(tDiffuse, hitUV).rgb * 4.0;\n                            sum += texture2D(tDiffuse, hitUV + vec2( px.x,  0.0) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2(-px.x,  0.0) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2( 0.0,  px.y) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2( 0.0, -px.y) * r).rgb;\n                            return sum / 8.0;\n                        }\n\n                        void main() {\n                            vec4  col  = texture2D(tDiffuse, vUv);\n                            vec2  centerD = readDepth(vUv);\n                            /* Небо — отражать нечего */\n                            if (centerD.y > 0.5) { gl_FragColor = col; return; }\n\n                            vec2  texel = 1.0 / uDepthResolution; /* depth-tex res for correct neighbor taps */\n                            vec3  pos   = getViewPos(vUv, centerD.x);\n\n                            /* ── Стабильная реконструкция нормали (см. AO-шейдер выше — тот же fix:\n                               центральная разность на плоских участках, чтобы швы кубов не давали\n                               скачущую нормаль и, как следствие, дрожащие отражения). ── */\n                            vec2 dR  = readDepth(vUv + vec2( texel.x, 0.0));\n                            vec2 dL  = readDepth(vUv - vec2( texel.x, 0.0));\n                            vec2 dU  = readDepth(vUv + vec2(0.0,  texel.y));\n                            vec2 dDn = readDepth(vUv - vec2(0.0,  texel.y));\n                            vec3 pR = getViewPos(vUv + vec2( texel.x, 0.0), dR.x);\n                            vec3 pL = getViewPos(vUv - vec2( texel.x, 0.0), dL.x);\n                            vec3 pU = getViewPos(vUv + vec2(0.0,  texel.y), dU.x);\n                            vec3 pD = getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);\n                            float edgeScale = max(0.001, centerD.x) * 0.06;\n                            float wx = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dR.x - dL.x));\n                            float wy = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dU.x - dDn.x));\n                            vec3 dXEdge = (abs(dR.x - centerD.x) < abs(centerD.x - dL.x)) ? (pR - pos) : (pos - pL);\n                            vec3 dYEdge = (abs(dU.x - centerD.x) < abs(centerD.x - dDn.x)) ? (pU - pos) : (pos - pD);\n                            vec3 dX = mix(dXEdge, (pR - pL) * 0.5, wx);\n                            vec3 dY = mix(dYEdge, (pU - pD) * 0.5, wy);\n                            vec3 N = normalize(cross(dX, dY));\n                            if (N.z < 0.0) N = -N;\n\n                            /* ── Трассировка отражённого луча в view-space ── */\n                            vec3  V = normalize(pos);           /* камера в (0,0,0) */\n                            float roughness = clamp(1.0 - uSharpness, 0.0, 1.0);\n                            vec3 randDir = vec3(IGN(vUv * resolution + 0.1) - 0.5, IGN(vUv * resolution + 0.2) - 0.5, IGN(vUv * resolution + 0.3) - 0.5);\n                            vec3  R = normalize(reflect(V, N) + randDir * roughness * 0.06);\n                            float jitter    = IGN(floor(vUv * resolution));\n                            /* Perf: dropped 22→14 steps. Temporal reprojection (below) accumulates\n                               samples across frames, so a single frame's ray no longer needs to be\n                               this precise — the history blend hides the coarser marching, but the\n                               GPU cost of the most expensive pass in the whole pipeline drops by\n                               ~35%. This was the single biggest FPS cost in the renderer. */\n                            const int   STEPS   = 14;\n                            const float MAXDIST = 34.0;\n                            float stepLen   = MAXDIST / float(STEPS);\n                            float thickness = 0.9;\n\n                            float hit = 0.0;\n                            vec2  hitUV = vUv;\n                            float t = stepLen * (0.35 + 0.65 * jitter);\n                            float prevT = 0.0;\n                            for (int i = 0; i < STEPS; i++) {\n                                vec3 p  = pos + R * t;\n                                if (p.z > -0.05) break;                 /* луч ушёл за камеру */\n                                vec2 uv2 = viewToUv(p);\n                                if (uv2.x < 0.0 || uv2.x > 1.0 || uv2.y < 0.0 || uv2.y > 1.0) break;\n                                vec2 sD = readDepth(uv2);\n                                if (sD.y < 0.5) {\n                                    float sceneZ = -sD.x;\n                                    float diff   = sceneZ - p.z;        /* >0 когда луч зашёл за поверхность */\n                                    if (diff > 0.0 && diff < thickness + t * 0.06) {\n                                        /* Binary refinement: 3 iterations is enough precision once\n                                           temporal accumulation smooths the result over several frames —\n                                           trimmed from 4 for perf, edge crispness loss is not visible\n                                           after the history blend. */\n                                        float lo = prevT, hi = t;\n                                        for (int j = 0; j < 3; j++) {\n                                            float mid = (lo + hi) * 0.5;\n                                            vec3  pm  = pos + R * mid;\n                                            vec2  uvm = viewToUv(pm);\n                                            vec2  sDm = readDepth(uvm);\n                                            if (sDm.y < 0.5 && (-sDm.x - pm.z) > 0.0) { hi = mid; hitUV = uvm; }\n                                            else lo = mid;\n                                        }\n                                        hit = 1.0;\n                                        break;\n                                    }\n                                }\n                                prevT = t;\n                                t += stepLen * (1.0 + float(i) * 0.07);  /* ускоряющийся шаг */\n                            }\n\n                            vec3 outCol = col.rgb;\n\n                            if (hit > 0.5) {\n                                vec3 refCol = resolveReflectionColor(hitUV, roughness);\n                                /* Френель: под скользящим углом отражения сильнее — физически корректно.\n                                   Slightly softer power (3→2.4) reads closer to a real dielectric\n                                   Fresnel curve instead of an overly narrow rim highlight. */\n                                float fres = pow(1.0 - max(0.0, dot(-V, N)), 2.4);\n                                float refAmt = clamp(rtStrength * (0.08 + 0.88 * fres), 0.0, 0.82);\n                                /* Затухание у краёв экрана — убирает резкие обрывы отражений */\n                                vec2  edge = min(hitUV, 1.0 - hitUV);\n                                refAmt *= smoothstep(0.0, 0.10, min(edge.x, edge.y));\n\n                                /* ── Temporal reprojection: blend with last frame's reflection at the\n                                   same WORLD point to average out per-frame ray noise. This is what\n                                   turns a single noisy screen-space sample into a smooth, denoised\n                                   result — the main reason real-time reflections look "cheap" without\n                                   it. ── */\n                                vec3 worldPos = (uInvView * vec4(pos, 1.0)).xyz;\n                                vec4 prevClip = uPrevViewProj * vec4(worldPos, 1.0);\n                                vec3 blended = mix(col.rgb, refCol, refAmt);\n                                if (uHistoryValid > 0.5 && prevClip.w > 0.0) {\n                                    vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;\n                                    if (prevUV.x > 0.0 && prevUV.x < 1.0 && prevUV.y > 0.0 && prevUV.y < 1.0) {\n                                        vec3 histCol = texture2D(tPrevFrame, prevUV).rgb;\n                                        float histWeight = mix(0.82, 0.15, uCameraMoved);\n                                        blended = mix(blended, histCol, histWeight);\n                                    }\n                                }\n                                outCol = blended;\n\n                                /* GI: одноотскоковый перенос цвета (colour bleeding) от точки попадания */\n                                float lum = dot(refCol, vec3(0.299, 0.587, 0.114));\n                                outCol += refCol * lum * 0.06 * rtStrength;\n                            } else if (uHistoryValid > 0.5) {\n                                /* No ray hit this frame (e.g. a single dropped sample near a grazing\n                                   angle) — reproject history instead of snapping straight back to the\n                                   unreflected colour, which would otherwise flicker every time a ray\n                                   happens to miss. Weighted lightly so real, persistent misses (e.g.\n                                   camera turned away) still fade out instead of ghosting forever. */\n                                vec3 worldPos = (uInvView * vec4(pos, 1.0)).xyz;\n                                vec4 prevClip = uPrevViewProj * vec4(worldPos, 1.0);\n                                if (prevClip.w > 0.0) {\n                                    vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;\n                                    if (prevUV.x > 0.0 && prevUV.x < 1.0 && prevUV.y > 0.0 && prevUV.y < 1.0) {\n                                        vec3 histCol = texture2D(tPrevFrame, prevUV).rgb;\n                                        outCol = mix(col.rgb, histCol, mix(0.5, 0.05, uCameraMoved));\n                                    }\n                                }\n                            }\n\n                            /* Мягкий кинематографичный контраст в RT-режиме */\n                            outCol = mix(outCol, outCol * outCol * (3.0 - 2.0 * outCol), 0.18);\n                            gl_FragColor = vec4(outCol, col.a);\n                        }\n                    `
+            fragmentShader: `\n                        precision highp float;\n                        uniform sampler2D tDiffuse;\n                        uniform sampler2D tDepth;\n                        uniform sampler2D tPrevFrame;\n                        uniform vec2      resolution;       /* full output size — IGN + edge fade */\n                        uniform vec2      uDepthResolution; /* half-res depth texture — texel offsets */\n                        uniform mat4      proj;\n                        uniform mat4      uPrevViewProj;     /* previous frame's world→clip matrix */\n                        uniform mat4      uInvView;          /* this frame's view→world matrix */\n                        uniform vec3      uCamPos;           /* this frame's world-space camera position */\n                        uniform float     uHistoryValid;     /* 0 = first frame / just resized, skip blend */\n                        uniform float     uCameraMoved;      /* 0..1 — larger camera motion → trust history less */\n                        uniform float     rtStrength;\n                        uniform float     uSharpness;\n                        uniform float     uFar;\n                        uniform float     uTanHalfFovX;\n                        uniform float     uTanHalfFovY;\n                        varying vec2 vUv;\n\n                        /* Unpacking лandnotйbutй глубandны andз RGBA8 (кросс-платформенbut, without hardware depth-textures) */\n                        float unpackDepth(vec4 rgba) {\n                            const vec4 bitShifts = vec4(1.0/16777216.0, 1.0/65536.0, 1.0/256.0, 1.0);\n                            return dot(rgba, bitShifts);\n                        }\n                        /* .x = лandnotйonя глубandon (view-space -Z, метры), .y = 1.0 if это «notбо» (notт геометрandand) */\n                        vec2 readDepth(vec2 uv) {\n                            vec4 raw = texture2D(tDepth, uv);\n                            if (raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);\n                            return vec2(unpackDepth(raw) * uFar, 0.0);\n                        }\n\n                        vec3 getViewPos(vec2 uv, float linZ) {\n                            vec2 ndc = uv * 2.0 - 1.0;\n                            return vec3(ndc.x * uTanHalfFovX * linZ, ndc.y * uTanHalfFovY * linZ, -linZ);\n                        }\n\n                        vec2 viewToUv(vec3 p) {\n                            vec4 clip = proj * vec4(p, 1.0);\n                            return (clip.xy / clip.w) * 0.5 + 0.5;\n                        }\n\n                        float IGN(vec2 pix) {\n                            return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));\n                        }\n\n                        /* Reads the reflection colour with a small roughness-weighted multi-tap\n                           blur. A single texel lookup at the hit point is what made reflections\n                           look blocky/pixelated at a distance (each screen pixel maps to a large\n                           world area). Averaging a few neighbouring taps softens that without\n                           costing extra rays. */\n                        vec3 resolveReflectionColor(vec2 hitUV, float roughness) {\n                            vec2 px = 1.0 / resolution;\n                            float r = 1.0 + roughness * 2.5;\n                            vec3 sum = texture2D(tDiffuse, hitUV).rgb * 4.0;\n                            sum += texture2D(tDiffuse, hitUV + vec2( px.x,  0.0) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2(-px.x,  0.0) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2( 0.0,  px.y) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2( 0.0, -px.y) * r).rgb;\n                            return sum / 8.0;\n                        }\n\n                        void main() {\n                            vec4  col  = texture2D(tDiffuse, vUv);\n                            vec2  centerD = readDepth(vUv);\n                            /* Notбо — reflect notчit */\n                            if (centerD.y > 0.5) { gl_FragColor = col; return; }\n\n                            vec2  texel = 1.0 / uDepthResolution; /* depth-tex res for correct neighbor taps */\n                            vec3  pos   = getViewPos(vUv, centerD.x);\n\n                            /* ── Стабandльonя реконструкцandя butрмалand (см. AO-шейдер intoыше — тот same fix:\n                               центральonя разbutсть on плоскandх участках, so шintoы кубоinto not даintoалand\n                               скачущую butрмаль and, как следстintoandе, дрожащandе отраsameнandя). ── */\n                            vec2 dR  = readDepth(vUv + vec2( texel.x, 0.0));\n                            vec2 dL  = readDepth(vUv - vec2( texel.x, 0.0));\n                            vec2 dU  = readDepth(vUv + vec2(0.0,  texel.y));\n                            vec2 dDn = readDepth(vUv - vec2(0.0,  texel.y));\n                            vec3 pR = getViewPos(vUv + vec2( texel.x, 0.0), dR.x);\n                            vec3 pL = getViewPos(vUv - vec2( texel.x, 0.0), dL.x);\n                            vec3 pU = getViewPos(vUv + vec2(0.0,  texel.y), dU.x);\n                            vec3 pD = getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);\n                            float edgeScale = max(0.001, centerD.x) * 0.06;\n                            float wx = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dR.x - dL.x));\n                            float wy = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dU.x - dDn.x));\n                            vec3 dXEdge = (abs(dR.x - centerD.x) < abs(centerD.x - dL.x)) ? (pR - pos) : (pos - pL);\n                            vec3 dYEdge = (abs(dU.x - centerD.x) < abs(centerD.x - dDn.x)) ? (pU - pos) : (pos - pD);\n                            vec3 dX = mix(dXEdge, (pR - pL) * 0.5, wx);\n                            vec3 dY = mix(dYEdge, (pU - pD) * 0.5, wy);\n                            vec3 N = normalize(cross(dX, dY));\n                            if (N.z < 0.0) N = -N;\n\n                            /* ── Трассandроintoка отражёнbutго луча into view-space ── */\n                            vec3  V = normalize(pos);           /* камера into (0,0,0) */\n                            float roughness = clamp(1.0 - uSharpness, 0.0, 1.0);\n                            vec3 randDir = vec3(IGN(vUv * resolution + 0.1) - 0.5, IGN(vUv * resolution + 0.2) - 0.5, IGN(vUv * resolution + 0.3) - 0.5);\n                            vec3  R = normalize(reflect(V, N) + randDir * roughness * 0.06);\n                            float jitter    = IGN(floor(vUv * resolution));\n                            /* Perf: dropped 22→14 steps. Temporal reprojection (below) accumulates\n                               samples across frames, so a single frame's ray no longer needs to be\n                               this precise — the history blend hides the coarser marching, but the\n                               GPU cost of the most expensive pass in the whole pipeline drops by\n                               ~35%. This was the single biggest FPS cost in the renderer. */\n                            const int   STEPS   = 14;\n                            const float MAXDIST = 34.0;\n                            float stepLen   = MAXDIST / float(STEPS);\n                            float thickness = 0.9;\n\n                            float hit = 0.0;\n                            vec2  hitUV = vUv;\n                            float t = stepLen * (0.35 + 0.65 * jitter);\n                            float prevT = 0.0;\n                            for (int i = 0; i < STEPS; i++) {\n                                vec3 p  = pos + R * t;\n                                if (p.z > -0.05) break;                 /* луч ушёл за камеру */\n                                vec2 uv2 = viewToUv(p);\n                                if (uv2.x < 0.0 || uv2.x > 1.0 || uv2.y < 0.0 || uv2.y > 1.0) break;\n                                vec2 sD = readDepth(uv2);\n                                if (sD.y < 0.5) {\n                                    float sceneZ = -sD.x;\n                                    float diff   = sceneZ - p.z;        /* >0 когда луч зашёл за byintoерхbutсть */\n                                    if (diff > 0.0 && diff < thickness + t * 0.06) {\n                                        /* Binary refinement: 3 iterations is enough precision once\n                                           temporal accumulation smooths the result over several frames —\n                                           trimmed from 4 for perf, edge crispness loss is not visible\n                                           after the history blend. */\n                                        float lo = prevT, hi = t;\n                                        for (int j = 0; j < 3; j++) {\n                                            float mid = (lo + hi) * 0.5;\n                                            vec3  pm  = pos + R * mid;\n                                            vec2  uvm = viewToUv(pm);\n                                            vec2  sDm = readDepth(uvm);\n                                            if (sDm.y < 0.5 && (-sDm.x - pm.z) > 0.0) { hi = mid; hitUV = uvm; }\n                                            else lo = mid;\n                                        }\n                                        hit = 1.0;\n                                        break;\n                                    }\n                                }\n                                prevT = t;\n                                t += stepLen * (1.0 + float(i) * 0.07);  /* ускоряющandйся шаг */\n                            }\n\n                            vec3 outCol = col.rgb;\n\n                            if (hit > 0.5) {\n                                vec3 refCol = resolveReflectionColor(hitUV, roughness);\n                                /* Фреnotль: byд скользящandм углом отраsameнandя сandльnotе — фandзandческand корректbut.\n                                   Slightly softer power (3→2.4) reads closer to a real dielectric\n                                   Fresnel curve instead of an overly narrow rim highlight. */\n                                float fres = pow(1.0 - max(0.0, dot(-V, N)), 2.4);\n                                float refAmt = clamp(rtStrength * (0.08 + 0.88 * fres), 0.0, 0.82);\n                                /* Затуханandе у краёinto экраon — убandрает резкandе обрыintoы отраsameнandй */\n                                vec2  edge = min(hitUV, 1.0 - hitUV);\n                                refAmt *= smoothstep(0.0, 0.10, min(edge.x, edge.y));\n\n                                /* ── Temporal reprojection: blend with last frame's reflection at the\n                                   same WORLD point to average out per-frame ray noise. This is what\n                                   turns a single noisy screen-space sample into a smooth, denoised\n                                   result — the main reason real-time reflections look "cheap" without\n                                   it. ── */\n                                vec3 worldPos = (uInvView * vec4(pos, 1.0)).xyz;\n                                vec4 prevClip = uPrevViewProj * vec4(worldPos, 1.0);\n                                vec3 blended = mix(col.rgb, refCol, refAmt);\n                                if (uHistoryValid > 0.5 && prevClip.w > 0.0) {\n                                    vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;\n                                    if (prevUV.x > 0.0 && prevUV.x < 1.0 && prevUV.y > 0.0 && prevUV.y < 1.0) {\n                                        vec3 histCol = texture2D(tPrevFrame, prevUV).rgb;\n                                        float histWeight = mix(0.82, 0.15, uCameraMoved);\n                                        blended = mix(blended, histCol, histWeight);\n                                    }\n                                }\n                                outCol = blended;\n\n                                /* GI: одbutотскокоintoый переbutс цintoета (colour bleeding) от точкand byпаданandя */\n                                float lum = dot(refCol, vec3(0.299, 0.587, 0.114));\n                                outCol += refCol * lum * 0.06 * rtStrength;\n                            } else if (uHistoryValid > 0.5) {\n                                /* No ray hit this frame (e.g. a single dropped sample near a grazing\n                                   angle) — reproject history instead of snapping straight back to the\n                                   unreflected colour, which would otherwise flicker every time a ray\n                                   happens to miss. Weighted lightly so real, persistent misses (e.g.\n                                   camera turned away) still fade out instead of ghosting forever. */\n                                vec3 worldPos = (uInvView * vec4(pos, 1.0)).xyz;\n                                vec4 prevClip = uPrevViewProj * vec4(worldPos, 1.0);\n                                if (prevClip.w > 0.0) {\n                                    vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;\n                                    if (prevUV.x > 0.0 && prevUV.x < 1.0 && prevUV.y > 0.0 && prevUV.y < 1.0) {\n                                        vec3 histCol = texture2D(tPrevFrame, prevUV).rgb;\n                                        outCol = mix(col.rgb, histCol, mix(0.5, 0.05, uCameraMoved));\n                                    }\n                                }\n                            }\n\n                            /* Мягкandй кandnotматографandчный контраст into RT-режandме */\n                            outCol = mix(outCol, outCol * outCol * (3.0 - 2.0 * outCol), 0.18);\n                            gl_FragColor = vec4(outCol, col.a);\n                        }\n                    `
         };
         this.rtPass = new ShaderPass(_rtShader);
         this.rtPass.material.depthTest = false;
@@ -7097,10 +7097,10 @@ const engine = {
         return mesh;
     },
     /**
-     * Строит объект из массива кубов (формат GoreBox: name/tag/tileMode/materialName/position/rotation/scale)
-     * по одному кубу за раз, с задержкой между ними, чтобы был виден процесс постройки.
-     * onProgress(index, total, mesh) вызывается после добавления каждого куба.
-     * Возвращает { cancel() } — вызов cancel() останавливает добавление оставшихся кубов.
+     * Строandт объект andз массinto кубоinto (формат GoreBox: name/tag/tileMode/materialName/position/rotation/scale)
+     * by одbutму кубу за раз, с задержкой между нandмand, so был intoandден процесс byстройкand.
+     * onProgress(index, total, mesh) intoызыintoается byсле добаintoленandя каждого куба.
+     * Возintoращает { cancel() } — intoызоinto cancel() остаonintoлintoет добаintoленandе остаintoшandхся cubes.
      */
     buildFromCubesAnimated: async function(cubes, options = {}) {
         const { delayMs = 55, buildName = "AI Object", onProgress = null, onDone = null } = options;
@@ -11588,14 +11588,14 @@ window.uiManager = {
         const data = this._collectionData || [];
         body.innerHTML = "";
         if (!data.length) {
-            body.innerHTML = '<div class="collection-empty-hint">Коллекция пока пуста.<br>Загружается CollectionOfSubjects.zip из репозитория —<br>или нажмите «+ ADD COLLECTION», чтобы выбрать архив вручную.</div>';
+            body.innerHTML = '<div class="collection-empty-hint">Collection is empty for now.<br>Loading CollectionOfSubjects.zip from the repository —<br>or click "+ ADD COLLECTION" to choose an archive manually.</div>';
             return;
         }
         data.forEach((item, idx) => {
             const el = document.createElement("div");
             el.className = "collection-item" + (this._collectionSelected === idx ? " selected" : "");
             el.dataset.idx = idx;
-            el.innerHTML = `\n                        <img class="collection-item-img" src="${item.image}" alt="${item.name}" draggable="false">\n                        <div class="collection-item-info">\n                            <div class="collection-item-name">${item.name}</div>\n                            <div class="collection-item-meta">${item.cubeCount} кубов · Группа</div>\n                        </div>\n                        <span class="collection-item-badge">ОБЪЕКТ</span>\n                    `;
+            el.innerHTML = `\n                        <img class="collection-item-img" src="${item.image}" alt="${item.name}" draggable="false">\n                        <div class="collection-item-info">\n                            <div class="collection-item-name">${item.name}</div>\n                            <div class="collection-item-meta">${item.cubeCount} cubes · Group</div>\n                        </div>\n                        <span class="collection-item-badge">OBJECT</span>\n                    `;
             el.addEventListener("click", () => {
                 body.querySelectorAll(".collection-item").forEach(e => e.classList.remove("selected"));
                 el.classList.add("selected");
@@ -11962,7 +11962,7 @@ window.uiManager = {
             if (!file) return;
             const text = await file.text();
             const rawMapData = parseGbmapFile(text);
-            if (!rawMapData || !Array.isArray(rawMapData.mapCubes)) throw new Error("В файле .gbmap не найден mapCubes");
+            if (!rawMapData || !Array.isArray(rawMapData.mapCubes)) throw new Error("В файле .gbmap not onйден mapCubes");
             const importedData = mapGbmapFormatToProjectData(rawMapData);
             const enteredName = (document.getElementById("new-map-name").value || "").trim();
             const gbmapBaseName = normalizeTextureKey(file.name);
@@ -12562,10 +12562,10 @@ document.addEventListener("pointerdown", e => {
 window.aiBuilder = {
     isRunning: false,
     _cancelHandle: null,
-    _imageBase64: null,   // "data:image/...;base64,...." прикреплённой картинки, если есть
+    _imageBase64: null,   // "data:image/...;base64,...." прandкреплёнbutй картandнкand, if есть
     _imageMediaType: null,
-    // ВАЖНО: замени этот адрес на свой после деплоя Cloudflare Worker (см. worker.js).
-    // Пока тут стоит placeholder — генерация не заработает, пока не вписан реальный адрес.
+    // ВАЖНО: заменand этот адрес on сintoой byсле деплоя Cloudflare Worker (см. worker.js).
+    // Пока тут стоandт placeholder — геnotрацandя not зарабоfades, byка not intoпandсан реальный адрес.
     ENDPOINT: "https://red-lake-ffec.sh1rka-4-200.workers.dev",
 
     _setStatus: function(text, kind) {
@@ -12601,7 +12601,7 @@ window.aiBuilder = {
         if (wrap) { wrap.style.display = "block"; wrap.classList.remove("collapsed"); }
     },
     /**
-     * Живая консоль технических шагов (запрос отправлен → ждём ответа → получено N символов → парсинг...).
+     * Live console technical steps (запрос отпраintoлен → ждём отintoета → received N chars → parsing...).
      * kind: "info" | "ok" | "warn" | "error"
      */
     _log: function(text, kind = "info") {
@@ -12634,16 +12634,16 @@ window.aiBuilder = {
         const ta = document.getElementById("ai-builder-prompt");
         if (btn) {
             btn.disabled = running;
-            btn.innerHTML = running ? '<span class="ai-spinner"></span> Строю...' : "✦ Построить";
+            btn.innerHTML = running ? '<span class="ai-spinner"></span> Building...' : "✦ Build";
         }
         if (cancelBtn) cancelBtn.style.display = running ? "flex" : "none";
         if (ta) ta.disabled = running;
     },
 
     /**
-     * Подбирает 2-3 наиболее похожих объекта из коллекции (uiManager._collectionData)
-     * по пересечению ключевых слов с промптом пользователя, чтобы дать модели
-     * реальные эталонные примеры GoreBox-геометрии.
+     * Picks 2-3 most similar объекта andз коллекцandand (uiManager._collectionData)
+     * by intersection of keywords with user prompt, so дать model
+     * реальные эталонные examples GoreBox geometry.
      */
     _pickReferenceItems: function(promptText, maxItems = 3) {
         const data = (window.uiManager && Array.isArray(uiManager._collectionData)) ? uiManager._collectionData : [];
@@ -12652,25 +12652,25 @@ window.aiBuilder = {
             .replace(/[^\p{L}\p{N}\s]/gu, " ")
             .split(/\s+/).filter(Boolean);
         const promptWords = new Set(norm(promptText));
-        // Небольшой словарь синонимов рус/eng, чтобы «мост» находил "Bridge" и т.п.
+        // Notбольшой слоintoарь сandbutнandмоinto рус/eng, so «мост» onходandл "Bridge" and т.п.
         const synonyms = {
-            "мост": ["bridge"], "бочка": ["barrel"], "ящик": ["pallet", "crate"],
-            "поддон": ["pallet"], "плита": ["slab", "roofing", "slate"],
-            "черепица": ["roofing", "slate"], "кровля": ["roofing", "slate"],
+            "мост": ["bridge"], "бочка": ["barrel"], "ящandк": ["pallet", "crate"],
+            "byддон": ["pallet"], "плandта": ["slab", "roofing", "slate"],
+            "черепandца": ["roofing", "slate"], "кроintoля": ["roofing", "slate"],
             "компьютер": ["computer"], "часы": ["clock"], "клумба": ["planter"],
-            "кадка": ["planter"], "куб": ["cube", "rubik"], "рубик": ["rubik"],
-            "дом": ["house", "hut", "cabin", "building", "domik"], "домик": ["house", "hut", "cabin", "building"],
-            "здание": ["building", "house"], "хижина": ["hut", "cabin"],
-            "башня": ["tower"], "вышка": ["tower"],
-            "лестница": ["stairs", "ladder"], "забор": ["fence"],
-            "китайский": ["chinese", "asian", "pagoda", "oriental"],
-            "японский": ["japanese", "asian", "pagoda", "oriental"],
+            "кадка": ["planter"], "куб": ["cube", "rubik"], "рубandк": ["rubik"],
+            "дом": ["house", "hut", "cabin", "building", "domik"], "домandк": ["house", "hut", "cabin", "building"],
+            "зданandе": ["building", "house"], "хandжandon": ["hut", "cabin"],
+            "башня": ["tower"], "intoышка": ["tower"],
+            "лестнandца": ["stairs", "ladder"], "забор": ["fence"],
+            "chinese": ["chinese", "asian", "pagoda", "oriental"],
+            "japanese": ["japanese", "asian", "pagoda", "oriental"],
             "пагода": ["pagoda", "chinese", "asian"],
-            "восточный": ["oriental", "asian", "pagoda"],
+            "oriental": ["oriental", "asian", "pagoda"],
             "дрон": ["drone", "quadcopter"], "самолёт": ["plane", "aircraft"],
             "лодка": ["boat", "ship"], "яхта": ["yacht", "boat", "ship"],
-            "машина": ["car", "vehicle"], "фонарь": ["lamp", "light"],
-            "лампа": ["lamp", "light"], "статуя": ["statue"], "ворота": ["gate"]
+            "машandon": ["car", "vehicle"], "фоonрь": ["lamp", "light"],
+            "лампа": ["lamp", "light"], "статуя": ["statue"], "gate": ["gate"]
         };
         promptWords.forEach(w => {
             if (synonyms[w]) synonyms[w].forEach(s => promptWords.add(s));
@@ -12680,8 +12680,8 @@ window.aiBuilder = {
             let score = 0;
             nameWords.forEach(w => {
                 promptWords.forEach(pw => {
-                    if (w === pw) score += 2; // точное совпадение слова весит больше
-                    else if (w.length > 3 && pw.length > 3 && (w.includes(pw) || pw.includes(w))) score += 1; // частичное — короткие слова не матчим, чтобы не ловить случайные подстроки
+                    if (w === pw) score += 2; // точbutе соintoпаденandе слоintoа intoесandт more
+                    else if (w.length > 3 && pw.length > 3 && (w.includes(pw) || pw.includes(w))) score += 1; // частandчbutе — короткandе слоintoа not матчandм, so not лоintoandть caseные byдстрокand
                 });
             });
             return { item, score };
@@ -12689,8 +12689,8 @@ window.aiBuilder = {
         scored.sort((a, b) => b.score - a.score);
         const withScore = scored.filter(s => s.score > 0).slice(0, maxItems);
         if (withScore.length > 0) return withScore.map(s => s.item);
-        // Если ничего явно не совпало — берём разнообразные примеры (маленький + средний + большой объект),
-        // чтобы модель всё равно видела реальный стиль геометрии проекта.
+        // Еслand нandчit яintobut not соintoпало — берём разbutобразные examples (маленькandй + среднandй + большой объект),
+        // so модель intoсё раintobut intoandдела реальный стandль геометрandand проекта.
         const bySize = [...data].sort((a, b) => (a.cubeCount || 0) - (b.cubeCount || 0));
         const picks = [];
         if (bySize.length) picks.push(bySize[0]);
@@ -12699,7 +12699,7 @@ window.aiBuilder = {
         return picks.slice(0, maxItems);
     },
 
-    /** Собирает список реально доступных в проекте materialName из селекта текстур. */
+    /** Собandрает спandсок really available into проекте materialName andз селекта textures. */
     _getAvailableTextureNames: function() {
         const sel = document.getElementById("sel-texture");
         if (!sel) return ["grid"];
@@ -12707,17 +12707,17 @@ window.aiBuilder = {
         return names.length ? names : ["grid"];
     },
 
-    /** Пользователь выбрал файл картинки — читаем в base64 и показываем превью. */
+    /** Пользоintoатель intoыбрал файл картandнкand — чandтаем into base64 and byказыintoаем преintoью. */
     onImageSelected: function(event) {
         const file = event?.target?.files?.[0];
         if (!file) return;
         if (!file.type || !file.type.startsWith("image/")) {
-            this._setStatus("Файл должен быть картинкой.", "error");
+            this._setStatus("File долsameн быть картandнкой.", "error");
             return;
         }
-        const MAX_BYTES = 8 * 1024 * 1024; // 8 МБ — с запасом под лимит Groq (20 МБ) и разумно для мобильного трафика
+        const MAX_BYTES = 8 * 1024 * 1024; // 8 МБ — с запасом byд лandмandт Groq (20 МБ) and разумbut for мобandльbutго трафandка
         if (file.size > MAX_BYTES) {
-            this._setStatus("Картинка слишком большая (макс. 8 МБ).", "error");
+            this._setStatus("Картandнка слandшком большая (макс. 8 МБ).", "error");
             return;
         }
         const reader = new FileReader();
@@ -12732,12 +12732,12 @@ window.aiBuilder = {
             if (attachBtn) attachBtn.style.display = "none";
         };
         reader.onerror = () => {
-            this._setStatus("Не удалось прочитать картинку.", "error");
+            this._setStatus("Not managed прочandтать картandнку.", "error");
         };
         reader.readAsDataURL(file);
     },
 
-    /** Убирает прикреплённую картинку. */
+    /** Убandрает прandкреплённую картandнку. */
     removeImage: function() {
         this._imageBase64 = null;
         this._imageMediaType = null;
@@ -12750,20 +12750,20 @@ window.aiBuilder = {
     },
 
     /**
-     * Отправляет картинку в vision-модель (отдельный запрос к Worker'у, mode:"vision")
-     * и получает подробное текстовое описание объекта на ней — форма, части, пропорции,
-     * материалы/цвета, расположение элементов. Это описание потом уходит в основной
-     * промпт генерации кубов как дополнительный контекст.
+     * Отпраintoляет картandнку into vision-модель (отдельный запрос к Worker'у, mode:"vision")
+     * and byлучает byдробbutе текстоintoое опandсанandе объекта on notй — форма, частand, проbyрцandand,
+     * матерandалы/цintoета, расbyлоsameнandе elementоinto. Это опandсанandе byтом уходandт into осbutintobutй
+     * промпт геnotрацandand кубоinto как доbyлнandтельный контекст.
      */
     _analyzeImage: async function() {
         if (!this._imageBase64) return null;
-        const visionPrompt = `Внимательно и детально опиши объект на этой картинке для 3D-художника, который будет собирать его из прямоугольных кубов (blocky/voxel стиль, как Minecraft). Опиши строго по пунктам:
-1. Из каких физических частей состоит объект и сколько их (например: корпус, 4 ноги, крыша из двух скатов и т.д.).
-2. Пропорции и взаимное расположение частей (что шире/уже, что выше/ниже, что симметрично, под каким углом наклонены поверхности).
-3. Форма каждой части в терминах простых объёмов (прямоугольный параллелепипед, наклонная плоскость, цилиндр из гранёных сегментов и т.д.) — так как итоговая модель будет собрана ТОЛЬКО из прямоугольных кубов, опиши как лучше всего аппроксимировать округлые/сложные формы кубами.
-4. Материалы и цвета каждой части (дерево, металл, камень, ткань, стекло и т.п., и их примерный цвет/оттенок).
-5. Любые характерные декоративные детали, которые важны для узнаваемости объекта (выступы, узоры, изгибы крыши, ступени и т.д.).
-Пиши по-русски, компактно, по пунктам, без вступления и заключения — только фактическое описание.`;
+        const visionPrompt = `Carefully and in detail describe the object in this image for a 3D artist who will assemble it from rectangular cubes (blocky/voxel style, like Minecraft). Describe strictly by points:
+1. What physical parts the object consists of and how many (e.g.: body, 4 legs, roof of two slopes, etc.).
+2. Proportions and mutual arrangement of parts (what is wider/narrower, higher/lower, symmetrical, at what angle surfaces are inclined).
+3. Shape of each part in terms of simple volumes (rectangular parallelepiped, inclined plane, cylinder of faceted segments, etc.) — since the final model will be built ONLY from rectangular cubes, describe how best to approximate rounded/complex shapes with cubes.
+4. Materials and colors of each part (wood, metal, stone, fabric, glass, etc., and their approximate color/shade).
+5. Any characteristic decorative details important for object recognizability (protrusions, patterns, roof curves, steps, etc.).
+Write in English, concisely, by points, without introduction or conclusion — only factual description.`;
 
         const imageContent = [
             { type: "text", text: visionPrompt },
@@ -12784,7 +12784,7 @@ window.aiBuilder = {
         });
 
         if (!response.ok) {
-            let msg = "Не удалось проанализировать картинку (" + response.status + ")";
+            let msg = "Not managed проаonлandзandроintoать картandнку (" + response.status + ")";
             try {
                 const errJson = await response.json();
                 if (errJson?.error) msg = typeof errJson.error === "string" ? errJson.error : (errJson.error.message || msg);
@@ -12795,7 +12795,7 @@ window.aiBuilder = {
         const data = await response.json();
         const content = data?.choices?.[0]?.message?.content;
         if (!content || typeof content !== "string" || !content.trim()) {
-            throw new Error("Модель не смогла описать картинку. Попробуй другое фото.");
+            throw new Error("Модель not смогла опandсать картandнку. Попробуй другое фото.");
         }
         return content.trim();
     },
@@ -12811,42 +12811,42 @@ window.aiBuilder = {
                 position: c.position, rotation: c.rotation, scale: c.scale
             })));
             const note = item.cubes.length > MAX_CUBES_PER_REF
-                ? ` — показаны первые ${MAX_CUBES_PER_REF} из ${item.cubeCount} кубов, для примера стиля`
+                ? ` — byказаны перintoые ${MAX_CUBES_PER_REF} andз ${item.cubeCount} кубоinto, for прandмера стandля`
                 : "";
-            return `### Пример: "${item.name}" (${item.cubeCount} кубов${note})\n${cubesJson}`;
+            return `### Прandмер: "${item.name}" (${item.cubeCount} кубоinto${note})\n${cubesJson}`;
         }).join("\n\n");
 
-        return `Ты — эксперт-архитектор внутри редактора карт для игры GoreBox (MAPCG). Твоя задача: по текстовому описанию сгенерировать 3D-объект/постройку как массив кубов (JSON), которые движок соберёт в сцене.
+        return `You are an expert architect inside the GoreBox (MAPCG) map editor. Your task: from a text description, generate a 3D object/building as an array of cubes (JSON) that the engine will assemble in the scene.
 
-ФОРМАТ КАЖДОГО КУБА (строго):
+CUBE FORMAT (strict):
 {
   "name": "MapCube",
-  "tag": одно из [${tagList}],
-  "tileMode": 0 | 1 | 2  (0=xy тайлинг, 1=yx тайлинг, 2=растянуть на всю грань — используй 2 для больших плоских панелей, 0 или 1 для мелких повторяющихся текстур типа кирпича/дерева),
+  "tag": one of [${tagList}],
+  "tileMode": 0 | 1 | 2  (0=xy tiling, 1=yx tiling, 2=stretch over face — use 2 for large flat panels, 0 or 1 for small repeating textures like brick/wood),
   "visible": true,
   "collisions": true,
   "physics": false,
-  "materialName": одно из реально доступных имён текстур проекта (см. список ниже) — выбирай максимально подходящее по смыслу и по tag,
+  "materialName": one of the реальbut available texture names from the project (see list below) — pick the closest by meaning and by tag,
   "position": {"x":0,"y":0,"z":0},
-  "rotation": {"x":0,"y":0,"z":0}  (градусы, оси Unity: Y — поворот вокруг вертикали, X/Z — наклоны),
-  "scale": {"x":1,"y":1,"z":1}  (масштаб куба по каждой оси, единица = примерно 1 метр)
+  "rotation": {"x":0,"y":0,"z":0}  (degrees, Unity axes: Y = rotation around vertical, X/Z = tilts),
+  "scale": {"x":1,"y":1,"z":1}  (cube scale per axis, unit = approx. 1 meter)
 }
 
-ДОСТУПНЫЕ ТЕКСТУРЫ (materialName), используй ТОЛЬКО эти значения, выбирай ближайшее по смыслу к материалу и к tag:
+AVAILABLE TEXTURES (materialName), use ONLY these values, pick the closest by meaning and tag:
 ${texSample}
 
-СИСТЕМА КООРДИНАТ И ГЕОМЕТРИИ:
-- position — это смещение куба ОТНОСИТЕЛЬНО общего центра объекта (0,0,0 = точка, куда игрок поставил объект). НЕ используй абсолютные мировые координаты, всегда считай от локального центра постройки.
-- Ось Y — вверх. Постройка растёт от Y=0 (низ) вверх. Не уводи объект в минус по Y без причины (он окажется под полом).
-- Куб — это ЕДИНИЧНЫЙ кубик с центром в position, растянутый на scale по каждой оси. Например тонкая доска: scale {x:2, y:0.08, z:0.3}. Толстая стена: scale {x:3, y:2.5, z:0.15}.
-- rotation.y используется для поворота вокруг вертикальной оси, rotation.x/z — для наклонов (скатные крыши, наклонные балки моста, лестницы).
+COORDINATE SYSTEM AND GEOMETRY:
+- position — cube offset RELATIVE to the object center (0,0,0 = where the player placed the object). DO NOT use absolute world coordinates; always count from the local build center.
+- Y axis — up. The build grows from Y=0 (bottom) upward. Do not push the object into negative Y without reason (it will be under the floor).
+- Cube — a SINGLE cube centered at position, stretched by scale on each axis. Example thin plank: scale {x:2, y:0.08, z:0.3}. Thick wall: scale {x:3, y:2.5, z:0.15}.
+- rotation.y andсbyльзуется for bygate intoокруг intoертandкальbutй осand, rotation.x/z — for onклоbutinto (скатные крышand, onклонные балкand моста, лестнandцы).
 
-ТЕХНИКА ПОСТРОЕНИЯ ЦИЛИНДРИЧЕСКИХ/СКРУГЛЁННЫХ ФОРМ (кузова, бочки, трубы, колёсные арки, купола, колонны) — используй ВСЕГДА, когда в объекте есть что-то круглое или скруглённое, а не только для явных цилиндров:
-Один куб даёт только прямоугольную (воксельную) форму. Чтобы получить цилиндр/скругление, ставь КОЛЬЦО из N узких кубов вокруг общего центра (X0, Z0) на одной высоте Y, каждый сдвинут по радиусу R от центра и повёрнут так, чтобы "смотреть" наружу.
+CYLINDRICAL / ROUNDED SHAPE TECHNIQUE (car bodies, barrels, pipes, wheel arches, domes, columns) — use ALWAYS when the object has anything round or curved, not only for obvious cylinders:
+One cube gives only a rectangular (voxel) shape. To get a cylinder / rounding, place a RING of N narrow cubes around the common center (X0, Z0) at one height Y, each shifted by radius R from center and rotated so it "looks" outward.
 
-НЕ вычисляй синус/косинус самостоятельно — используй готовые множители x_mult/z_mult из таблицы ниже: position.x = X0 + R * x_mult, position.z = Z0 + R * z_mult, rotation.y = angle.
+DO NOT compute sine/cosine yourself — use the ready multipliers x_mult/z_mult from the table below: position.x = X0 + R * x_mult, position.z = Z0 + R * z_mult, rotation.y = angle.
 
-Таблица для N=8 (шаг 45°) — используй для мелких/средних скруглений:
+Table for N=8 (45° step) — use for small/medium roundings:
 i=0: angle=0,   x_mult=0,      z_mult=1
 i=1: angle=45,  x_mult=0.707,  z_mult=0.707
 i=2: angle=90,  x_mult=1,      z_mult=0
@@ -12856,7 +12856,7 @@ i=5: angle=225, x_mult=-0.707, z_mult=-0.707
 i=6: angle=270, x_mult=-1,     z_mult=0
 i=7: angle=315, x_mult=-0.707, z_mult=0.707
 
-Таблица для N=12 (шаг 30°) — используй для крупных/заметных цилиндров (кузов, бочка, купол):
+Table for N=12 (30° step) — use for large/noticeable cylinders (body, barrel, dome):
 i=0: angle=0,   x_mult=0,     z_mult=1
 i=1: angle=30,  x_mult=0.5,   z_mult=0.866
 i=2: angle=60,  x_mult=0.866, z_mult=0.5
@@ -12870,28 +12870,28 @@ i=9: angle=270, x_mult=-1,    z_mult=0
 i=10:angle=300, x_mult=-0.866,z_mult=0.5
 i=11:angle=330, x_mult=-0.5,  z_mult=0.866
 
-scale каждого куба в кольце — узкий по касательной оси (обычно scale.x, порядка 2*PI*R/N чтобы кубы стыковались без больших щелей) и нужной толщины/высоты по остальным осям.
-Для НЕполного скругления (например скруглённый угол, а не полная труба) бери только несколько соседних i из таблицы (нужную дугу), а не всю таблицу целиком.
-Многослойное скругление по высоте (напр. выпуклый кузов, купол) — повторяй кольцо на нескольких значениях Y с разным радиусом R на каждом слое (уменьшая R к верху/низу), это даёт объём, а не просто плоскую трубу.
-НЕ собирай круглые/обтекаемые объекты (кузова машин, бочки, купола, колонны, колёса) из одних только прямоугольных кубов без поворота — это даёт грубый "кирпичный" вид, которого нужно избегать. Если объект в запросе явно имеет округлые формы (машина, дрон с цилиндрическим корпусом, купол, труба, колесо) — обязательно применяй эту технику колец хотя бы для основных объёмов, а не только для мелких деталей.
-- Собирай объект из МНОГИХ мелких/средних кубов, а не из 2-3 огромных — так выглядит качественно и детализировано, как ручная работа. Ориентируйся на 20-80 кубов для среднего объекта, для простых объектов (забор, одна бочка) можно 10-30, для сложных построек (дом, мост, вышка) 50-150; если объект требует колец из кубов для скруглений (см. технику выше), общее число кубов может быть заметно больше — это нормально и даёт лучший результат.
-- Всегда включай базовую структуру (фундамент/пол, если это здание), несущие элементы, и декоративные детали (обшивка, мелкие акценты) — это то, что отличает качественный объект от примитивного.
-- Материалы подбирай по смыслу: дерево → tag "Wood" + деревянная текстура из списка; камень/бетон → tag "Concrete"; металл → tag "Metal"; и т.д. Не смешивай случайные текстуры не по смыслу.
-- Для симметричных объектов (мосты, башни, заборы) соблюдай точную симметрию координат — это выглядит профессионально, асимметрия по ошибке выглядит криво.
+scale of each ring cube — narrow along tangent axis (usually scale.x, around 2*PI*R/N so cubes meet without big gaps) and needed thickness/height on other axes.
+For PARTIAL rounding (e.g. rounded corner, not a full pipe) take only several adjacent i from the table (the needed arc), not the whole table.
+Multi-layer height rounding (e.g. convex body, dome) — repeat the ring at several Y values with different radius R on each layer (decreasing R toward top/bottom), this gives volume, not just a flat tube.
+DO NOT build round / streamlined objects (car bodies, barrels, domes, columns, wheels) from only straight rectangular cubes without rotation — this gives a rough "brick" look that should be avoided. If the request clearly has rounded forms (car, drone with cylindrical body, dome, pipe, wheel) — apply this ring technique at least for the main volumes, not just small details.
+- Build the object from MANY small/medium cubes, not 2-3 huge ones — this looks high-quality and detailed, like handmade work. Target 20-80 cubes for a medium object, for simple objects (fence, single barrel) 10-30, for complex builds (house, bridge, tower) 50-150; if the object needs cube rings for roundings (see technique above), total cube count may be noticeably larger — this is normal and gives a better result.
+- Always include basic structure (foundation/floor if a building), load-bearing elements, and decorative details (cladding, small accents) — this is what distinguishes a quality object from a primitive one.
+- Pick materials by meaning: wood → tag "Wood" + wood texture from list; stone/concrete → tag "Concrete"; metal → tag "Metal"; etc. Do not mix random textures out of meaning.
+- For symmetrical objects (bridges, towers, fences) keep exact coordinate symmetry — this looks professional, accidental asymmetry looks crooked.
 
-Ниже — РЕАЛЬНЫЕ примеры качественных объектов из этого же проекта (сделаны вручную автором). Изучи их: как используются position/rotation/scale, как достигается радиальная симметрия, наклонные элементы, слоистые конструкции, какие масштабы разумны. Копируй этот стиль и уровень детализации, а не выдумывай координаты с нуля.
+Below — REAL examples of quality objects from this same project (handmade by the author). Study them: how position/rotation/scale are used, how radial symmetry, inclined elements, layered structures are achieved, what scales are reasonable. Copy this style and level of detail, do not invent coordinates from scratch.
 
-${refBlock || "(релевантных примеров не найдено, ориентируйся только на правила выше)"}
+${refBlock || "(релеintoантных прandмероinto not onйдеbut, орandентandруйся только on праintoandла intoыше)"}
 
-ОБЯЗАТЕЛЬНЫЙ ПОРЯДОК РАБОТЫ (это критично для качества результата):
-Прежде чем писать координаты кубов, ты должен СНАЧАЛА мысленно спроектировать объект и записать этот план в текстовое поле "plan". План должен КРАТКО (3-6 коротких предложений, без воды) по пунктам перечислить:
-1. Из каких физических частей состоит объект (например для дрона: центральный корпус, 4 руки-балки крестом, 4 пропеллера на концах балок, камера/сенсор снизу, стойки-ножки).
-2. Как эти части расположены друг относительно друга в пространстве (что сверху/снизу, что симметрично, на каком расстоянии от центра, под каким углом).
-3. Какие размеры (scale) разумны для каждой части относительно остальных (например "руки-балки длинные и тонкие: scale x:1.4 y:0.08 z:0.08", "корпус — приплюснутый параллелепипед по центру: scale x:0.6 y:0.25 z:0.6").
-4. Какие из частей круглые/цилиндрические/скруглённые (кузов, купол, труба, колесо и т.п.) и потребуют кольца из повёрнутых кубов (см. технику выше) вместо простого прямоугольного куба — назови их явно, чтобы не забыть применить технику при генерации cubes.
-План должен быть коротким, потому что основной бюджет ответа нужен для кубов. КРИТИЧНО: КАЖДАЯ часть, упомянутая в плане, должна получить свои кубы в массиве "cubes" — не бросай генерацию кубов на середине списка частей плана. Если частей много, лучше сделай каждую часть из меньшего числа кубов, чем полностью пропусти часть плана. Не придумывай в кубах части, которых нет в плане, и не пропускай части плана при генерации кубов.
+MANDATORY WORKFLOW (this is critical for result quality):
+Before writing cube coordinates, you must FIRST mentally design the object and write this plan into the text field "plan". The plan must be BRIEF (3-6 short sentences, no fluff) and list by points:
+1. What physical parts the object consists of (e.g. for a drone: central body, 4 cross arms, 4 propellers at arm ends, camera/sensor below, landing legs).
+2. How these parts are positioned relative to each other in space (what is top/bottom, what is symmetrical, at what distance from center, at what angle).
+3. What sizes (scale) are reasonable for each part relative to others (e.g. "arms are long and thin: scale x:1.4 y:0.08 z:0.08", "body — flattened parallelepiped at center: scale x:0.6 y:0.25 z:0.6").
+4. Which parts are round / cylindrical / curved (body, dome, pipe, wheel, etc.) and will need a ring of rotated cubes (see technique above) instead of a simple rectangular cube — name them explicitly so you do not forget to apply the technique when generating cubes.
+The plan must be short, because the main response budget is needed for cubes. CRITICAL: EVERY part mentioned in the plan must get its cubes in the array "cubes" — do not drop cube generation in the middle of the plan parts list. If there are many parts, better make each part from fewer cubes than completely skip a plan part. Do not invent parts in cubes that are not in the plan, and do not skip plan parts when generating cubes.
 
-ОТВЕТ: верни ТОЛЬКО валидный JSON-объект вида {"plan": "краткий текст плана", "cubes": [ ... ]}, где "plan" — краткая строка с рассуждением по пунктам выше, а "cubes" — массив кубов в описанном выше формате, построенный строго по этому плану и покрывающий ВСЕ его части. Никаких пояснений вне этих двух полей, никакой markdown-разметки. Первый символ ответа должен быть { и последний — }.`;
+ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text", "cubes": [ ... ]}, where "plan" is a short reasoning string per points above, and "cubes" is the array of cubes in the format described above, built strictly according to this plan and covering ALL its parts. No explanations outside these two fields, no markdown formatting. The first character must be { and the last — }.`;
     },
 
     run: async function() {
@@ -12899,65 +12899,65 @@ ${refBlock || "(релевантных примеров не найдено, о�
         const ta = document.getElementById("ai-builder-prompt");
         const promptText = (ta?.value || "").trim();
         if (!promptText) {
-            this._setStatus("Сначала опиши, что построить.", "error");
+            this._setStatus("First describe what to build.", "error");
             return;
         }
 
         this._setRunningUI(true);
-        this._setStatus('<span class="ai-spinner"></span> Подбираю референсы и отправляю запрос...', "");
+        this._setStatus('<span class="ai-spinner"></span> Picking references and sending request...', "");
         this._setProgress(0);
         this._setRefLine("");
         this._clearConsole();
-        this._log("Запрос: «" + promptText + "»" + (this._imageBase64 ? " (+ картинка)" : ""));
+        this._log("Request: «" + promptText + "»" + (this._imageBase64 ? " (+ image)" : ""));
         const planWrapEl = document.getElementById("ai-plan-wrap");
         if (planWrapEl) planWrapEl.style.display = "none";
 
         try {
             let imageDescription = null;
             if (this._imageBase64) {
-                this._setStatus('<span class="ai-spinner"></span> Анализирую картинку...', "");
-                this._log("Отправляю картинку на анализ (vision)...");
+                this._setStatus('<span class="ai-spinner"></span> Analyzing image...', "");
+                this._log("Sending image for vision analysis...");
                 const imgStart = performance.now();
                 try {
                     imageDescription = await this._analyzeImage();
                 } catch (imgErr) {
-                    this._log("Анализ картинки не удался: " + (imgErr?.message || String(imgErr)), "error");
-                    throw new Error("Ошибка анализа картинки: " + (imgErr?.message || String(imgErr)));
+                    this._log("Image analysis failed: " + (imgErr?.message || String(imgErr)), "error");
+                    throw new Error("Image analysis error: " + (imgErr?.message || String(imgErr)));
                 }
-                this._log("Картинка проанализирована за " + Math.round(performance.now() - imgStart) + " мс, получено " + (imageDescription?.length || 0) + " симв. описания.", "ok");
-                this._setStatus('<span class="ai-spinner"></span> Подбираю референсы и отправляю запрос...', "");
+                this._log("Image analyzed in " + Math.round(performance.now() - imgStart) + " ms, received " + (imageDescription?.length || 0) + " chars of description.", "ok");
+                this._setStatus('<span class="ai-spinner"></span> Picking references and sending request...', "");
             }
 
             const refs = this._pickReferenceItems(promptText, 4);
             if (refs.length) {
                 this._setRefLine("Референсы: " + refs.map(r => r.name).join(", "));
-                this._log("Подобраны референсы из коллекции: " + refs.map(r => r.name).join(", "));
+                this._log("References picked from collection: " + refs.map(r => r.name).join(", "));
             } else {
-                this._log("Подходящих референсов в коллекции не найдено — работаю только по текстовым правилам.", "warn");
+                this._log("No suitable references found in collection — working from text rules only.", "warn");
             }
             const availableTextures = this._getAvailableTextureNames();
             const systemPrompt = this._buildSystemPrompt(refs, availableTextures);
 
             if (!this.ENDPOINT || this.ENDPOINT.includes("YOUR-SUBDOMAIN")) {
-                this._log("ENDPOINT не настроен — нет адреса Worker'а.", "error");
-                throw new Error("AI Builder ещё не настроен: не указан адрес прокси-сервера. Автору проекта нужно задеплоить worker.js на Cloudflare Workers и вписать адрес в aiBuilder.ENDPOINT.");
+                this._log("ENDPOINT not set — no Worker's address.", "error");
+                throw new Error("AI Builder not configured yet: proxy server address is missing. The project author needs to deploy worker.js to Cloudflare Workers and insert the address into aiBuilder.ENDPOINT.");
             }
 
             const userContent = imageDescription
-                ? `Построй: ${promptText}.\n\nДетальное описание прикреплённой референсной картинки (опирайся на него максимально точно — форма, части, пропорции, материалы, расположение элементов должны максимально соответствовать этому описанию):\n${imageDescription}\n\nОтветь строго JSON-объектом {"plan": "...", "cubes": [...]}. План пиши кратко (3-6 коротких предложений) — основной бюджет ответа должен уйти на полный массив cubes со ВСЕМИ частями из плана, ни одна часть плана не должна остаться без кубов.`
-                : `Построй: ${promptText}. Ответь строго JSON-объектом {"plan": "...", "cubes": [...]}. План пиши кратко (3-6 коротких предложений) — основной бюджет ответа должен уйти на полный массив cubes со ВСЕМИ частями из плана, ни одна часть плана не должна остаться без кубов.`;
+                ? `Build: ${promptText}.\n\nDetailed description of the attached reference image (rely on it as precisely as possible — shape, parts, proportions, materials, element arrangement must match this description as closely as possible):\n${imageDescription}\n\nAnswer strictly as a JSON object {"plan": "...", "cubes": [...]}. Write the plan briefly (3-6 short sentences) — the main response budget must go into the full array of cubes covering ALL parts of the plan, not a single plan part should remain without cubes.`
+                : `Build: ${promptText}. Answer strictly as a JSON object {"plan": "...", "cubes": [...]}. Write the plan briefly (3-6 short sentences) — the main response budget must go into the full array of cubes covering ALL parts of the plan, not a single plan part should remain without cubes.`;
 
-            // До двух попыток: если первая попытка вернёт валидный, но обрубленный по MAX_TOKENS
-            // JSON (частая ситуация на очень крупных постройках), пробуем один раз повторить
-            // с явной просьбой к модели быть компактнее по кубам, а не просто сдаёмся.
+            // Up to two attempts: if first attempt returns valid but truncated by MAX_TOKENS
+            // JSON (common situation on very large builds), try one more time
+            // with an explicit request to the model to be more compact with cubes, not just give up.
             let cubes = null;
             let planText = null;
             let lastRepairNote = "";
             const MAX_ATTEMPTS = 2;
 
             for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-                this._setStatus('<span class="ai-spinner"></span> Жду ответ модели' + (attempt > 1 ? " (попытка " + attempt + ")" : "") + '...', "");
-                this._log((attempt > 1 ? "Повторная попытка " + attempt + ": " : "Отправляю запрос модели...") + (attempt > 1 ? lastRepairNote : ""));
+                this._setStatus('<span class="ai-spinner"></span> Waiting for model response' + (attempt > 1 ? " (attempt " + attempt + ")" : "") + '...', "");
+                this._log((attempt > 1 ? "Retry attempt " + attempt + ": " : "Sending model request...") + (attempt > 1 ? lastRepairNote : ""));
                 const reqStart = performance.now();
 
                 const response = await fetch(this.ENDPOINT, {
@@ -12965,7 +12965,7 @@ ${refBlock || "(релевантных примеров не найдено, о�
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         messages: [
-                            { role: "system", content: systemPrompt + (attempt > 1 ? "\n\nВАЖНО: предыдущий ответ не уместился в лимит и оборвался. В этот раз будь компактнее — используй немного меньше кубов (упрости мелкие декоративные детали, сохрани основную структуру) и короче план, чтобы гарантированно уложиться в лимит токенов." : "") },
+                            { role: "system", content: systemPrompt + (attempt > 1 ? "\n\nIMPORTANT: the previous response did not fit within the limit and was truncated. This time be more compact — use slightly fewer cubes (simplify small decorative details, keep the main structure) and a shorter plan, so it is guaranteed to fit within the token limit." : "") },
                             { role: "user", content: userContent }
                         ],
                         temperature: 0.5,
@@ -12976,15 +12976,15 @@ ${refBlock || "(релевантных примеров не найдено, о�
                 const elapsedMs = Math.round(performance.now() - reqStart);
 
                 if (!response.ok) {
-                    let msg = "Сервер вернул ошибку (" + response.status + ")";
+                    let msg = "Server returned error (" + response.status + ")";
                     let debugInfo = null;
                     try {
                         const errJson = await response.json();
                         if (errJson?.error) msg = typeof errJson.error === "string" ? errJson.error : (errJson.error.message || msg);
                         debugInfo = errJson?._debug;
                     } catch (e) {}
-                    if (response.status === 429) msg = "Слишком много запросов подряд. Подожди минуту и попробуй снова.";
-                    this._log("Ошибка ответа (" + response.status + ") за " + elapsedMs + " мс: " + msg, "error");
+                    if (response.status === 429) msg = "Too many requests in a row. Wait a minute and try again.";
+                    this._log("Response error (" + response.status + ") after " + elapsedMs + " ms: " + msg, "error");
                     throw new Error(msg);
                 }
 
@@ -12992,34 +12992,34 @@ ${refBlock || "(релевантных примеров не найдено, о�
                 const content = data?.choices?.[0]?.message?.content;
                 const debug = data?._debug;
                 if (debug) {
-                    this._log(`Ответ получен за ${elapsedMs} мс — модель: ${debug.model}, причина завершения: ${debug.finishReason}, символов: ${debug.outputChars}.`, debug.finishReason === "STOP" ? "ok" : "warn");
+                    this._log(`Response received in ${elapsedMs} мс — model: ${debug.model}, finish reason: ${debug.finishReason}, characters: ${debug.outputChars}.`, debug.finishReason === "STOP" ? "ok" : "warn");
                 } else {
-                    this._log(`Ответ получен за ${elapsedMs} мс.`, "ok");
+                    this._log(`Response received in ${elapsedMs} мс.`, "ok");
                 }
 
                 if (!content || typeof content !== "string" || !content.trim()) {
-                    this._log("Модель вернула пустой ответ.", "error");
-                    throw new Error("Модель вернула пустой ответ. Попробуй ещё раз.");
+                    this._log("Model returned empty response.", "error");
+                    throw new Error("Model returned empty response. Try again.");
                 }
 
                 let raw = content.trim();
                 raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
-                this._log("Парсинг JSON (" + raw.length + " симв.)...");
+                this._log("Parsing JSON (" + raw.length + " chars)...");
 
                 let parsed = null;
                 let wasTruncated = false;
                 try {
                     parsed = JSON.parse(raw);
                 } catch (e) {
-                    // Обрыв на середине массива cubes — частая ситуация при MAX_TOKENS на крупных
-                    // постройках. Пытаемся "починить" JSON: отрезаем до последнего полностью
-                    // закрытого объекта в массиве, а не выбрасываем весь результат целиком.
-                    this._log("JSON оборван (" + (e?.message || "ошибка парсинга") + ") — пробую восстановить частичный результат...", "warn");
+                    // Truncation in the middle of array cubes — частая сandтуацandя прand MAX_TOKENS on крупных
+                    // builds. Trying to "repair" JSON: cut to last fully
+                    // закрытого объекта into массintoе, а not throw away whole result.
+                    this._log("JSON truncated (" + (e?.message || "parse error") + ") — trying to recover partial result...", "warn");
                     const repaired = this._repairTruncatedCubesJson(raw);
                     if (repaired) {
                         parsed = repaired;
                         wasTruncated = true;
-                        this._log("Восстановлено " + (repaired.cubes?.length || 0) + " кубов из оборванного ответа.", "warn");
+                        this._log("Recovered " + (repaired.cubes?.length || 0) + " cubes from truncated response.", "warn");
                     }
                 }
 
@@ -13031,20 +13031,20 @@ ${refBlock || "(релевантных примеров не найдено, о�
                 if (extractedCubes && extractedCubes.length) {
                     cubes = extractedCubes;
                     if (wasTruncated && attempt < MAX_ATTEMPTS) {
-                        // Даём модели ещё один шанс на полный, не обрубленный результат,
-                        // но сохраняем текущий частичный результат на случай если и вторая попытка не выйдет.
-                        lastRepairNote = "предыдущий ответ обрубился на " + extractedCubes.length + " кубах.";
-                        this._log("Результат частичный (обрубленный) — пробую получить полный вариант ещё раз перед тем как использовать этот.", "warn");
+                        // We give model another one chance on full, not truncated result,
+                        // but we keep current partial result on case if and second attempt not works.
+                        lastRepairNote = "предыдущandй отintoет обрубandлся on " + extractedCubes.length + " кубах.";
+                        this._log("Partial result (truncated) — trying to get full version again before using this.", "warn");
                         continue;
                     }
                     break;
                 }
 
                 if (attempt === MAX_ATTEMPTS) {
-                    this._log("Не удалось получить валидный JSON ни с одной попытки.", "error");
-                    throw new Error("Модель вернула невалидный JSON после " + MAX_ATTEMPTS + " попыток.");
+                    this._log("Failed to get valid JSON on any attempt.", "error");
+                    throw new Error("Model returned invalid JSON after " + MAX_ATTEMPTS + " attempts.");
                 }
-                this._log("Валидных кубов не найдено в ответе, пробую ещё раз...", "warn");
+                this._log("No valid cubes found in response, trying again...", "warn");
             }
 
             if (planText) {
@@ -13052,9 +13052,9 @@ ${refBlock || "(релевантных примеров не найдено, о�
                 this._showPlan(planText);
             }
             if (!cubes || !cubes.length) {
-                throw new Error("Пустой результат от модели");
+                throw new Error("Empty result from model");
             }
-            // Базовая санитизация каждого куба перед постройкой
+            // Базоintoая санandтandзацandя каждого куба перед byстройкой
             cubes = cubes.filter(c => c && typeof c === "object").map(c => ({
                 name: "MapCube",
                 tag: typeof c.tag === "string" ? c.tag : "Concrete",
@@ -13079,10 +13079,10 @@ ${refBlock || "(релевантных примеров не найдено, о�
                     z: Number.isFinite(+c.scale?.z) && +c.scale.z > 0 ? +c.scale.z : 1
                 }
             }));
-            if (!cubes.length) throw new Error("После проверки не осталось валидных кубов");
-            this._log("Готово к постройке: " + cubes.length + " кубов прошли проверку.", "ok");
+            if (!cubes.length) throw new Error("No valid cubes left after check");
+            this._log("Ready to build: " + cubes.length + " cubes passed check.", "ok");
 
-            this._setStatus(`Строю: 0 / ${cubes.length} кубов...`, "");
+            this._setStatus(`Building: 0 / ${cubes.length} cubes...`, "");
             this._setProgress(0);
 
             const buildName = promptText.slice(0, 40);
@@ -13090,18 +13090,18 @@ ${refBlock || "(релевантных примеров не найдено, о�
                 delayMs: cubes.length > 80 ? 25 : cubes.length > 40 ? 40 : 60,
                 buildName: buildName,
                 onProgress: (i, total) => {
-                    this._setStatus(`Строю: ${i} / ${total} кубов...`, "");
+                    this._setStatus(`Building: ${i} / ${total} cubes...`, "");
                     this._setProgress(i / total);
                 },
                 onDone: (created, wasCancelled) => {
                     this._setRunningUI(false);
                     this._cancelHandle = null;
                     if (wasCancelled) {
-                        this._log("Остановлено пользователем на " + created.length + " из " + cubes.length + " кубов.", "warn");
-                        this._setStatus(`Остановлено пользователем (${created.length} из ${cubes.length} кубов построено).`, "");
+                        this._log("Stopped by user at " + created.length + " andз " + cubes.length + " cubes.", "warn");
+                        this._setStatus(`Stopped by user (${created.length} andз ${cubes.length} cubes built).`, "");
                     } else {
-                        this._log("Постройка завершена: " + created.length + " кубов.", "ok");
-                        this._setStatus(`✓ Готово — построено ${created.length} кубов.`, "ok");
+                        this._log("Build finished: " + created.length + " cubes.", "ok");
+                        this._setStatus(`✓ Done — built ${created.length} cubes.`, "ok");
                     }
                     this._setProgress(null);
                 }
@@ -13110,8 +13110,8 @@ ${refBlock || "(релевантных примеров не найдено, о�
 
         } catch (err) {
             console.error("[AI Builder]", err);
-            const base = err?.message || "Не удалось построить объект.";
-            this._log("Ошибка: " + base, "error");
+            const base = err?.message || "Failed to build object.";
+            this._log("Error: " + base, "error");
             this._setStatus("✕ " + base, "error");
             this._setRunningUI(false);
             this._setProgress(null);
@@ -13119,11 +13119,11 @@ ${refBlock || "(релевантных примеров не найдено, о�
     },
 
     /**
-     * Пытается вытащить максимум валидных кубов из оборванного (обрезанного по MAX_TOKENS)
-     * JSON-ответа вида {"plan":"...", "cubes":[ {...}, {...}, {...
-     * Стратегия: найти начало массива "cubes":[ , затем идти по тексту, отслеживая глубину
-     * фигурных/квадратных скобок и строки (учитывая экранирование), и собирать только те
-     * элементы верхнего уровня массива, что закрылись полностью до места обрыва.
+     * Пыfadesся intoытащandть максandмум intoалandдных кубоinto andз оборintoанbutго (обрезанbutго by MAX_TOKENS)
+     * JSON-отintoета intoandда {"plan":"...", "cubes":[ {...}, {...}, {...
+     * Стратегandя: onйтand onчало массinto "cubes":[ , заthe andдтand by тексту, отслежintoя глубandну
+     * фandгурных/кintoадратных скобок and строкand (учandтыintoая экранandроintoанandе), and собandрать только те
+     * elementы intoерхnotго уроintoня массinto, что закрылandсь byлbutстью до места обрыintoа.
      */
     _repairTruncatedCubesJson: function(raw) {
         try {
@@ -13161,11 +13161,11 @@ ${refBlock || "(релевантных примеров не найдено, о�
                         const itemText = raw.slice(itemStart, i + 1);
                         try {
                             items.push(JSON.parse(itemText));
-                        } catch (e) { /* повреждённый последний элемент — пропускаем его молча */ }
+                        } catch (e) { /* damaged last element — skip it silently */ }
                         itemStart = -1;
                     }
                 } else if (ch === "]" && depth === 0) {
-                    break; // штатный конец массива, дальше не идём
+                    break; // normal array end, further not going
                 }
             }
 
@@ -13192,22 +13192,22 @@ ${refBlock || "(релевантных примеров не найдено, о�
                     <button class="collection-modal-close" onclick="uiManager.closeAIBuilderModal()">✕</button>
                 </div>
                 <div class="ai-modal-body">
-                    <textarea id="ai-builder-prompt" class="ai-prompt-input" placeholder="Опиши, что построить: например «деревянный мост через реку» или «бочка с ржавым металлом»..."></textarea>
+                    <textarea id="ai-builder-prompt" class="ai-prompt-input" placeholder="Describe what to build: e.g. "wooden bridge over river" or "rusty metal barrel"..."></textarea>
                     <div class="ai-image-row" id="ai-image-row">
                         <input type="file" id="ai-image-input" accept="image/*" style="display:none" onchange="aiBuilder.onImageSelected(event)">
-                        <button type="button" class="ai-image-attach-btn" id="ai-image-attach-btn" onclick="document.getElementById('ai-image-input').click()">🖼 Прикрепить картинку</button>
+                        <button type="button" class="ai-image-attach-btn" id="ai-image-attach-btn" onclick="document.getElementById('ai-image-input').click()">🖼 Attach image</button>
                         <div class="ai-image-preview" id="ai-image-preview" style="display:none">
                             <img id="ai-image-preview-img" src="" alt="preview">
-                            <span class="ai-image-remove" onclick="aiBuilder.removeImage()" title="Убрать картинку">✕</span>
+                            <span class="ai-image-remove" onclick="aiBuilder.removeImage()" title="Remove image">✕</span>
                         </div>
                     </div>
                     <div class="ai-quick-row">
-                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Простой деревянный дом с двускатной крышей'">Дом</span>
-                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Каменный мост через реку с аркой'">Мост</span>
-                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Металлическая бочка'">Бочка</span>
-                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Деревянный забор'">Забор</span>
-                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Сторожевая вышка из дерева'">Вышка</span>
-                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Каменная лестница с перилами'">Лестница</span>
+                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Simple wooden house with gable roof'">House</span>
+                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Stone bridge over river with arch'">Bridge</span>
+                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Metal barrel'">Barrel</span>
+                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Wooden fence'">Fence</span>
+                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Wooden watchtower'">Tower</span>
+                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Stone stairs with railings'">Stairs</span>
                     </div>
                     <div class="ai-progress-wrap" id="ai-progress-wrap"><div class="ai-progress-bar" id="ai-progress-bar"></div></div>
                     <div class="ai-status-line" id="ai-status-line"></div>
@@ -13221,15 +13221,15 @@ ${refBlock || "(релевантных примеров не найдено, о�
                     </div>
                     <div class="ai-plan-wrap" id="ai-plan-wrap" style="display:none">
                         <div class="ai-plan-header" onclick="aiBuilder.togglePlan()">
-                            <span>🧠 Рассуждение ИИ</span>
+                            <span>🧠 AI Reasoning</span>
                             <span class="ai-plan-toggle" id="ai-plan-toggle">▾</span>
                         </div>
                         <div class="ai-plan-body" id="ai-plan-body"></div>
                     </div>
                 </div>
                 <div class="collection-modal-footer">
-                    <button class="ai-cancel-btn" id="ai-cancel-btn" style="display:none" onclick="aiBuilder.cancel()">Стоп</button>
-                    <button class="ai-build-btn" id="ai-build-btn" style="flex:1" onclick="aiBuilder.run()">✦ Построить</button>
+                    <button class="ai-cancel-btn" id="ai-cancel-btn" style="display:none" onclick="aiBuilder.cancel()">Cancel</button>
+                    <button class="ai-build-btn" id="ai-build-btn" style="flex:1" onclick="aiBuilder.run()">✦ Build</button>
                 </div>
             </div>
         </div>
@@ -13270,5 +13270,6 @@ ${refBlock || "(релевантных примеров не найдено, о�
     </div>
 
 
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
 </html>
