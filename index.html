@@ -621,8 +621,9 @@
             transition: all 0.12s; letter-spacing: 0.02em; font-family: inherit;
         }
         .ai-image-attach-btn:hover { border-color: #b79dff; color: #cbb8ff; }
-        .ai-image-preview { position: relative; display: inline-flex; }
-        .ai-image-preview img {
+        .ai-image-preview { display: flex; flex-wrap: wrap; gap: 8px; }
+        .ai-image-thumb { position: relative; display: inline-flex; }
+        .ai-image-thumb img {
             width: 44px; height: 44px; object-fit: cover; border: 1px solid rgba(160,120,255,0.4);
         }
         .ai-image-remove {
@@ -12822,8 +12823,8 @@ window.aiGenToast = {
 window.aiBuilder = {
     isRunning: false,
     _cancelHandle: null,
-    _imageBase64: null,   // "data:image/...;base64,...." прandкреплёнbutй картandнкand, if есть
-    _imageMediaType: null,
+    _images: [],   // [{ dataUrl: "data:image/...;base64,....", mediaType: "image/..." }, ...] прикреплённые картинки, если есть
+    MAX_IMAGES: 4,
     // Автоопределение эндпоинта: работает и с GitHub Pages, и с Vercel.
     ENDPOINT: (function(){
       var h = window.location.hostname;
@@ -13011,55 +13012,88 @@ window.aiBuilder = {
 
     /** Пользоintoатель intoыбрал файл картandнкand — чandтаем into base64 and byказыintoаем преintoью. */
     onImageSelected: function(event) {
-        const file = event?.target?.files?.[0];
-        if (!file) return;
-        if (!file.type || !file.type.startsWith("image/")) {
-            this._setStatus("The selected file must be an image.", "error");
+        const files = Array.from(event?.target?.files || []);
+        if (!files.length) return;
+        const MAX_BYTES = 8 * 1024 * 1024; // 8 МБ на файл — с запасом от лимита Groq (20 МБ) и разумно для мобильного трафика
+
+        const freeSlots = this.MAX_IMAGES - this._images.length;
+        if (freeSlots <= 0) {
+            this._setStatus("Already attached the maximum of " + this.MAX_IMAGES + " images.", "error");
+            event.target.value = "";
             return;
         }
-        const MAX_BYTES = 8 * 1024 * 1024; // 8 МБ — с запасом byд лandмandт Groq (20 МБ) and разумbut for мобandльbutго трафandка
-        if (file.size > MAX_BYTES) {
-            this._setStatus("Image is too large (max 8 MB).", "error");
-            return;
+        const toProcess = files.slice(0, freeSlots);
+        if (files.length > freeSlots) {
+            this._setStatus("Only " + freeSlots + " more image(s) can be attached (max " + this.MAX_IMAGES + ").", "warn");
         }
-        const reader = new FileReader();
-        reader.onload = () => {
-            this._imageBase64 = reader.result; // data:image/...;base64,....
-            this._imageMediaType = file.type;
-            const previewWrap = document.getElementById("ai-image-preview");
-            const previewImg = document.getElementById("ai-image-preview-img");
-            const attachBtn = document.getElementById("ai-image-attach-btn");
-            if (previewImg) previewImg.src = this._imageBase64;
-            if (previewWrap) previewWrap.style.display = "inline-flex";
-            if (attachBtn) attachBtn.style.display = "none";
-        };
-        reader.onerror = () => {
-            this._setStatus("Could not read the image file.", "error");
-        };
-        reader.readAsDataURL(file);
+
+        let pending = toProcess.length;
+        toProcess.forEach(file => {
+            if (!file.type || !file.type.startsWith("image/")) {
+                this._setStatus("Selected files must be images.", "error");
+                pending--;
+                return;
+            }
+            if (file.size > MAX_BYTES) {
+                this._setStatus("Image \"" + file.name + "\" is too large (max 8 MB).", "error");
+                pending--;
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = () => {
+                this._images.push({ dataUrl: reader.result, mediaType: file.type });
+                this._renderImagePreviews();
+            };
+            reader.onerror = () => {
+                this._setStatus("Could not read the image file.", "error");
+            };
+            reader.readAsDataURL(file);
+        });
+        event.target.value = "";
     },
 
-    /** Убandрает прandкреплённую картandнку. */
-    removeImage: function() {
-        this._imageBase64 = null;
-        this._imageMediaType = null;
+    /** Перерисовывает миниатюры всех прикреплённых картинок. */
+    _renderImagePreviews: function() {
         const previewWrap = document.getElementById("ai-image-preview");
         const attachBtn = document.getElementById("ai-image-attach-btn");
+        if (!previewWrap) return;
+        previewWrap.innerHTML = "";
+        this._images.forEach((img, idx) => {
+            const thumb = document.createElement("div");
+            thumb.className = "ai-image-thumb";
+            thumb.innerHTML = `<img src="${img.dataUrl}" alt="preview ${idx + 1}"><span class="ai-image-remove" title="Remove image">✕</span>`;
+            thumb.querySelector(".ai-image-remove").addEventListener("click", () => this.removeImage(idx));
+            previewWrap.appendChild(thumb);
+        });
+        previewWrap.style.display = this._images.length ? "flex" : "none";
+        if (attachBtn) attachBtn.style.display = this._images.length >= this.MAX_IMAGES ? "none" : "";
+    },
+
+    /** Убирает одну прикреплённую картинку по индексу (или все, если индекс не передан). */
+    removeImage: function(index) {
+        if (typeof index === "number") {
+            this._images.splice(index, 1);
+        } else {
+            this._images = [];
+        }
+        this._renderImagePreviews();
         const input = document.getElementById("ai-image-input");
-        if (previewWrap) previewWrap.style.display = "none";
-        if (attachBtn) attachBtn.style.display = "";
         if (input) input.value = "";
     },
 
     /**
-     * Отпраintoляет картandнку into vision-модель (отдельный запрос к Worker'у, mode:"vision")
-     * and byлучает byдробbutе текстоintoое опandсанandе объекта on notй — форма, частand, проbyрцandand,
-     * матерandалы/цintoета, расbyлоsameнandе elementоinto. Это опandсанandе byтом уходandт into осbutintobutй
-     * промпт геnotрацandand кубоinto как доbyлнandтельный контекст.
+     * Отправляет все прикреплённые картинки в vision-модель одним запросом (отдельный
+     * запрос к Worker'у, mode:"vision") и получает подробное текстовое описание объекта —
+     * форма, части, пропорции, материалы/цвета, расположение элементов, с учётом того что
+     * несколько фото могут показывать объект с разных ракурсов. Это описание потом уходит
+     * в основной промпт генерации кубов как дополнительный контекст.
      */
     _analyzeImage: async function() {
-        if (!this._imageBase64) return null;
-        const visionPrompt = `Carefully and in detail describe the object in this image for a 3D artist who will assemble it from rectangular cubes (blocky/voxel style, like Minecraft). Describe strictly by points:
+        if (!this._images.length) return null;
+        const multiple = this._images.length > 1;
+        const visionPrompt = (multiple
+            ? `Carefully and in detail describe the object shown in these ${this._images.length} images (they show the same object from different angles/sides — combine them into one consistent description) for a 3D artist who will assemble it from rectangular cubes (blocky/voxel style, like Minecraft). Describe strictly by points:`
+            : `Carefully and in detail describe the object in this image for a 3D artist who will assemble it from rectangular cubes (blocky/voxel style, like Minecraft). Describe strictly by points:`) + `
 1. What physical parts the object consists of and how many (e.g.: body, 4 legs, roof of two slopes, etc.).
 2. Proportions and mutual arrangement of parts (what is wider/narrower, higher/lower, symmetrical, at what angle surfaces are inclined).
 3. Shape of each part in terms of simple volumes (rectangular parallelepiped, inclined plane, cylinder of faceted segments, etc.) — since the final model will be built ONLY from rectangular cubes, describe how best to approximate rounded/complex shapes with cubes.
@@ -13069,7 +13103,7 @@ Write in English, concisely, by points, without introduction or conclusion — o
 
         const imageContent = [
             { type: "text", text: visionPrompt },
-            { type: "image_url", image_url: { url: this._imageBase64 } }
+            ...this._images.map(img => ({ type: "image_url", image_url: { url: img.dataUrl } }))
         ];
 
         const response = await fetch(this.ENDPOINT, {
@@ -13081,7 +13115,7 @@ Write in English, concisely, by points, without introduction or conclusion — o
                     { role: "user", content: imageContent }
                 ],
                 temperature: 0.3,
-                max_tokens: 1000
+                max_tokens: 1800
             })
         });
 
@@ -13229,15 +13263,15 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         this._setProgress(0);
         this._setRefLine("");
         this._clearConsole();
-        this._log("Request: \"" + promptText + "\"" + (this._imageBase64 ? " (+ image)" : ""));
+        this._log("Request: \"" + promptText + "\"" + (this._images.length ? " (+ " + this._images.length + " image" + (this._images.length > 1 ? "s" : "") + ")" : ""));
         const planWrapEl = document.getElementById("ai-plan-wrap");
         if (planWrapEl) planWrapEl.style.display = "none";
 
         try {
             let imageDescription = null;
-            if (this._imageBase64) {
-                this._setStatus('<span class="ai-spinner"></span> Analyzing image...', "");
-                this._log("Sending image for vision analysis...");
+            if (this._images.length) {
+                this._setStatus('<span class="ai-spinner"></span> Analyzing image' + (this._images.length > 1 ? "s" : "") + '...', "");
+                this._log("Sending " + this._images.length + " image" + (this._images.length > 1 ? "s" : "") + " for vision analysis...");
                 const imgStart = performance.now();
                 try {
                     imageDescription = await this._analyzeImage();
@@ -13265,7 +13299,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
             }
 
             const userContent = imageDescription
-                ? `Build: ${promptText}.\n\nDetailed description of the attached reference image (rely on it as precisely as possible — shape, parts, proportions, materials, element arrangement must match this description as closely as possible):\n${imageDescription}\n\nAnswer strictly as a JSON object {"plan": "...", "cubes": [...]}. Write the plan briefly (3-6 short sentences) — the main response budget must go into the full array of cubes covering ALL parts of the plan, not a single plan part should remain without cubes.`
+                ? `Build: ${promptText}.\n\nDetailed description of the attached reference image${this._images.length > 1 ? "s" : ""} (rely on it as precisely as possible — shape, parts, proportions, materials, element arrangement must match this description as closely as possible):\n${imageDescription}\n\nAnswer strictly as a JSON object {"plan": "...", "cubes": [...]}. Write the plan briefly (3-6 short sentences) — the main response budget must go into the full array of cubes covering ALL parts of the plan, not a single plan part should remain without cubes.`
                 : `Build: ${promptText}. Answer strictly as a JSON object {"plan": "...", "cubes": [...]}. Write the plan briefly (3-6 short sentences) — the main response budget must go into the full array of cubes covering ALL parts of the plan, not a single plan part should remain without cubes.`;
 
             // Up to two attempts: if first attempt returns valid but truncated by MAX_TOKENS
@@ -13568,12 +13602,9 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                 <div class="ai-modal-body">
                     <textarea id="ai-builder-prompt" class="ai-prompt-input" placeholder="Describe what to build: e.g. "wooden bridge over river" or "rusty metal barrel"..."></textarea>
                     <div class="ai-image-row" id="ai-image-row">
-                        <input type="file" id="ai-image-input" accept="image/*" style="display:none" onchange="aiBuilder.onImageSelected(event)">
-                        <button type="button" class="ai-image-attach-btn" id="ai-image-attach-btn" onclick="document.getElementById('ai-image-input').click()">🖼 Attach image</button>
-                        <div class="ai-image-preview" id="ai-image-preview" style="display:none">
-                            <img id="ai-image-preview-img" src="" alt="preview">
-                            <span class="ai-image-remove" onclick="aiBuilder.removeImage()" title="Remove image">✕</span>
-                        </div>
+                        <input type="file" id="ai-image-input" accept="image/*" multiple style="display:none" onchange="aiBuilder.onImageSelected(event)">
+                        <button type="button" class="ai-image-attach-btn" id="ai-image-attach-btn" onclick="document.getElementById('ai-image-input').click()">🖼 Attach images</button>
+                        <div class="ai-image-preview" id="ai-image-preview" style="display:none"></div>
                     </div>
                     <div class="ai-quick-row">
                         <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Simple wooden house with gable roof'">House</span>
