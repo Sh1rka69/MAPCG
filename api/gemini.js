@@ -200,13 +200,22 @@ module.exports = async (req, res) => {
     return;
   }
 
-  // Читаем тело запроса
-  let bodyRaw = "";
+  // Читаем тело запроса (Buffer.concat для корректной работы с бинарными чанками)
+  const chunks = [];
   await new Promise((resolve, reject) => {
-    req.on("data", (chunk) => (bodyRaw += chunk));
-    req.on("end", resolve);
-    req.on("error", reject);
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => resolve());
+    req.on("error", (err) => reject(err));
   });
+  const bodyRaw = Buffer.concat(chunks).toString("utf8");
+
+  // Vercel Hobby лимит ~4.5 MB, Pro ~6 MB. Даём запас.
+  if (bodyRaw.length > 5.5 * 1024 * 1024) {
+    res
+      .writeHead(413, { "Content-Type": "application/json", ...cors })
+      .end(JSON.stringify({ error: "Request payload too large. Try attaching fewer or smaller images." }));
+    return;
+  }
 
   let body;
   try {
