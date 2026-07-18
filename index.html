@@ -5942,7 +5942,7 @@ const engine = {
                 }
             },
             vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-            fragmentShader: `\n                        precision highp float;\n                        uniform sampler2D tDiffuse;\n                        uniform sampler2D tDepth;\n                        uniform sampler2D tPrevFrame;\n                        uniform vec2      resolution;       /* full output size — IGN + edge fade */\n                        uniform vec2      uDepthResolution; /* half-res depth texture — texel offsets */\n                        uniform mat4      proj;\n                        uniform mat4      uPrevViewProj;     /* previous frame's world→clip matrix */\n                        uniform mat4      uInvView;          /* this frame's view→world matrix */\n                        uniform vec3      uCamPos;           /* this frame's world-space camera position */\n                        uniform float     uHistoryValid;     /* 0 = first frame / just resized, skip blend */\n                        uniform float     uCameraMoved;      /* 0..1 — larger camera motion → trust history less */\n                        uniform float     rtStrength;\n                        uniform float     uSharpness;\n                        uniform float     uFar;\n                        uniform float     uTanHalfFovX;\n                        uniform float     uTanHalfFovY;\n                        varying vec2 vUv;\n\n                        /* Unpacking лandnotйbutй глубandны andз RGBA8 (кросс-платформенbut, without hardware depth-textures) */\n                        float unpackDepth(vec4 rgba) {\n                            const vec4 bitShifts = vec4(1.0/16777216.0, 1.0/65536.0, 1.0/256.0, 1.0);\n                            return dot(rgba, bitShifts);\n                        }\n                        /* .x = лandnotйonя глубandon (view-space -Z, метры), .y = 1.0 if это «notбо» (notт геометрandand) */\n                        vec2 readDepth(vec2 uv) {\n                            vec4 raw = texture2D(tDepth, uv);\n                            if (raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);\n                            return vec2(unpackDepth(raw) * uFar, 0.0);\n                        }\n\n                        vec3 getViewPos(vec2 uv, float linZ) {\n                            vec2 ndc = uv * 2.0 - 1.0;\n                            return vec3(ndc.x * uTanHalfFovX * linZ, ndc.y * uTanHalfFovY * linZ, -linZ);\n                        }\n\n                        vec2 viewToUv(vec3 p) {\n                            vec4 clip = proj * vec4(p, 1.0);\n                            return (clip.xy / clip.w) * 0.5 + 0.5;\n                        }\n\n                        float IGN(vec2 pix) {\n                            return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));\n                        }\n\n                        /* Reads the reflection colour with a small roughness-weighted multi-tap\n                           blur. A single texel lookup at the hit point is what made reflections\n                           look blocky/pixelated at a distance (each screen pixel maps to a large\n                           world area). Averaging a few neighbouring taps softens that without\n                           costing extra rays. */\n                        vec3 resolveReflectionColor(vec2 hitUV, float roughness) {\n                            vec2 px = 1.0 / resolution;\n                            float r = 1.0 + roughness * 2.5;\n                            vec3 sum = texture2D(tDiffuse, hitUV).rgb * 4.0;\n                            sum += texture2D(tDiffuse, hitUV + vec2( px.x,  0.0) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2(-px.x,  0.0) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2( 0.0,  px.y) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2( 0.0, -px.y) * r).rgb;\n                            return sum / 8.0;\n                        }\n\n                        void main() {\n                            vec4  col  = texture2D(tDiffuse, vUv);\n                            vec2  centerD = readDepth(vUv);\n                            /* Notбо — reflect notчit */\n                            if (centerD.y > 0.5) { gl_FragColor = col; return; }\n\n                            vec2  texel = 1.0 / uDepthResolution; /* depth-tex res for correct neighbor taps */\n                            vec3  pos   = getViewPos(vUv, centerD.x);\n\n                            /* ── Стабandльonя реконструкцandя butрмалand (см. AO-шейдер intoыше — тот same fix:\n                               центральonя разbutсть on плоскandх участках, so шintoы кубоinto not даintoалand\n                               скачущую butрмаль and, как следстintoandе, дрожащandе отраsameнandя). ── */\n                            vec2 dR  = readDepth(vUv + vec2( texel.x, 0.0));\n                            vec2 dL  = readDepth(vUv - vec2( texel.x, 0.0));\n                            vec2 dU  = readDepth(vUv + vec2(0.0,  texel.y));\n                            vec2 dDn = readDepth(vUv - vec2(0.0,  texel.y));\n                            vec3 pR = getViewPos(vUv + vec2( texel.x, 0.0), dR.x);\n                            vec3 pL = getViewPos(vUv - vec2( texel.x, 0.0), dL.x);\n                            vec3 pU = getViewPos(vUv + vec2(0.0,  texel.y), dU.x);\n                            vec3 pD = getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);\n                            float edgeScale = max(0.001, centerD.x) * 0.06;\n                            float wx = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dR.x - dL.x));\n                            float wy = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dU.x - dDn.x));\n                            vec3 dXEdge = (abs(dR.x - centerD.x) < abs(centerD.x - dL.x)) ? (pR - pos) : (pos - pL);\n                            vec3 dYEdge = (abs(dU.x - centerD.x) < abs(centerD.x - dDn.x)) ? (pU - pos) : (pos - pD);\n                            vec3 dX = mix(dXEdge, (pR - pL) * 0.5, wx);\n                            vec3 dY = mix(dYEdge, (pU - pD) * 0.5, wy);\n                            vec3 N = normalize(cross(dX, dY));\n                            if (N.z < 0.0) N = -N;\n\n                            /* ── Трассandроintoка отражёнbutго луча into view-space ── */\n                            vec3  V = normalize(pos);           /* камера into (0,0,0) */\n                            float roughness = clamp(1.0 - uSharpness, 0.0, 1.0);\n                            vec3 randDir = vec3(IGN(vUv * resolution + 0.1) - 0.5, IGN(vUv * resolution + 0.2) - 0.5, IGN(vUv * resolution + 0.3) - 0.5);\n                            vec3  R = normalize(reflect(V, N) + randDir * roughness * 0.06);\n                            float jitter    = IGN(floor(vUv * resolution));\n                            /* Perf: dropped 22→14 steps. Temporal reprojection (below) accumulates\n                               samples across frames, so a single frame's ray no longer needs to be\n                               this precise — the history blend hides the coarser marching, but the\n                               GPU cost of the most expensive pass in the whole pipeline drops by\n                               ~35%. This was the single biggest FPS cost in the renderer. */\n                            const int   STEPS   = 14;\n                            const float MAXDIST = 34.0;\n                            float stepLen   = MAXDIST / float(STEPS);\n                            float thickness = 0.9;\n\n                            float hit = 0.0;\n                            vec2  hitUV = vUv;\n                            float t = stepLen * (0.35 + 0.65 * jitter);\n                            float prevT = 0.0;\n                            for (int i = 0; i < STEPS; i++) {\n                                vec3 p  = pos + R * t;\n                                if (p.z > -0.05) break;                 /* луч ушёл за камеру */\n                                vec2 uv2 = viewToUv(p);\n                                if (uv2.x < 0.0 || uv2.x > 1.0 || uv2.y < 0.0 || uv2.y > 1.0) break;\n                                vec2 sD = readDepth(uv2);\n                                if (sD.y < 0.5) {\n                                    float sceneZ = -sD.x;\n                                    float diff   = sceneZ - p.z;        /* >0 когда луч зашёл за byintoерхbutсть */\n                                    if (diff > 0.0 && diff < thickness + t * 0.06) {\n                                        /* Binary refinement: 3 iterations is enough precision once\n                                           temporal accumulation smooths the result over several frames —\n                                           trimmed from 4 for perf, edge crispness loss is not visible\n                                           after the history blend. */\n                                        float lo = prevT, hi = t;\n                                        for (int j = 0; j < 3; j++) {\n                                            float mid = (lo + hi) * 0.5;\n                                            vec3  pm  = pos + R * mid;\n                                            vec2  uvm = viewToUv(pm);\n                                            vec2  sDm = readDepth(uvm);\n                                            if (sDm.y < 0.5 && (-sDm.x - pm.z) > 0.0) { hi = mid; hitUV = uvm; }\n                                            else lo = mid;\n                                        }\n                                        hit = 1.0;\n                                        break;\n                                    }\n                                }\n                                prevT = t;\n                                t += stepLen * (1.0 + float(i) * 0.07);  /* ускоряющandйся шаг */\n                            }\n\n                            vec3 outCol = col.rgb;\n\n                            if (hit > 0.5) {\n                                vec3 refCol = resolveReflectionColor(hitUV, roughness);\n                                /* Фреnotль: byд скользящandм углом отраsameнandя сandльnotе — фandзandческand корректbut.\n                                   Slightly softer power (3→2.4) reads closer to a real dielectric\n                                   Fresnel curve instead of an overly narrow rim highlight. */\n                                float fres = pow(1.0 - max(0.0, dot(-V, N)), 2.4);\n                                float refAmt = clamp(rtStrength * (0.08 + 0.88 * fres), 0.0, 0.82);\n                                /* Затуханandе у краёinto экраon — убandрает резкandе обрыintoы отраsameнandй */\n                                vec2  edge = min(hitUV, 1.0 - hitUV);\n                                refAmt *= smoothstep(0.0, 0.10, min(edge.x, edge.y));\n\n                                /* ── Temporal reprojection: blend with last frame's reflection at the\n                                   same WORLD point to average out per-frame ray noise. This is what\n                                   turns a single noisy screen-space sample into a smooth, denoised\n                                   result — the main reason real-time reflections look "cheap" without\n                                   it. ── */\n                                vec3 worldPos = (uInvView * vec4(pos, 1.0)).xyz;\n                                vec4 prevClip = uPrevViewProj * vec4(worldPos, 1.0);\n                                vec3 blended = mix(col.rgb, refCol, refAmt);\n                                if (uHistoryValid > 0.5 && prevClip.w > 0.0) {\n                                    vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;\n                                    if (prevUV.x > 0.0 && prevUV.x < 1.0 && prevUV.y > 0.0 && prevUV.y < 1.0) {\n                                        vec3 histCol = texture2D(tPrevFrame, prevUV).rgb;\n                                        float histWeight = mix(0.82, 0.15, uCameraMoved);\n                                        blended = mix(blended, histCol, histWeight);\n                                    }\n                                }\n                                outCol = blended;\n\n                                /* GI: одbutотскокоintoый переbutс цintoета (colour bleeding) от точкand byпаданandя */\n                                float lum = dot(refCol, vec3(0.299, 0.587, 0.114));\n                                outCol += refCol * lum * 0.06 * rtStrength;\n                            } else if (uHistoryValid > 0.5) {\n                                /* No ray hit this frame (e.g. a single dropped sample near a grazing\n                                   angle) — reproject history instead of snapping straight back to the\n                                   unreflected colour, which would otherwise flicker every time a ray\n                                   happens to miss. Weighted lightly so real, persistent misses (e.g.\n                                   camera turned away) still fade out instead of ghosting forever. */\n                                vec3 worldPos = (uInvView * vec4(pos, 1.0)).xyz;\n                                vec4 prevClip = uPrevViewProj * vec4(worldPos, 1.0);\n                                if (prevClip.w > 0.0) {\n                                    vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;\n                                    if (prevUV.x > 0.0 && prevUV.x < 1.0 && prevUV.y > 0.0 && prevUV.y < 1.0) {\n                                        vec3 histCol = texture2D(tPrevFrame, prevUV).rgb;\n                                        outCol = mix(col.rgb, histCol, mix(0.5, 0.05, uCameraMoved));\n                                    }\n                                }\n                            }\n\n                            /* Мягкandй кandnotматографandчный контраст into RT-режandме */\n                            outCol = mix(outCol, outCol * outCol * (3.0 - 2.0 * outCol), 0.18);\n                            gl_FragColor = vec4(outCol, col.a);\n                        }\n                    `
+            fragmentShader: `\n                        precision highp float;\n                        uniform sampler2D tDiffuse;\n                        uniform sampler2D tDepth;\n                        uniform sampler2D tPrevFrame;\n                        uniform vec2      resolution;       /* full output size — IGN + edge fade */\n                        uniform vec2      uDepthResolution; /* half-res depth texture — texel offsets */\n                        uniform mat4      proj;\n                        uniform mat4      uPrevViewProj;     /* previous frame's world→clip matrix */\n                        uniform mat4      uInvView;          /* this frame's view→world matrix */\n                        uniform vec3      uCamPos;           /* this frame's world-space camera position */\n                        uniform float     uHistoryValid;     /* 0 = first frame / just resized, skip blend */\n                        uniform float     uCameraMoved;      /* 0..1 — larger camera motion → trust history less */\n                        uniform float     rtStrength;\n                        uniform float     uSharpness;\n                        uniform float     uFar;\n                        uniform float     uTanHalfFovX;\n                        uniform float     uTanHalfFovY;\n                        varying vec2 vUv;\n\n                        /* Unpacking лandnotйbutй глубandны andз RGBA8 (кросс-платформенbut, without hardware depth-textures) */\n                        float unpackDepth(vec4 rgba) {\n                            const vec4 bitShifts = vec4(1.0/16777216.0, 1.0/65536.0, 1.0/256.0, 1.0);\n                            return dot(rgba, bitShifts);\n                        }\n                        /* .x = лandnotйonя глубandon (view-space -Z, метры), .y = 1.0 if это «notбо» (notт геометрandand) */\n                        vec2 readDepth(vec2 uv) {\n                            vec4 raw = texture2D(tDepth, uv);\n                            if (raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);\n                            return vec2(unpackDepth(raw) * uFar, 0.0);\n                        }\n\n                        vec3 getViewPos(vec2 uv, float linZ) {\n                            vec2 ndc = uv * 2.0 - 1.0;\n                            return vec3(ndc.x * uTanHalfFovX * linZ, ndc.y * uTanHalfFovY * linZ, -linZ);\n                        }\n\n                        vec2 viewToUv(vec3 p) {\n                            vec4 clip = proj * vec4(p, 1.0);\n                            return (clip.xy / clip.w) * 0.5 + 0.5;\n                        }\n\n                        float IGN(vec2 pix) {\n                            return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));\n                        }\n\n                        /* Reads the reflection colour with a small roughness-weighted multi-tap\n                           blur. A single texel lookup at the hit point is what made reflections\n                           look blocky/pixelated at a distance (each screen pixel maps to a large\n                           world area). Averaging a few neighbouring taps softens that without\n                           costing extra rays. */\n                        vec3 resolveReflectionColor(vec2 hitUV, float roughness) {\n                            vec2 px = 1.0 / resolution;\n                            float r = 1.0 + roughness * 2.5;\n                            vec3 sum = texture2D(tDiffuse, hitUV).rgb * 4.0;\n                            sum += texture2D(tDiffuse, hitUV + vec2( px.x,  0.0) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2(-px.x,  0.0) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2( 0.0,  px.y) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2( 0.0, -px.y) * r).rgb;\n                            return sum / 8.0;\n                        }\n\n                        void main() {\n                            vec4  col  = texture2D(tDiffuse, vUv);\n                            vec2  centerD = readDepth(vUv);\n                            /* Notбо — reflect notчit */\n                            if (centerD.y > 0.5) { gl_FragColor = col; return; }\n\n                            vec2  texel = 1.0 / uDepthResolution; /* depth-tex res for correct neighbor taps */\n                            vec3  pos   = getViewPos(vUv, centerD.x);\n\n                            /* ── Стабandльonя реконструкцandя butрмалand (см. AO-шейдер intoыше — тот same fix:\n                               центральonя разbutсть on плоскandх участках, so шintoы кубоinto not даintoалand\n                               скачущую butрмаль and, как следстintoandе, дрожащandе отраsameнandя). ── */\n                            vec2 dR  = readDepth(vUv + vec2( texel.x, 0.0));\n                            vec2 dL  = readDepth(vUv - vec2( texel.x, 0.0));\n                            vec2 dU  = readDepth(vUv + vec2(0.0,  texel.y));\n                            vec2 dDn = readDepth(vUv - vec2(0.0,  texel.y));\n                            vec3 pR = getViewPos(vUv + vec2( texel.x, 0.0), dR.x);\n                            vec3 pL = getViewPos(vUv - vec2( texel.x, 0.0), dL.x);\n                            vec3 pU = getViewPos(vUv + vec2(0.0,  texel.y), dU.x);\n                            vec3 pD = getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);\n                            float edgeScale = max(0.001, centerD.x) * 0.06;\n                            float wx = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dR.x - dL.x));\n                            float wy = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dU.x - dDn.x));\n                            vec3 dXEdge = (abs(dR.x - centerD.x) < abs(centerD.x - dL.x)) ? (pR - pos) : (pos - pL);\n                            vec3 dYEdge = (abs(dU.x - centerD.x) < abs(centerD.x - dDn.x)) ? (pU - pos) : (pos - pD);\n                            vec3 dX = mix(dXEdge, (pR - pL) * 0.5, wx);\n                            vec3 dY = mix(dYEdge, (pU - pD) * 0.5, wy);\n                            vec3 N = normalize(cross(dX, dY));\n                            if (N.z < 0.0) N = -N;\n\n                            /* ── Трассandроintoка отражёнbutго луча into view-space ── */\n                            vec3  V = normalize(pos);           /* камера into (0,0,0) */\n                            float roughness = clamp(1.0 - uSharpness, 0.0, 1.0);\n                            vec3 randDir = vec3(IGN(vUv * resolution + 0.1) - 0.5, IGN(vUv * resolution + 0.2) - 0.5, IGN(vUv * resolution + 0.3) - 0.5);\n                            vec3  R = normalize(reflect(V, N) + randDir * roughness * 0.06);\n                            float jitter    = IGN(floor(vUv * resolution));\n                            /* Perf: dropped 22→14 steps. Temporal reprojection (below) accumulates\n                               samples across frames, so a single frame's ray no longer needs to be\n                               this precise — the history blend hides the coarser marching, but the\n                               GPU cost of the most expensive pass in the whole pipeline drops by\n                               ~35%. This was the single biggest FPS cost in the renderer. */\n                            const int   STEPS   = 14;\n                            const float MAXDIST = 34.0;\n                            float stepLen   = MAXDIST / float(STEPS);\n                            float thickness = 0.9;\n\n                            float hit = 0.0;\n                            vec2  hitUV = vUv;\n                            float t = stepLen * (0.35 + 0.65 * jitter);\n                            float prevT = 0.0;\n                            for (int i = 0; i < STEPS; i++) {\n                                vec3 p  = pos + R * t;\n                                if (p.z > -0.05) break;                 /* луч ушёл за камеру */\n                                vec2 uv2 = viewToUv(p);\n                                if (uv2.x < 0.0 || uv2.x > 1.0 || uv2.y < 0.0 || uv2.y > 1.0) break;\n                                vec2 sD = readDepth(uv2);\n                                if (sD.y < 0.5) {\n                                    float sceneZ = -sD.x;\n                                    float diff   = sceneZ - p.z;        /* >0 когда луч зашёл за byintoерхbutсть */\n                                    if (diff > 0.0 && diff < thickness + t * 0.06) {\n                                        /* Binary refinement: 3 iterations is enough precision once\n                                           temporal accumulation smooths the result over several frames —\n                                           trimmed from 4 for perf, edge crispness loss is not visible\n                                           after the history blend. */\n                                        float lo = prevT, hi = t;\n                                        for (int j = 0; j < 3; j++) {\n                                            float mid = (lo + hi) * 0.5;\n                                            vec3  pm  = pos + R * mid;\n                                            vec2  uvm = viewToUv(pm);\n                                            vec2  sDm = readDepth(uvm);\n                                            if (sDm.y < 0.5 && (-sDm.x - pm.z) > 0.0) { hi = mid; hitUV = uvm; }\n                                            else lo = mid;\n                                        }\n                                        hit = 1.0;\n                                        break;\n                                    }\n                                }\n                                prevT = t;\n                                t += stepLen * (1.0 + float(i) * 0.07);  /* ускоряющandйся шаг */\n                            }\n\n                            vec3 outCol = col.rgb;\n\n                            if (hit > 0.5) {\n                                vec3 refCol = resolveReflectionColor(hitUV, roughness);\n                                /* Фреnotль: byд скользящandм углом отраsameнandя сandльnotе — фandзandческand корректbut.\n                                   Slightly softer power (3→2.4) reads closer to a real dielectric\n                                   Fresnel curve instead of an overly narrow rim highlight. */\n                                float fres = pow(1.0 - max(0.0, dot(-V, N)), 2.4);\n                                float refAmt = clamp(rtStrength * (0.08 + 0.88 * fres), 0.0, 0.82);\n                                /* Затуханandе у краёinto экраon — убandрает резкandе обрыintoы отраsameнandй */\n                                vec2  edge = min(hitUV, 1.0 - hitUV);\n                                refAmt *= smoothstep(0.0, 0.10, min(edge.x, edge.y));\n\n                                /* ── Temporal reprojection: blend with last frame's reflection at the\n                                   same WORLD point to average out per-frame ray noise. This is what\n                                   turns a single noisy screen-space sample into a smooth, denoised\n                                   result — the main reason real-time reflections look "cheap" without\n                                   it. ── */\n                                vec3 worldPos = (uInvView * vec4(pos, 1.0)).xyz;\n                                vec4 prevClip = uPrevViewProj * vec4(worldPos, 1.0);\n                                vec3 blended = mix(col.rgb, refCol, refAmt);\n                                if (uHistoryValid > 0.5 && prevClip.w > 0.0) {\n                                    vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;\n                                    if (prevUV.x > 0.0 && prevUV.x < 1.0 && prevUV.y > 0.0 && prevUV.y < 1.0) {\n                                        vec3 histCol = texture2D(tPrevFrame, prevUV).rgb;\n                                        float histWeight = mix(0.6, 0.05, uCameraMoved);\n                                        blended = mix(blended, histCol, histWeight);\n                                    }\n                                }\n                                outCol = blended;\n\n                                /* GI: одbutотскокоintoый переbutс цintoета (colour bleeding) от точкand byпаданandя */\n                                float lum = dot(refCol, vec3(0.299, 0.587, 0.114));\n                                outCol += refCol * lum * 0.06 * rtStrength;\n                            } else if (uHistoryValid > 0.5) {\n                                /* No ray hit this frame (e.g. a single dropped sample near a grazing\n                                   angle) — reproject history instead of snapping straight back to the\n                                   unreflected colour, which would otherwise flicker every time a ray\n                                   happens to miss. Weighted lightly so real, persistent misses (e.g.\n                                   camera turned away) still fade out instead of ghosting forever. */\n                                vec3 worldPos = (uInvView * vec4(pos, 1.0)).xyz;\n                                vec4 prevClip = uPrevViewProj * vec4(worldPos, 1.0);\n                                if (prevClip.w > 0.0) {\n                                    vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;\n                                    if (prevUV.x > 0.0 && prevUV.x < 1.0 && prevUV.y > 0.0 && prevUV.y < 1.0) {\n                                        vec3 histCol = texture2D(tPrevFrame, prevUV).rgb;\n                                        outCol = mix(col.rgb, histCol, mix(0.35, 0.02, uCameraMoved));\n                                    }\n                                }\n                            }\n\n                            /* Мягкandй кandnotматографandчный контраст — тольклo on отраsameнandых пandкселях, not on всю сцену */\n                            if (hit > 0.5) {\n                                outCol = mix(outCol, outCol * outCol * (3.0 - 2.0 * outCol), 0.18);\n                            }\n                            gl_FragColor = vec4(outCol, col.a);\n                        }\n                    `
         };
         this.rtPass = new ShaderPass(_rtShader);
         this.rtPass.material.depthTest = false;
@@ -8019,7 +8019,7 @@ const engine = {
     updateSelectionPanels: function() {
         const first = this.selectedBlocks[0];
         const type = first?.userData?.type;
-        const hasEditable = this.editorMode && this.selectedBlocks.length > 0 && !!first && (type === "cube" || type === "light");
+        const hasEditable = this.editorMode && this.selectedBlocks.length > 0 && !!first && (type === "cube" || type === "light" || type === "spawn");
         const showCube = hasEditable && type === "cube";
         const showLight = hasEditable && type === "light";
         [ "right-sidebar", "bottom-object-bar", "transform-panel", "btn-delete-float" ].forEach(id => {
@@ -8036,6 +8036,15 @@ const engine = {
             const allSameGroup = canGroup && this.selectedBlocks.every(b => b.userData?.groupId && b.userData.groupId === this.selectedBlocks[0].userData.groupId);
             btnGroup.classList.toggle("hidden", !canGroup || allSameGroup);
         }
+        const isSpawnSelected = this.selectedBlocks.includes(this.spawnPointObj);
+        [ "mode-rotate", "mode-scale" ].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.disabled = isSpawnSelected;
+            el.style.opacity = isSpawnSelected ? "0.35" : "";
+            el.style.pointerEvents = isSpawnSelected ? "none" : "";
+            el.title = isSpawnSelected ? "Unavailable for Spawn Point" : "";
+        });
     },
     selectObject: function(object, viaClick = false) {
         if (!object) return;
@@ -8061,6 +8070,7 @@ const engine = {
         if (this.selectedBlocks.length === 0) {
             this.deselect();
         } else {
+            if (this.selectedBlocks.includes(this.spawnPointObj)) this.setTransformMode("translate");
             this.buildTransformGroup();
             this.updateUIFromObject();
             this.updateSelectionPanels();
@@ -8216,6 +8226,7 @@ const engine = {
         }
     },
     setTransformMode: function(mode) {
+        if (mode !== "translate" && this.selectedBlocks.includes(this.spawnPointObj)) return;
         this.transformControl.setMode(mode);
         [ "translate", "rotate", "scale" ].forEach(m => document.getElementById(`mode-${m}`).classList.toggle("active-tool", m === mode));
     },
@@ -8235,13 +8246,22 @@ const engine = {
         if (this.selectedBlocks.length === 0) return;
         const obj = this.selectedBlocks[0];
         const isMulti = this.selectedBlocks.length > 1;
-        const transformIds = [ "inp-pos-x", "inp-pos-y", "inp-pos-z", "inp-rot-x", "inp-rot-y", "inp-rot-z", "inp-sca-x", "inp-sca-y", "inp-sca-z" ];
-        transformIds.forEach(id => {
+        const isSpawn = obj.userData?.type === "spawn";
+        const posIds = [ "inp-pos-x", "inp-pos-y", "inp-pos-z" ];
+        const rotScaIds = [ "inp-rot-x", "inp-rot-y", "inp-rot-z", "inp-sca-x", "inp-sca-y", "inp-sca-z" ];
+        posIds.forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
             el.disabled = isMulti;
             el.style.opacity = isMulti ? "0.35" : "";
             el.title = isMulti ? "Unavailable in multi-select — use Gizmo" : "";
+        });
+        rotScaIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.disabled = isMulti || isSpawn;
+            el.style.opacity = isMulti || isSpawn ? "0.35" : "";
+            el.title = isSpawn ? "Unavailable for Spawn Point" : isMulti ? "Unavailable in multi-select — use Gizmo" : "";
         });
         let wp = new THREE.Vector3, wq = new THREE.Quaternion, ws = new THREE.Vector3;
         obj.getWorldPosition(wp);
@@ -8392,6 +8412,28 @@ const engine = {
             if (!culled) visibleCount++;
         }
         this._lastVisibleBlockCount = visibleCount;
+    },
+    _hideSkyForDepthPass: function() {
+        const list = [ this.sky, this.cloudsObj, this.starsObj, this.moonObj ];
+        const saved = [];
+        list.forEach(o => {
+            if (o) {
+                saved.push([ o, o.visible ]);
+                o.visible = false;
+            }
+        });
+        this._savedSceneBackground = this.scene.background;
+        this.scene.background = null;
+        return saved;
+    },
+    _restoreSkyAfterDepthPass: function(saved) {
+        if (saved) {
+            saved.forEach(([ o, wasVisible ]) => {
+                o.visible = wasVisible;
+            });
+        }
+        this.scene.background = this._savedSceneBackground;
+        this._savedSceneBackground = undefined;
     },
     updateShadowFrustumFollow: function() {
         if (!this.dirLight || !this.camera) return;
@@ -8737,6 +8779,7 @@ const engine = {
                 this.hemiLight.groundColor.setHex(11579568);
             }
             if (this.cloudsObj) this.cloudsObj.visible = false;
+            this.sky.visible = false;
             this.scene.background = this.customSkyboxTexture;
             this.scene.environment = this.customSkyboxEnvMap || null;
         } else {
@@ -9534,116 +9577,14 @@ const engine = {
         return merged;
     },
     serializeToGoreBoxFormatLit: function(bakeResult) {
-        const SKIN_THICKNESS = .008;
-        const SKIN_OFFSET = .005;
+        const SKIN_THICKNESS = .001;
+        const SKIN_OFFSET = .0005;
         const mapData = {
             version: 4,
             cubes: []
         };
         const cubesWithDecals = new Set(bakeResult.newDecalDefs.map(d => d.cubeRef.uuid));
         const bakedCubeIds = new Set(bakeResult.litCubes.filter(c => cubesWithDecals.has(c.uuid)).map(c => c.uuid));
-        const AXIS_EPS = .001;
-        const isAxisAligned = q => {
-            const e = (new THREE.Euler).setFromQuaternion(q, "YXZ");
-            return Math.abs(e.x) < AXIS_EPS && Math.abs(e.y) < AXIS_EPS && Math.abs(e.z) < AXIS_EPS;
-        };
-        const mergeGroups = new Map;
-        const nonMergeableBaked = [];
-        const tmpP = new THREE.Vector3, tmpQ = new THREE.Quaternion, tmpS = new THREE.Vector3;
-        bakeResult.litCubes.forEach(b => {
-            if (!cubesWithDecals.has(b.uuid)) return;
-            b.getWorldPosition(tmpP);
-            b.getWorldQuaternion(tmpQ);
-            b.getWorldScale(tmpS);
-            if (!isAxisAligned(tmpQ)) {
-                nonMergeableBaked.push(b);
-                return;
-            }
-            const hx = Math.abs(tmpS.x) / 2, hy = Math.abs(tmpS.y) / 2, hz = Math.abs(tmpS.z) / 2;
-            const box = {
-                min: {
-                    x: tmpP.x - hx,
-                    y: tmpP.y - hy,
-                    z: tmpP.z - hz
-                },
-                max: {
-                    x: tmpP.x + hx,
-                    y: tmpP.y + hy,
-                    z: tmpP.z + hz
-                }
-            };
-            const stdTag = getFallbackGoreBoxTag(b.userData.materialType || "Concrete");
-            const groupKey = (b.userData.collisions !== false) + "\0" + (b.userData.materialType || "Concrete") + "\0" + stdTag;
-            if (!mergeGroups.has(groupKey)) mergeGroups.set(groupKey, []);
-            mergeGroups.get(groupKey).push({
-                box: box,
-                srcCube: b
-            });
-        });
-        mergeGroups.forEach((entries, groupKey) => {
-            const [collisionsStr, materialType, gbTag] = groupKey.split("\0");
-            const mergedBoxes = this.greedyMergeBoxes(entries.map(e => e.box));
-            mergedBoxes.forEach(box => {
-                const cx = (box.min.x + box.max.x) / 2, cy = (box.min.y + box.max.y) / 2, cz = (box.min.z + box.max.z) / 2;
-                const sx = box.max.x - box.min.x, sy = box.max.y - box.min.y, sz = box.max.z - box.min.z;
-                mapData.cubes.push({
-                    name: "MapCube",
-                    tag: gbTag,
-                    tileMode: 2,
-                    visible: false,
-                    collisions: collisionsStr === "true",
-                    physics: false,
-                    materialName: getFallbackGoreBoxMaterialName(materialType || "Concrete"),
-                    position: {
-                        x: cx,
-                        y: cy,
-                        z: -cz
-                    },
-                    rotation: {
-                        x: 0,
-                        y: 0,
-                        z: 0
-                    },
-                    scale: {
-                        x: sx,
-                        y: sy,
-                        z: sz
-                    }
-                });
-            });
-        });
-        nonMergeableBaked.forEach(b => {
-            const gbTag = getFallbackGoreBoxTag(b.userData.materialType || "Concrete");
-            let pos = new THREE.Vector3, rot = new THREE.Quaternion, scl = new THREE.Vector3;
-            b.getWorldPosition(pos);
-            b.getWorldQuaternion(rot);
-            b.getWorldScale(scl);
-            const gbEuler = threeQuaternionToUnityEulerDeg(rot);
-            mapData.cubes.push({
-                name: "MapCube",
-                tag: gbTag,
-                tileMode: 2,
-                visible: false,
-                collisions: b.userData.collisions !== false,
-                physics: false,
-                materialName: getFallbackGoreBoxMaterialName(b.userData.materialType || "Concrete"),
-                position: {
-                    x: pos.x,
-                    y: pos.y,
-                    z: -pos.z
-                },
-                rotation: {
-                    x: gbEuler.x,
-                    y: gbEuler.y,
-                    z: gbEuler.z
-                },
-                scale: {
-                    x: scl.x,
-                    y: scl.y,
-                    z: scl.z
-                }
-            });
-        });
         this.blocks.forEach(b => {
             if (bakedCubeIds.has(b.uuid)) return;
             const gbTag = b.userData.sourceTag || getFallbackGoreBoxTag(b.userData.materialType || "Concrete");
@@ -9689,7 +9630,7 @@ const engine = {
                 tag: gbTag,
                 tileMode: 2,
                 visible: true,
-                collisions: false,
+                collisions: decal.cubeRef.userData.collisions !== false,
                 physics: false,
                 materialName: decal.materialName,
                 position: {
@@ -10242,6 +10183,7 @@ const engine = {
                         if ((this.ssaoPass.enabled || this.rtPass?.enabled) && this._depthTarget) {
                             const _prevOverride = this.scene.overrideMaterial;
                             this.scene.overrideMaterial = this._depthPackMat;
+                            const _savedSkyVis = this._hideSkyForDepthPass();
                             if (!this._tmpClearColor) this._tmpClearColor = new THREE.Color;
                             this.renderer.getClearColor(this._tmpClearColor);
                             const _prevClearAlpha = this.renderer.getClearAlpha();
@@ -10249,6 +10191,7 @@ const engine = {
                             this.renderer.setRenderTarget(this._depthTarget);
                             this.renderer.clear();
                             this.renderer.render(this.scene, this.camera);
+                            this._restoreSkyAfterDepthPass(_savedSkyVis);
                             this.scene.overrideMaterial = _prevOverride;
                             this.renderer.setRenderTarget(null);
                             this.renderer.setClearColor(this._tmpClearColor, _prevClearAlpha);
@@ -10316,6 +10259,7 @@ const engine = {
             if ((this.ssaoPass.enabled || this.rtPass?.enabled) && this._depthTarget) {
                 const _prevOverride = this.scene.overrideMaterial;
                 this.scene.overrideMaterial = this._depthPackMat;
+                const _savedSkyVis = this._hideSkyForDepthPass();
                 if (!this._tmpClearColor) this._tmpClearColor = new THREE.Color;
                 this.renderer.getClearColor(this._tmpClearColor);
                 const _prevClearAlpha = this.renderer.getClearAlpha();
@@ -10323,6 +10267,7 @@ const engine = {
                 this.renderer.setRenderTarget(this._depthTarget);
                 this.renderer.clear();
                 this.renderer.render(this.scene, this.camera);
+                this._restoreSkyAfterDepthPass(_savedSkyVis);
                 this.scene.overrideMaterial = _prevOverride;
                 this.renderer.setRenderTarget(null);
                 this.renderer.setClearColor(this._tmpClearColor, _prevClearAlpha);
@@ -10337,8 +10282,8 @@ const engine = {
                     const moved = this.camera.position.distanceTo(this._rtPrevCamPos);
                     if (!this._rtPrevCamQuat) this._rtPrevCamQuat = this.camera.quaternion.clone();
                     const angleMoved = this._rtPrevCamQuat.angleTo(this.camera.quaternion);
-                    const moveFactor = moved / 2;
-                    const rotFactor = angleMoved / .12;
+                    const moveFactor = moved / .12;
+                    const rotFactor = angleMoved / .02;
                     this.rtPass.uniforms.uCameraMoved.value = THREE.MathUtils.clamp(Math.max(moveFactor, rotFactor), 0, 1);
                     this.rtPass.uniforms.uHistoryValid.value = this._rtHistoryReady ? 1 : 0;
                 }
@@ -13011,38 +12956,10 @@ window.aiBuilder = {
     },
 
     /** Пользоintoатель intoыбрал файл картandнкand — чandтаем into base64 and byказыintoаем преintoью. */
-    /**
-     * Уменьшает изображение через canvas, чтобы не превысить лимит Vercel
-     * на размер запроса (~4.5–6 MB). Возвращает dataUrl.
-     */
-    _resizeImage: function(dataUrl, mimeType, maxDim, quality) {
-        return new Promise((resolve) => {
-            const img = new Image();
-            img.onload = () => {
-                let w = img.naturalWidth || img.width;
-                let h = img.naturalHeight || img.height;
-                if (w > maxDim || h > maxDim) {
-                    if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
-                    else { w = Math.round(w * maxDim / h); h = maxDim; }
-                }
-                const canvas = document.createElement('canvas');
-                canvas.width = w;
-                canvas.height = h;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, w, h);
-                const outMime = (mimeType === 'image/png' || mimeType === 'image/webp') ? mimeType : 'image/jpeg';
-                const outQuality = (outMime === 'image/jpeg') ? quality : undefined;
-                resolve(canvas.toDataURL(outMime, outQuality));
-            };
-            img.onerror = () => resolve(dataUrl);
-            img.src = dataUrl;
-        });
-    },
-
     onImageSelected: function(event) {
         const files = Array.from(event?.target?.files || []);
         if (!files.length) return;
-        const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 МБ на файл — с запасом
+        const MAX_BYTES = 8 * 1024 * 1024; // 8 МБ на файл — с запасом от лимита Groq (20 МБ) и разумно для мобильного трафика
 
         const freeSlots = this.MAX_IMAGES - this._images.length;
         if (freeSlots <= 0) {
@@ -13055,20 +12972,21 @@ window.aiBuilder = {
             this._setStatus("Only " + freeSlots + " more image(s) can be attached (max " + this.MAX_IMAGES + ").", "warn");
         }
 
+        let pending = toProcess.length;
         toProcess.forEach(file => {
             if (!file.type || !file.type.startsWith("image/")) {
                 this._setStatus("Selected files must be images.", "error");
+                pending--;
                 return;
             }
-            if (file.size > MAX_FILE_BYTES) {
+            if (file.size > MAX_BYTES) {
                 this._setStatus("Image \"" + file.name + "\" is too large (max 8 MB).", "error");
+                pending--;
                 return;
             }
             const reader = new FileReader();
-            reader.onload = async () => {
-                // Сжимаем до 1200px и JPEG 0.85, чтобы уложиться в лимит Vercel
-                const resized = await this._resizeImage(reader.result, file.type, 1200, 0.85);
-                this._images.push({ dataUrl: resized, mediaType: file.type });
+            reader.onload = () => {
+                this._images.push({ dataUrl: reader.result, mediaType: file.type });
                 this._renderImagePreviews();
             };
             reader.onerror = () => {
@@ -13146,28 +13064,16 @@ Write in English, concisely, by points, without introduction or conclusion — o
             })
         });
 
-        const contentType = response.headers.get('content-type') || '';
-
-        // Если сервер вернул не JSON (например, HTML из-за rewrite на index.html) — сообщаем понятно
-        if (!response.ok || !contentType.includes('application/json')) {
-            let msg = "Failed to analyze the image (HTTP " + response.status + ")";
-            if (!contentType.includes('application/json')) {
-                msg = "API returned non-JSON response (likely HTML instead of API). Check Vercel routing configuration.";
-            } else {
-                try {
-                    const errJson = await response.json();
-                    if (errJson?.error) msg = typeof errJson.error === "string" ? errJson.error : (errJson.error.message || msg);
-                } catch (e) {}
-            }
+        if (!response.ok) {
+            let msg = "Failed to analyze the image (" + response.status + ")";
+            try {
+                const errJson = await response.json();
+                if (errJson?.error) msg = typeof errJson.error === "string" ? errJson.error : (errJson.error.message || msg);
+            } catch (e) {}
             throw new Error(msg);
         }
 
-        let data;
-        try {
-            data = await response.json();
-        } catch (e) {
-            throw new Error("API returned invalid JSON. " + (e?.message || ""));
-        }
+        const data = await response.json();
         const content = data?.choices?.[0]?.message?.content;
         if (!content || typeof content !== "string" || !content.trim()) {
             throw new Error("The model could not describe the image. Try another photo.");
@@ -13716,5 +13622,5 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
 
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1c97df0cce6dbdb',t:'MTc4NDI5Mzg4MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1cf501708afd2f6',t:'MTc4NDM1NDkxNg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
