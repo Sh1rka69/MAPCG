@@ -13011,10 +13011,38 @@ window.aiBuilder = {
     },
 
     /** Пользоintoатель intoыбрал файл картandнкand — чandтаем into base64 and byказыintoаем преintoью. */
+    /**
+     * Уменьшает изображение через canvas, чтобы не превысить лимит Vercel
+     * на размер запроса (~4.5–6 MB). Возвращает dataUrl.
+     */
+    _resizeImage: function(dataUrl, mimeType, maxDim, quality) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+                let w = img.naturalWidth || img.width;
+                let h = img.naturalHeight || img.height;
+                if (w > maxDim || h > maxDim) {
+                    if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+                    else { w = Math.round(w * maxDim / h); h = maxDim; }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                const outMime = (mimeType === 'image/png' || mimeType === 'image/webp') ? mimeType : 'image/jpeg';
+                const outQuality = (outMime === 'image/jpeg') ? quality : undefined;
+                resolve(canvas.toDataURL(outMime, outQuality));
+            };
+            img.onerror = () => resolve(dataUrl);
+            img.src = dataUrl;
+        });
+    },
+
     onImageSelected: function(event) {
         const files = Array.from(event?.target?.files || []);
         if (!files.length) return;
-        const MAX_BYTES = 8 * 1024 * 1024; // 8 МБ на файл — с запасом от лимита Groq (20 МБ) и разумно для мобильного трафика
+        const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 МБ на файл — с запасом
 
         const freeSlots = this.MAX_IMAGES - this._images.length;
         if (freeSlots <= 0) {
@@ -13027,21 +13055,20 @@ window.aiBuilder = {
             this._setStatus("Only " + freeSlots + " more image(s) can be attached (max " + this.MAX_IMAGES + ").", "warn");
         }
 
-        let pending = toProcess.length;
         toProcess.forEach(file => {
             if (!file.type || !file.type.startsWith("image/")) {
                 this._setStatus("Selected files must be images.", "error");
-                pending--;
                 return;
             }
-            if (file.size > MAX_BYTES) {
+            if (file.size > MAX_FILE_BYTES) {
                 this._setStatus("Image \"" + file.name + "\" is too large (max 8 MB).", "error");
-                pending--;
                 return;
             }
             const reader = new FileReader();
-            reader.onload = () => {
-                this._images.push({ dataUrl: reader.result, mediaType: file.type });
+            reader.onload = async () => {
+                // Сжимаем до 1200px и JPEG 0.85, чтобы уложиться в лимит Vercel
+                const resized = await this._resizeImage(reader.result, file.type, 1200, 0.85);
+                this._images.push({ dataUrl: resized, mediaType: file.type });
                 this._renderImagePreviews();
             };
             reader.onerror = () => {
@@ -13119,16 +13146,28 @@ Write in English, concisely, by points, without introduction or conclusion — o
             })
         });
 
-        if (!response.ok) {
-            let msg = "Failed to analyze the image (" + response.status + ")";
-            try {
-                const errJson = await response.json();
-                if (errJson?.error) msg = typeof errJson.error === "string" ? errJson.error : (errJson.error.message || msg);
-            } catch (e) {}
+        const contentType = response.headers.get('content-type') || '';
+
+        // Если сервер вернул не JSON (например, HTML из-за rewrite на index.html) — сообщаем понятно
+        if (!response.ok || !contentType.includes('application/json')) {
+            let msg = "Failed to analyze the image (HTTP " + response.status + ")";
+            if (!contentType.includes('application/json')) {
+                msg = "API returned non-JSON response (likely HTML instead of API). Check Vercel routing configuration.";
+            } else {
+                try {
+                    const errJson = await response.json();
+                    if (errJson?.error) msg = typeof errJson.error === "string" ? errJson.error : (errJson.error.message || msg);
+                } catch (e) {}
+            }
             throw new Error(msg);
         }
 
-        const data = await response.json();
+        let data;
+        try {
+            data = await response.json();
+        } catch (e) {
+            throw new Error("API returned invalid JSON. " + (e?.message || ""));
+        }
         const content = data?.choices?.[0]?.message?.content;
         if (!content || typeof content !== "string" || !content.trim()) {
             throw new Error("The model could not describe the image. Try another photo.");
@@ -13677,5 +13716,5 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
 
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1c97df0cce6dbdb',t:'MTc4NDI5Mzg4MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1cf501708afd2f6',t:'MTc4NDM1NDkxNg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
