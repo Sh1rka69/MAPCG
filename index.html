@@ -7986,6 +7986,15 @@ const engine = {
         if (mode === "stretch") {
             uvs.array.set(defaultUVs);
         } else {
+            // rw/rh ALWAYS equal the real physical size (in meters) of this face's own
+            // width/height, and rw always feeds the U slot / rh always feeds the V slot.
+            // This is what guarantees every tile is a true 1x1 meter square on every face,
+            // no matter the cube's proportions - exactly like GoreBox, where switching
+            // between "X Y" and "Y X" tiling never stretches or squashes a tile.
+            // "yx" must NOT swap the rw/rh magnitudes (that would attach the wrong repeat
+            // count to a physical edge and distort non-square faces). The only difference
+            // "yx" is allowed to make is mirroring the winding direction along each axis,
+            // which flips the pattern's orientation without changing tile density.
             let rw = 1, rh = 1;
             for (let i = 0; i < 6; i++) {
                 if (i === 0 || i === 1) {
@@ -7998,20 +8007,29 @@ const engine = {
                     rw = sx;
                     rh = sy;
                 }
-                if (mode === "yx") {
-                    let temp = rw;
-                    rw = rh;
-                    rh = temp;
-                }
                 const offset = i * 8;
-                uvs.array[offset + 0] = 0;
-                uvs.array[offset + 1] = rh;
-                uvs.array[offset + 2] = rw;
-                uvs.array[offset + 3] = rh;
-                uvs.array[offset + 4] = 0;
-                uvs.array[offset + 5] = 0;
-                uvs.array[offset + 6] = rw;
-                uvs.array[offset + 7] = 0;
+                if (mode === "yx") {
+                    // Mirror both axes (rotate pattern 180°/flip) - same tile size, different
+                    // starting corner, so directional textures (brick courses, wood grain)
+                    // read as "inverted" while staying perfectly 1x1 square on any face.
+                    uvs.array[offset + 0] = rw;
+                    uvs.array[offset + 1] = 0;
+                    uvs.array[offset + 2] = 0;
+                    uvs.array[offset + 3] = 0;
+                    uvs.array[offset + 4] = rw;
+                    uvs.array[offset + 5] = rh;
+                    uvs.array[offset + 6] = 0;
+                    uvs.array[offset + 7] = rh;
+                } else {
+                    uvs.array[offset + 0] = 0;
+                    uvs.array[offset + 1] = rh;
+                    uvs.array[offset + 2] = rw;
+                    uvs.array[offset + 3] = rh;
+                    uvs.array[offset + 4] = 0;
+                    uvs.array[offset + 5] = 0;
+                    uvs.array[offset + 6] = rw;
+                    uvs.array[offset + 7] = 0;
+                }
             }
         }
         uvs.needsUpdate = true;
