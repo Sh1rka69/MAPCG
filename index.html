@@ -616,6 +616,14 @@
             padding: 2px 6px; background: var(--td-bg-3); color: var(--td-text-dim);
             border: 1px solid var(--td-border); flex-shrink: 0;
         }
+        .texture-picker-delete-btn {
+            width: 28px; height: 28px; flex-shrink: 0;
+            border: 1px solid var(--td-danger); background: rgba(255,59,48,0.08); color: var(--td-danger);
+            cursor: pointer; font-size: 13px; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.12s;
+        }
+        .texture-picker-delete-btn:hover { background: var(--td-danger); color: #fff; }
         .collection-modal-footer {
             padding: 12px 18px; border-top: 1px solid var(--td-border); flex-shrink: 0;
             display: flex; gap: 8px;
@@ -12592,6 +12600,48 @@ window.uiManager = {
         img.src = preview;
         img.style.visibility = preview ? "visible" : "hidden";
     },
+    deleteCustomTexture: function(key) {
+        const tex = activeProjectCustomTextures[key];
+        if (!tex) return;
+        const label = tex.userData?.originalName || key;
+        if (!confirm(`Delete custom texture "${label}"? Cubes using it will be reset to Grid.`)) return;
+        const affected = engine.blocks.filter(obj => obj.userData?.texture === key);
+        affected.forEach(obj => {
+            obj.userData.texture = "grid";
+            try {
+                const old = obj.material;
+                obj.material = engine.acquireCubeMaterialFor(obj);
+                engine.releaseCubeMaterial(old);
+            } catch (e) {}
+        });
+        if (activeProjectNormalMaps[key]) {
+            const nm = activeProjectNormalMaps[key];
+            if (nm.texture) {
+                try {
+                    nm.texture.dispose();
+                } catch (e) {}
+            }
+            delete activeProjectNormalMaps[key];
+        }
+        try {
+            tex.dispose();
+        } catch (e) {}
+        delete activeProjectCustomTextures[key];
+        const sel = document.getElementById("sel-texture");
+        if (sel) {
+            const opt = Array.from(sel.options).find(o => o.value === key);
+            if (opt) opt.remove();
+            if (affected.length && engine.selectedBlocks?.length && affected.includes(engine.selectedBlocks[0])) {
+                sel.value = "grid";
+                sel.dispatchEvent(new Event("change", {
+                    bubbles: true
+                }));
+            }
+        }
+        engine.syncAllObjectMaterials(true);
+        if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
+        this._refreshTexturePickerBody();
+    },
     _refreshTexturePickerBody: function() {
         const body = document.getElementById("texture-picker-modal-body");
         const sel = document.getElementById("sel-texture");
@@ -12605,6 +12655,7 @@ window.uiManager = {
             return;
         }
         options.forEach(opt => {
+            const isCustom = Object.prototype.hasOwnProperty.call(activeProjectCustomTextures, opt.value);
             const el = document.createElement("div");
             el.className = "collection-item" + (opt.value === currentValue ? " selected" : "");
             const preview = this._texturePickerPreview(opt.value);
@@ -12613,6 +12664,7 @@ window.uiManager = {
                         <div class="collection-item-info">
                             <div class="collection-item-name">${opt.textContent}</div>
                         </div>
+                        ${isCustom ? '<button class="texture-picker-delete-btn" title="Delete custom texture">🗑</button>' : ""}
                     `;
             el.addEventListener("click", () => {
                 sel.value = opt.value;
@@ -12621,6 +12673,13 @@ window.uiManager = {
                 }));
                 this.closeTexturePickerModal();
             });
+            if (isCustom) {
+                const delBtn = el.querySelector(".texture-picker-delete-btn");
+                delBtn.addEventListener("click", e => {
+                    e.stopPropagation();
+                    this.deleteCustomTexture(opt.value);
+                });
+            }
             body.appendChild(el);
         });
     },
