@@ -541,6 +541,25 @@
             display: flex; flex-direction: column;
             animation: tdModalIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
+        .collection-modal.collection-modal-fullscreen {
+            width: 100vw; height: 100vh; max-height: 100vh;
+        }
+        .collection-modal-fullscreen .collection-modal-body {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 8px;
+            align-content: start;
+        }
+        .collection-modal-fullscreen .collection-modal-header {
+            position: relative;
+            justify-content: flex-end;
+        }
+        .collection-modal-fullscreen .collection-modal-title {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
         @keyframes tdModalIn {
             from { opacity:0; transform: scale(0.96) translateY(8px); }
             to   { opacity:1; transform: scale(1) translateY(0); }
@@ -2367,14 +2386,6 @@
                             A ready-made set of objects (for example, from the Vabish library) that can be quickly placed onto the map.
                         </p>
                         <div class="grid grid-cols-1 gap-2">
-                            <div class="flex items-start gap-2 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
-                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><path d="M10 3v14M3 10h14"/></svg>
-                                <span style="color: var(--td-text-dim);"><b style="color: var(--td-text);">+ Add Collection</b> — load your own object set from a ZIP archive.</span>
-                            </div>
-                            <div class="flex items-start gap-2 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
-                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><path d="M4 10h9M9 5l5 5-5 5"/></svg>
-                                <span style="color: var(--td-text-dim);"><b style="color: var(--td-text);">Select → Panel</b> — the selected collection object opens in the editing panel.</span>
-                            </div>
                             <div class="flex items-start gap-2 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
                                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M4 17h12"/></svg>
                                 <span style="color: var(--td-text-dim);"><b style="color: var(--td-text);">✦ Spawn Object</b> — places the selected collection object directly onto the map.</span>
@@ -14554,20 +14565,14 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         </div>
 
         <div id="collection-modal-overlay" class="collection-modal-overlay hidden" onclick="if(event.target===this)uiManager.closeCollectionModal()">
-            <div class="collection-modal">
+            <div class="collection-modal collection-modal-fullscreen">
                 <div class="collection-modal-header">
-                    <span class="collection-modal-title">✦ Collection of Subjects</span>
+                    <span class="collection-modal-title">Collection of Subjects</span>
                     <button class="collection-modal-close" onclick="uiManager.closeCollectionModal()">✕</button>
-                </div>
-                <div class="collection-modal-toolbar">
-                    <button class="collection-btn-add" onclick="document.getElementById('collection-zip-input').click()" data-i18n="collectionAdd">+ ADD COLLECTION</button>
-                    <span id="collection-add-status" class="collection-add-status"></span>
-                    <input type="file" id="collection-zip-input" accept=".zip" style="display:none" onchange="handleManualSubjectsZip(event)">
                 </div>
                 <div class="collection-modal-body" id="collection-modal-body">
                 </div>
                 <div class="collection-modal-footer">
-                    <button class="collection-btn-select" onclick="uiManager.collectionSelectItem()" data-i18n="collectionSelect">SELECT → PANEL</button>
                     <button class="collection-btn-spawn" onclick="uiManager.collectionSpawnItem()" data-i18n="collectionSpawn">✦ SPAWN OBJECT</button>
                 </div>
             </div>
