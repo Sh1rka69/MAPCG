@@ -2647,6 +2647,29 @@
                         </div>
 
                         <label class="flex items-center gap-2 mb-2 cursor-pointer">
+                            <input type="checkbox" id="setting-dof" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();">
+                            <span class="text-xs font-semibold" style="color: var(--td-info);">Depth of Field</span>
+                        </label>
+                        <div class="pl-7 mb-3" id="dof-controls" style="display:none;">
+                            <div class="flex items-center gap-2 mb-1">
+                                <label class="td-label" style="font-size: 9px; width: 62px;">Focus Dist</label>
+                                <input type="range" id="setting-dof-focus" min="1" max="100" step="0.5" value="14" class="flex-1" oninput="document.getElementById('dof-focus-val').innerText=Number(this.value).toFixed(1)+'m'; engine.updateGraphics();">
+                                <span id="dof-focus-val" class="mono text-xs w-10 text-right" style="color: var(--td-info);">14.0m</span>
+                            </div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <label class="td-label" style="font-size: 9px; width: 62px;">Sharp Zone</label>
+                                <input type="range" id="setting-dof-range" min="0.5" max="40" step="0.5" value="6" class="flex-1" oninput="document.getElementById('dof-range-val').innerText=Number(this.value).toFixed(1)+'m'; engine.updateGraphics();">
+                                <span id="dof-range-val" class="mono text-xs w-10 text-right" style="color: var(--td-info);">6.0m</span>
+                            </div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <label class="td-label" style="font-size: 9px; width: 62px;">Bokeh Size</label>
+                                <input type="range" id="setting-dof-blur" min="2" max="28" step="0.5" value="10" class="flex-1" oninput="document.getElementById('dof-blur-val').innerText=Number(this.value).toFixed(1)+'px'; engine.updateGraphics();">
+                                <span id="dof-blur-val" class="mono text-xs w-12 text-right" style="color: var(--td-info);">10.0px</span>
+                            </div>
+                            <p class="text-[10px] leading-tight mt-1" style="color: var(--td-text-muted);">Размываются только те кубы, которые находятся очень близко к камере. Всё, что дальше — резко.</p>
+                        </div>
+
+                        <label class="flex items-center gap-2 mb-2 cursor-pointer">
                             <input type="checkbox" id="setting-particles-enabled" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();" checked>
                             <span class="text-xs" style="color: var(--td-text-dim);">Particles</span>
                         </label>
@@ -5323,6 +5346,7 @@ const engine = {
     bloomPass: null,
     ssaoPass: null,
     rtPass: null,
+    dofPass: null,
     _renderSkipFrames: 0,
     orbit: null,
     transformControl: null,
@@ -5989,6 +6013,158 @@ const engine = {
         this.rtPass.uniforms.uCameraMoved = {
             value: 0
         };
+
+        /* ── Depth of Field (Tilt-Shift / Cinematic) ───────────────────────────
+           Screen-space DOF using the packed depth target already rendered for
+           SSAO/RT. Strategy:
+             1. Convert packed-depth → linear view-space Z for each pixel.
+             2. Compute CoC (Circle of Confusion) = abs(viewZ - focusDistance) / depthRange.
+                The CoC is zero inside the in-focus band and ramps up outside it.
+             3. Bokeh blur: a single radial multi-tap (Poisson disk) with radius
+                proportional to CoC. Foreground and background are separated so
+                foreground objects bleed over the background (physically correct).
+             4. Tilt-shift mode adds a vertical linear mask — the centre strip
+                stays sharp, top/bottom blur more aggressively — giving the
+                "miniature" cinematic look.
+           The pass reads tDepth (half-res packed RGBA depth) and tDiffuse (full
+           colour buffer from the previous pass), so it slots naturally at the
+           very end of the composer chain.                                       */
+        const _dofShader = {
+            uniforms: {
+                tDiffuse:    { value: null },
+                tDepth:      { value: this._depthTarget.texture },
+                resolution:  { value: new THREE.Vector2(_cw, _ch) },
+                uFar:        { value: this.camera.far },
+                uFocusDist:  { value: 14.0 },
+                uFocusRange: { value: 6.0 },
+                uBokehSize:  { value: 10.0 },
+                uStrength:   { value: 1.0 },
+            },
+            vertexShader: `varying vec2 vUv;
+void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+            fragmentShader: `
+precision mediump float;
+uniform sampler2D tDiffuse;
+uniform sampler2D tDepth;
+uniform vec2  resolution;
+uniform float uFar;
+uniform float uFocusDist;
+uniform float uFocusRange;
+uniform float uBokehSize;
+uniform float uStrength;
+varying vec2 vUv;
+
+float unpackDepth(vec4 r){
+    return dot(r, vec4(1.0/16777216.0, 1.0/65536.0, 1.0/256.0, 1.0));
+}
+float sampleLinearZ(vec2 uv){
+    vec4 raw = texture2D(tDepth, uv);
+    if(raw.r > 0.999 && raw.g > 0.999) return uFar;
+    return unpackDepth(raw) * uFar;
+}
+/* Foreground-only CoC: 0 beyond focus range, blurred when close to camera */
+float cocPx(float z){
+    if (z > uFocusDist) return 0.0;
+    float d = z - uFocusDist;
+    float r = min(0.0, d + uFocusRange);
+    return clamp(r / max(uFocusRange * 1.5, 0.5), -1.0, 0.0) * uBokehSize * uStrength;
+}
+/* IGN per-pixel rotation */
+float ign(vec2 p){ return fract(52.9829189 * fract(0.06711056*p.x + 0.00583715*p.y)); }
+
+/* 16-tap Poisson disk, precomputed (no trig in main) */
+const vec2 D0  = vec2( 0.000,  0.000);
+const vec2 D1  = vec2( 0.500,  0.000);
+const vec2 D2  = vec2(-0.500,  0.000);
+const vec2 D3  = vec2( 0.000,  0.500);
+const vec2 D4  = vec2( 0.000, -0.500);
+const vec2 D5  = vec2( 0.354,  0.354);
+const vec2 D6  = vec2(-0.354,  0.354);
+const vec2 D7  = vec2( 0.354, -0.354);
+const vec2 D8  = vec2(-0.354, -0.354);
+const vec2 D9  = vec2( 1.000,  0.000);
+const vec2 D10 = vec2(-1.000,  0.000);
+const vec2 D11 = vec2( 0.000,  1.000);
+const vec2 D12 = vec2( 0.000, -1.000);
+const vec2 D13 = vec2( 0.707,  0.707);
+const vec2 D14 = vec2(-0.707,  0.707);
+const vec2 D15 = vec2( 0.707, -0.707);
+
+/* Rotate 2D vector */
+vec2 rot(vec2 v, float c, float s){ return vec2(v.x*c - v.y*s, v.x*s + v.y*c); }
+
+/* Sample one tap: returns colour weighted by CoC mask */
+void tap(vec2 uv, vec2 d, float cosR, float sinR, float absCoc, vec2 px,
+         inout vec4 bgCol, inout float bgW,
+         inout vec4 fgCol, inout float fgW){
+    vec2 offset = rot(d, cosR, sinR) * absCoc * px;
+    vec2 tapUV  = clamp(uv + offset, vec2(0.001), vec2(0.999));
+    vec4 col    = texture2D(tDiffuse, tapUV);
+    float tapZ  = sampleLinearZ(tapUV);
+    float tapC  = cocPx(tapZ);
+    /* bg: tap must be behind focus or have large enough coc to "reach" here */
+    float bgM   = clamp(tapC / max(absCoc, 0.01), 0.0, 1.0);
+    bgCol += col * bgM;  bgW += bgM;
+    /* fg: only if tap is in front of focus */
+    float fgC   = max(0.0, -tapC);
+    float fgM   = step(0.3, fgC);
+    fgCol += col * fgM;  fgW += fgM;
+}
+
+void main(){
+    vec2  px      = 1.0 / (resolution * vec2(resolution.y/resolution.x, 1.0));
+    float centerZ = sampleLinearZ(vUv);
+    float coc     = cocPx(centerZ);
+    float absCoc  = abs(coc);
+    vec4  sharpC  = texture2D(tDiffuse, vUv);
+
+    if(absCoc < 0.4){ gl_FragColor = sharpC; return; }
+
+    float rotA = ign(floor(vUv * resolution)) * 6.28318;
+    float cosR = cos(rotA), sinR = sin(rotA);
+
+    vec4 bgCol = vec4(0.0); float bgW = 0.0;
+    vec4 fgCol = vec4(0.0); float fgW = 0.0;
+
+    tap(vUv, D0,  cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D1,  cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D2,  cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D3,  cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D4,  cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D5,  cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D6,  cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D7,  cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D8,  cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D9,  cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D10, cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D11, cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D12, cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D13, cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D14, cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+    tap(vUv, D15, cosR, sinR, absCoc, px, bgCol, bgW, fgCol, fgW);
+
+    vec4 blurred = bgW > 0.001 ? bgCol / bgW : sharpC;
+    if(fgW > 0.001) blurred = mix(blurred, fgCol / fgW, clamp(fgW / 16.0 * 3.5, 0.0, 0.9));
+
+    float blend = smoothstep(0.35, 2.0, absCoc);
+    vec4 result = mix(sharpC, blurred, blend);
+
+    /* Cinematic vignette */
+    vec2 vig = vUv * 2.0 - 1.0;
+    result.rgb *= 1.0 - 0.12 * dot(vig, vig) * uStrength;
+
+    gl_FragColor = vec4(result.rgb, sharpC.a);
+}
+            `
+        };
+        this.dofPass = new ShaderPass(_dofShader);
+        this.dofPass.material.depthTest = false;
+        this.dofPass.material.depthWrite = false;
+        this.dofPass.uniforms.tDepth.value = this._depthTarget.texture;
+        this.dofPass.uniforms.resolution.value.set(_cw, _ch);
+        this.dofPass.enabled = false;
+        this.composer.addPass(this.dofPass);
+
         this.sky = new Sky;
         this.sky.scale.setScalar(25e3);
         this.sun = new THREE.Vector3;
@@ -6232,6 +6408,10 @@ const engine = {
             const sharpVal = parseFloat(document.getElementById("setting-reflection-sharpness")?.value || "80") / 100;
             this.rtPass.uniforms.uSharpness.value = sharpVal;
         }
+        if (this.dofPass && this.dofPass.uniforms) {
+            this.dofPass.uniforms.resolution.value.set(w, h);
+            this.dofPass.uniforms.tDepth.value = this._depthTarget.texture;
+        }
         if (this._depthTarget) this._depthTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
         if (this._rtHistoryTarget) {
             this._rtHistoryTarget.setSize(w, h);
@@ -6291,6 +6471,10 @@ const engine = {
                 this.rtPass.uniforms.uDepthResolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
                 this.rtPass.uniforms.tDepth.value = this._depthTarget.texture;
                 this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
+            }
+            if (this.dofPass?.uniforms) {
+                this.dofPass.uniforms.resolution.value.set(w, h);
+                this.dofPass.uniforms.tDepth.value = this._depthTarget.texture;
             }
             if (this.updateDepthEncodingUniforms) this.updateDepthEncodingUniforms();
         }
@@ -8719,6 +8903,21 @@ const engine = {
             this._reflectionSharpness = sharpVal;
             this.rtPass.uniforms.uSharpness.value = sharpVal;
         }
+        const dofEnabled = document.getElementById("setting-dof")?.checked ?? false;
+        const dofControls = document.getElementById("dof-controls");
+        if (dofControls) dofControls.style.display = dofEnabled ? "" : "none";
+        if (this.dofPass) {
+            this.dofPass.enabled = dofEnabled;
+            if (dofEnabled) {
+                this.dofPass.uniforms.tDepth.value = this._depthTarget.texture;
+                this.dofPass.uniforms.resolution.value.set(this.renderer.domElement.width, this.renderer.domElement.height);
+                this.dofPass.uniforms.uFar.value = this.camera.far;
+                this.dofPass.uniforms.uFocusDist.value = parseFloat(document.getElementById("setting-dof-focus")?.value ?? "14");
+                this.dofPass.uniforms.uFocusRange.value = parseFloat(document.getElementById("setting-dof-range")?.value ?? "6");
+                const _rawBokeh = parseFloat(document.getElementById("setting-dof-blur")?.value ?? "10");
+                this.dofPass.uniforms.uBokehSize.value = this.isMobile ? Math.min(_rawBokeh, 8.0) : _rawBokeh;
+            }
+        }
         if (this.updateDepthEncodingUniforms) this.updateDepthEncodingUniforms();
         this.renderer.toneMapping = rtEnabled ? THREE.ACESFilmicToneMapping : THREE.LinearToneMapping;
         this.renderer.toneMappingExposure = rtEnabled ? 1.12 : 1;
@@ -10332,9 +10531,9 @@ const engine = {
                     };
                 }
                 if (this._pauseNeedsCapture && target) {
-                    const _useComposer = this.bloomPass?.enabled || this.ssaoPass?.enabled || this.rtPass?.enabled;
+                    const _useComposer = this.bloomPass?.enabled || this.ssaoPass?.enabled || this.rtPass?.enabled || this.dofPass?.enabled;
                     if (_useComposer && this.composer) {
-                        if ((this.ssaoPass.enabled || this.rtPass?.enabled) && this._depthTarget) {
+                        if ((this.ssaoPass.enabled || this.rtPass?.enabled || this.dofPass?.enabled) && this._depthTarget) {
                             const _prevOverride = this.scene.overrideMaterial;
                             this.scene.overrideMaterial = this._depthPackMat;
                             const _savedSkyVis = this._hideSkyForDepthPass();
@@ -10410,7 +10609,7 @@ const engine = {
             }
         });
         try {
-            if ((this.ssaoPass.enabled || this.rtPass?.enabled) && this._depthTarget) {
+            if ((this.ssaoPass.enabled || this.rtPass?.enabled || this.dofPass?.enabled) && this._depthTarget) {
                 const _prevOverride = this.scene.overrideMaterial;
                 this.scene.overrideMaterial = this._depthPackMat;
                 const _savedSkyVis = this._hideSkyForDepthPass();
@@ -10442,7 +10641,7 @@ const engine = {
                     this.rtPass.uniforms.uHistoryValid.value = this._rtHistoryReady ? 1 : 0;
                 }
             }
-            const _useComposer = this.bloomPass.enabled || this.ssaoPass.enabled || this.rtPass?.enabled;
+            const _useComposer = this.bloomPass.enabled || this.ssaoPass.enabled || this.rtPass?.enabled || this.dofPass?.enabled;
             if (_useComposer) {
                 this.composer.render();
                 this._blitQuad = this._blitQuad || (() => {
