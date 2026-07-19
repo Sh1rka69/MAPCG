@@ -1793,11 +1793,14 @@
                         <button onclick="engine.toggleShapesPanel()" id="btn-shapes-toggle" class="shape-arrow w-9 h-[40px] flex items-center justify-center transition" style="background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text-dim);" onmouseover="this.style.borderColor='var(--td-accent)'; this.style.color='var(--td-accent)'" onmouseout="this.style.borderColor='var(--td-border)'; this.style.color='var(--td-text-dim)'" title="Shapes">
                             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><path d="M5 8l5 5 5-5"/></svg>
                         </button>
-                        <div id="shapes-panel" class="shape-panel absolute right-0 top-[calc(100%+6px)] w-[240px] z-50" style="background: var(--td-bg-1); border: 1px solid var(--td-border-strong);">
+                        <div id="shapes-panel" class="shape-panel absolute right-0 top-[calc(100%+6px)] w-[330px] z-50" style="background: var(--td-bg-1); border: 1px solid var(--td-border-strong);">
                             <div class="p-3 flex flex-col gap-2">
                                 <div class="flex items-center justify-between gap-2 pb-2" style="border-bottom: 1px solid var(--td-border);">
                                     <span data-i18n="shapeMenu" class="td-label">Shapes</span>
-                                    <button id="btn-shape-group-select" onclick="engine.toggleShapeGroupSelect()" data-i18n="shapeGroupSelect" class="state-toggle px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-accent-dim); color: var(--td-accent); border: 1px solid rgba(255,138,61,0.3);">Whole Shape</button>
+                                    <div class="flex items-center gap-1">
+                                        <button id="btn-shape-group-select" onclick="engine.toggleShapeGroupSelect()" data-i18n="shapeGroupSelect" class="state-toggle px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-accent-dim); color: var(--td-accent); border: 1px solid rgba(255,138,61,0.3);">Whole Shape</button>
+                                        <button id="btn-texture-selection" onclick="engine.toggleTextureSelection()" class="state-toggle px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" title="Texture Selection: OFF">Texture Selection</button>
+                                    </div>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1">
                                     <button onclick="engine.addCylinder()" data-i18n="shapeCylinder" class="shape-btn px-2 py-2 text-xs transition uppercase tracking-[0.08em]" style="background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text);" onmouseover="this.style.borderColor='var(--td-accent)'; this.style.color='var(--td-accent)'" onmouseout="this.style.borderColor='var(--td-border)'; this.style.color='var(--td-text)'">Cylinder</button>
@@ -2295,6 +2298,10 @@
                                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0; margin-top:1px;"><rect x="3" y="3" width="14" height="14" rx="1"/><rect x="7" y="7" width="6" height="6"/></svg>
                                 <span style="color: var(--td-text-dim);"><b style="color: var(--td-accent);">Whole Shape</b> — a mode where clicking any cube of a shape selects the entire shape at once (handy for moving/painting composite objects in one go).</span>
                             </div>
+                            <div class="flex items-start gap-2 p-2" style="background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.3);">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><path d="M4 4h12v12H4z"/><path d="M4 8h12M8 4v12"/><circle cx="14" cy="6" r="1.2"/></svg>
+                                <span style="color: var(--td-text-dim);"><b style="color: var(--td-info);">Texture Selection</b> — when enabled, clicking a cube selects all cubes with the same texture. If <b style="color: var(--td-accent);">Whole Shape</b> is also enabled and the clicked cube belongs to a group, only cubes with that texture inside the same group are selected.</span>
+                            </div>
                         </div>
                     </div>
 
@@ -2428,7 +2435,7 @@
                         <ul class="flex flex-col gap-2" style="color: var(--td-text-dim);">
                             <li class="flex items-start gap-2"><span style="color: var(--td-accent);">•</span><span>Save regularly (<span class="mono" style="color: var(--td-accent-bright);">Ctrl+S</span>) — especially before baking lighting or a heavy import.</span></li>
                             <li class="flex items-start gap-2"><span style="color: var(--td-accent);">•</span><span>On mobile devices, graphics (shadows, reflections, ray tracing) are automatically simplified for stable FPS.</span></li>
-                            <li class="flex items-start gap-2"><span style="color: var(--td-accent);">•</span><span>Use Whole Shape so you don't have to select a composite shape cube by cube.</span></li>
+                            <li class="flex items-start gap-2"><span style="color: var(--td-accent);">•</span><span>Use Whole Shape so you don't have to select a composite shape cube by cube. Use Texture Selection when you need to quickly select/paint only cubes with one material; combined with Whole Shape it is limited to the clicked object's group.</span></li>
                             <li class="flex items-start gap-2"><span style="color: var(--td-accent);">•</span><span>Before exporting to GoreBox, make sure the spawn point is set and not stuck inside other cubes.</span></li>
                         </ul>
                     </div>
@@ -5396,6 +5403,7 @@ const engine = {
     projScreenMatrix: new THREE.Matrix4,
     isMultiSelectMode: false,
     shapeGroupSelect: true,
+    textureSelection: false,
     shapesPanelOpen: false,
     transformGroup: new THREE.Group,
     isMobile: false,
@@ -6296,6 +6304,8 @@ void main(){
         this.applyFpsCounterVisibility(localStorage.getItem("mmcg_show_fps_55") === "1");
         this.applyPixelSmoothing(localStorage.getItem("mmcg_pixel_smoothing_55") === "1");
         this.applyHitboxOpacity(parseFloat(localStorage.getItem("mmcg_hitbox_opacity_55") || "0.8"), false);
+        this.toggleShapeGroupSelect(this.shapeGroupSelect);
+        this.toggleTextureSelection(this.textureSelection);
         this.updateSelectionPanels();
         this.camera.far = 2e3;
         this.camera.updateProjectionMatrix();
@@ -7147,6 +7157,20 @@ void main(){
             btn.classList.toggle("is-off", !this.shapeGroupSelect);
             btn.title = `Whole Shape: ${this.shapeGroupSelect ? "ON" : "OFF"}`;
         }
+    },
+    toggleTextureSelection: function(force = null) {
+        this.textureSelection = force === null ? !this.textureSelection : !!force;
+        const btn = document.getElementById("btn-texture-selection");
+        if (btn) {
+            btn.classList.toggle("active-tool", this.textureSelection);
+            btn.classList.toggle("is-on", this.textureSelection);
+            btn.classList.toggle("is-off", !this.textureSelection);
+            btn.title = `Texture Selection: ${this.textureSelection ? "ON" : "OFF"}`;
+        }
+    },
+    _getTextureSelectionKey: function(obj) {
+        if (!obj || !obj.userData) return "";
+        return canonicalTextureKey(obj.userData.texture || obj.userData.materialName || obj.userData.sourceName || "grid");
     },
     groupSelectedBlocks: function() {
         if (this.selectedBlocks.length < 2) return;
@@ -8348,8 +8372,20 @@ void main(){
     selectObject: function(object, viaClick = false) {
         if (!object) return;
         let targets = [ object ];
-        if (viaClick && this.shapeGroupSelect && object.userData?.type === "cube" && object.userData?.groupId && object !== this.spawnPointObj) {
-            targets = this.blocks.filter(b => b.userData?.groupId === object.userData.groupId);
+        if (viaClick && object.userData?.type === "cube" && object !== this.spawnPointObj) {
+            const clickedTexture = this._getTextureSelectionKey(object);
+            const clickedGroupId = object.userData?.groupId;
+            const texBtn = document.getElementById("btn-texture-selection");
+            const wholeBtn = document.getElementById("btn-shape-group-select");
+            const textureSelectionActive = this.textureSelection === true && (!texBtn || texBtn.classList.contains("is-on"));
+            const wholeShapeActive = this.shapeGroupSelect === true && (!wholeBtn || wholeBtn.classList.contains("is-on"));
+            if (textureSelectionActive && wholeShapeActive && clickedGroupId) {
+                targets = this.blocks.filter(b => b.userData?.type === "cube" && b.userData?.groupId === clickedGroupId && this._getTextureSelectionKey(b) === clickedTexture);
+            } else if (textureSelectionActive) {
+                targets = this.blocks.filter(b => b.userData?.type === "cube" && this._getTextureSelectionKey(b) === clickedTexture);
+            } else if (wholeShapeActive && clickedGroupId) {
+                targets = this.blocks.filter(b => b.userData?.type === "cube" && b.userData?.groupId === clickedGroupId);
+            }
         }
         if (this.isMultiSelectMode) {
             const alreadySelected = targets.every(t => this.selectedBlocks.includes(t));
@@ -14177,5 +14213,5 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
 
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1c97df0cce6dbdb',t:'MTc4NDI5Mzg4MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1da1f66af61e436',t:'MTc4NDQ2ODI2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1db52393c60b689',t:'MTc4NDQ4MDgzMw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1da1f66af61e436',t:'MTc4NDQ2ODI2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1db77f3b9dbe3f8',t:'MTc4NDQ4MjM3OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
