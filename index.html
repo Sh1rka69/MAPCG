@@ -2456,6 +2456,7 @@
                     <button onclick="document.getElementById('settings-section-interface').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Interface</button>
                     <button onclick="document.getElementById('settings-section-graphics').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Graphics</button>
                     <button onclick="document.getElementById('settings-section-fog').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Fog</button>
+                    <button id="btn-save-settings" onclick="uiManager.saveSettings()" class="ml-auto px-3 py-1 text-[10px] uppercase tracking-[0.12em] font-semibold transition" style="background: rgba(94,196,110,0.18); color: var(--td-ok); border: 1px solid rgba(94,196,110,0.55);" onmouseover="this.style.background='rgba(94,196,110,0.32)'; this.style.color='white'; this.style.borderColor='var(--td-ok)'" onmouseout="this.style.background='rgba(94,196,110,0.18)'; this.style.color='var(--td-ok)'; this.style.borderColor='rgba(94,196,110,0.55)'">Save Settings</button>
                 </div>
 
                 <div class="flex flex-col gap-3 p-5 text-sm">
@@ -2539,6 +2540,12 @@
                         <div class="flex items-center gap-2">
                             <input type="range" id="setting-camera-sensitivity" min="0.15" max="3" step="0.05" value="1" class="flex-1" oninput="document.getElementById('camera-sensitivity-val').innerText = Number(this.value).toFixed(2)">
                             <span id="camera-sensitivity-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">1.00</span>
+                        </div>
+
+                        <label class="td-label block mt-3 mb-1">FOV</label>
+                        <div class="flex items-center gap-2">
+                            <input type="range" id="setting-camera-fov" min="20" max="120" step="1" value="60" class="flex-1" oninput="document.getElementById('camera-fov-val').innerText = this.value + '°'; engine.applyCameraFov?.(parseFloat(this.value));">
+                            <span id="camera-fov-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">60°</span>
                         </div>
 
                         <label class="td-label block mt-3 mb-1">Camera Movement Speed</label>
@@ -2653,18 +2660,18 @@
                         <div class="pl-7 mb-3" id="dof-controls" style="display:none;">
                             <div class="flex items-center gap-2 mb-1">
                                 <label class="td-label" style="font-size: 9px; width: 62px;">Focus Dist</label>
-                                <input type="range" id="setting-dof-focus" min="1" max="100" step="0.5" value="14" class="flex-1" oninput="document.getElementById('dof-focus-val').innerText=Number(this.value).toFixed(1)+'m'; engine.updateGraphics();">
-                                <span id="dof-focus-val" class="mono text-xs w-10 text-right" style="color: var(--td-info);">14.0m</span>
+                                <input type="range" id="setting-dof-focus" min="1" max="100" step="0.5" value="8" class="flex-1" oninput="document.getElementById('dof-focus-val').innerText=Number(this.value).toFixed(1)+'m'; engine.updateGraphics();">
+                                <span id="dof-focus-val" class="mono text-xs w-10 text-right" style="color: var(--td-info);">8.0m</span>
                             </div>
                             <div class="flex items-center gap-2 mb-1">
                                 <label class="td-label" style="font-size: 9px; width: 62px;">Sharp Zone</label>
-                                <input type="range" id="setting-dof-range" min="0.5" max="40" step="0.5" value="6" class="flex-1" oninput="document.getElementById('dof-range-val').innerText=Number(this.value).toFixed(1)+'m'; engine.updateGraphics();">
-                                <span id="dof-range-val" class="mono text-xs w-10 text-right" style="color: var(--td-info);">6.0m</span>
+                                <input type="range" id="setting-dof-range" min="0.5" max="40" step="0.5" value="4.5" class="flex-1" oninput="document.getElementById('dof-range-val').innerText=Number(this.value).toFixed(1)+'m'; engine.updateGraphics();">
+                                <span id="dof-range-val" class="mono text-xs w-10 text-right" style="color: var(--td-info);">4.5m</span>
                             </div>
                             <div class="flex items-center gap-2 mb-1">
                                 <label class="td-label" style="font-size: 9px; width: 62px;">Bokeh Size</label>
-                                <input type="range" id="setting-dof-blur" min="2" max="28" step="0.5" value="10" class="flex-1" oninput="document.getElementById('dof-blur-val').innerText=Number(this.value).toFixed(1)+'px'; engine.updateGraphics();">
-                                <span id="dof-blur-val" class="mono text-xs w-12 text-right" style="color: var(--td-info);">10.0px</span>
+                                <input type="range" id="setting-dof-blur" min="2" max="28" step="0.5" value="8.5" class="flex-1" oninput="document.getElementById('dof-blur-val').innerText=Number(this.value).toFixed(1)+'px'; engine.updateGraphics();">
+                                <span id="dof-blur-val" class="mono text-xs w-12 text-right" style="color: var(--td-info);">8.5px</span>
                             </div>
                             <p class="text-[10px] leading-tight mt-1" style="color: var(--td-text-muted);">Размываются только те кубы, которые находятся очень близко к камере. Всё, что дальше — резко.</p>
                         </div>
@@ -5393,6 +5400,7 @@ const engine = {
     transformGroup: new THREE.Group,
     isMobile: false,
     editorMode: true,
+    cameraFov: 60,
     mobileJoystick: {
         active: false,
         pointerId: null,
@@ -6035,9 +6043,9 @@ const engine = {
                 tDepth:      { value: this._depthTarget.texture },
                 resolution:  { value: new THREE.Vector2(_cw, _ch) },
                 uFar:        { value: this.camera.far },
-                uFocusDist:  { value: 14.0 },
-                uFocusRange: { value: 6.0 },
-                uBokehSize:  { value: 10.0 },
+                uFocusDist:  { value: 8.0 },
+                uFocusRange: { value: 4.5 },
+                uBokehSize:  { value: 8.5 },
                 uStrength:   { value: 1.0 },
             },
             vertexShader: `varying vec2 vUv;
@@ -6282,6 +6290,7 @@ void main(){
         window.addEventListener("keyup", this.onKeyUp.bind(this));
         this.updateEnvironment();
         this.applyCameraSensitivity(parseFloat(localStorage.getItem("mmcg_camera_sens_55") || "1"));
+        this.applyCameraFov(parseFloat(localStorage.getItem("mmcg_camera_fov_55") || "60"));
         this.applyCameraMoveSpeed(parseFloat(localStorage.getItem("mmcg_camera_move_55") || "1"));
         this.applyPixelRatio(parseFloat(localStorage.getItem("mmcg_pixel_ratio_55") || "0.8"));
         this.applyFpsCounterVisibility(localStorage.getItem("mmcg_show_fps_55") === "1");
@@ -6432,6 +6441,23 @@ void main(){
         if (this.orbit) {
             this.orbit.rotateSpeed = safe;
             this.orbit.zoomSpeed = Math.max(.45, safe * .85);
+        }
+        return safe;
+    },
+    applyCameraFov: function(value = null) {
+        const raw = value !== null && value !== undefined ? parseFloat(value) : parseFloat(document.getElementById("setting-camera-fov")?.value || localStorage.getItem("mmcg_camera_fov_55") || "60");
+        const safe = Math.min(120, Math.max(20, Number.isFinite(raw) ? raw : 60));
+        this.cameraFov = safe;
+        localStorage.setItem("mmcg_camera_fov_55", String(safe));
+        const slider = document.getElementById("setting-camera-fov");
+        if (slider && Number(slider.value) !== safe) slider.value = String(safe);
+        const lbl = document.getElementById("camera-fov-val");
+        if (lbl) lbl.innerText = Math.round(safe) + "°";
+        if (this.camera && !(window.gameplay && gameplay.isPlaytest)) {
+            this.camera.fov = safe;
+            this.camera.updateProjectionMatrix();
+            if (this.rtPass?.uniforms?.proj) this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
+            if (this.worldPaused) this._pauseNeedsCapture = true;
         }
         return safe;
     },
@@ -8912,10 +8938,10 @@ void main(){
                 this.dofPass.uniforms.tDepth.value = this._depthTarget.texture;
                 this.dofPass.uniforms.resolution.value.set(this.renderer.domElement.width, this.renderer.domElement.height);
                 this.dofPass.uniforms.uFar.value = this.camera.far;
-                this.dofPass.uniforms.uFocusDist.value = parseFloat(document.getElementById("setting-dof-focus")?.value ?? "14");
-                this.dofPass.uniforms.uFocusRange.value = parseFloat(document.getElementById("setting-dof-range")?.value ?? "6");
-                const _rawBokeh = parseFloat(document.getElementById("setting-dof-blur")?.value ?? "10");
-                this.dofPass.uniforms.uBokehSize.value = this.isMobile ? Math.min(_rawBokeh, 8.0) : _rawBokeh;
+                this.dofPass.uniforms.uFocusDist.value = parseFloat(document.getElementById("setting-dof-focus")?.value ?? "8");
+                this.dofPass.uniforms.uFocusRange.value = parseFloat(document.getElementById("setting-dof-range")?.value ?? "4.5");
+                const _rawBokeh = parseFloat(document.getElementById("setting-dof-blur")?.value ?? "8.5");
+                this.dofPass.uniforms.uBokehSize.value = this.isMobile ? Math.min(_rawBokeh, 8.5) : _rawBokeh;
             }
         }
         if (this.updateDepthEncodingUniforms) this.updateDepthEncodingUniforms();
@@ -8931,6 +8957,7 @@ void main(){
         });
         allKnownTextures.forEach(tex => applyGlobalTextureFiltering(tex));
         this.applyCameraSensitivity(parseFloat(document.getElementById("setting-camera-sensitivity")?.value || localStorage.getItem("mmcg_camera_sens_55") || "1"));
+        this.applyCameraFov(parseFloat(document.getElementById("setting-camera-fov")?.value || localStorage.getItem("mmcg_camera_fov_55") || "60"));
         this.syncAllObjectMaterials(false);
         this.updateLocalReflections(true);
         this.scene.traverse(child => {
@@ -8956,6 +8983,7 @@ void main(){
             bloom: document.getElementById("setting-bloom").checked,
             bloomStrength: parseFloat(document.getElementById("setting-bloom-strength")?.value || "1"),
             cameraSensitivity: parseFloat(document.getElementById("setting-camera-sensitivity")?.value || localStorage.getItem("mmcg_camera_sens_55") || "1"),
+            cameraFov: parseFloat(document.getElementById("setting-camera-fov")?.value || localStorage.getItem("mmcg_camera_fov_55") || String(this.cameraFov || 60)),
             aoIntensity: parseFloat(document.getElementById("setting-ao-intensity")?.value || "0.55"),
             ssao: document.getElementById("setting-ssao").checked,
             rayTracing: document.getElementById("setting-reflections") ? document.getElementById("setting-reflections").checked : false,
@@ -10217,6 +10245,12 @@ void main(){
             if (document.getElementById("setting-pbr-textures")) document.getElementById("setting-pbr-textures").checked = data.env.pbrTextures !== false;
             document.getElementById("setting-camera-sensitivity").value = String(data.env.cameraSensitivity ?? parseFloat(localStorage.getItem("mmcg_camera_sens_55") || "1"));
             document.getElementById("camera-sensitivity-val").innerText = Number(document.getElementById("setting-camera-sensitivity").value).toFixed(2);
+            if (document.getElementById("setting-camera-fov")) {
+                const fovVal = Math.min(120, Math.max(20, parseFloat(data.env.cameraFov ?? localStorage.getItem("mmcg_camera_fov_55") ?? "60") || 60));
+                document.getElementById("setting-camera-fov").value = String(fovVal);
+                document.getElementById("camera-fov-val").innerText = Math.round(fovVal) + "°";
+                this.applyCameraFov(fovVal);
+            }
             document.getElementById("setting-ssao").checked = data.env.ssao === true;
             if (document.getElementById("setting-reflections")) document.getElementById("setting-reflections").checked = data.env.rayTracing === true;
             if (document.getElementById("setting-reflection-sharpness")) {
@@ -10288,6 +10322,7 @@ void main(){
             if (document.getElementById("setting-reflections")) document.getElementById("setting-reflections").checked = false;
         }
         this.applyCameraSensitivity(parseFloat(document.getElementById("setting-camera-sensitivity")?.value || localStorage.getItem("mmcg_camera_sens_55") || "1"));
+        this.applyCameraFov(parseFloat(document.getElementById("setting-camera-fov")?.value || localStorage.getItem("mmcg_camera_fov_55") || "60"));
         this.recalculateManualLightSpecular();
         this.updateEnvironment();
         this.updateGraphics();
@@ -11084,6 +11119,10 @@ const gameplay = {
             const joyEl = document.getElementById("mobile-joystick");
             if (joyEl) joyEl.classList.add("visible");
         }
+        if (engine.camera) {
+            engine.camera.fov = Math.min(120, Math.max(20, engine.cameraFov || parseFloat(localStorage.getItem("mmcg_camera_fov_55") || "60") || 60));
+            engine.camera.updateProjectionMatrix();
+        }
         if (engine.spawnPointObj) {
             engine.camera.position.copy(engine.spawnPointObj.position);
             engine.camera.position.y = engine.spawnPointObj.position.y - 1 + this.eyeToFeet;
@@ -11148,8 +11187,7 @@ const gameplay = {
         if (lz) lz.classList.remove("active");
         engine.updateJoystickVisibility?.();
         if (engine.spawnPointObj) engine.spawnPointObj.visible = true;
-        engine.camera.fov = 60;
-        engine.camera.updateProjectionMatrix();
+        engine.applyCameraFov?.(engine.cameraFov || parseFloat(localStorage.getItem("mmcg_camera_fov_55") || "60"));
         document.getElementById("gb-btn-sleep")?.classList.remove("active");
     },
     exitPlaytest: function() {
@@ -11577,8 +11615,12 @@ const gameplay = {
 
     },
     _updateFOV: function(dt, speedH) {
-        let targetFOV = 65;
-        if (this.flyMode) targetFOV = this.moveState.sprint ? 78 : 70; else if (this.isRagdoll) targetFOV = 60; else if (this.moveState.sprint && speedH > 4) targetFOV = 72 + this.bhopSpeedBonus * .6;
+        const baseFOV = Math.min(120, Math.max(20, engine.cameraFov || parseFloat(localStorage.getItem("mmcg_camera_fov_55") || "60") || 60));
+        let targetFOV = baseFOV;
+        if (this.flyMode) targetFOV = this.moveState.sprint ? baseFOV + 18 : baseFOV + 10;
+        else if (this.isRagdoll) targetFOV = baseFOV;
+        else if (this.moveState.sprint && speedH > 4) targetFOV = baseFOV + 12 + this.bhopSpeedBonus * .6;
+        targetFOV = Math.min(120, Math.max(20, targetFOV));
         engine.camera.fov += (targetFOV - engine.camera.fov) * Math.min(1, dt * 5);
         engine.camera.updateProjectionMatrix();
     },
@@ -11816,6 +11858,12 @@ window.uiManager = {
             const el = document.getElementById("camera-sensitivity-val");
             if (el) el.innerText = Number(camSens.value).toFixed(2);
             engine.applyCameraSensitivity?.(parseFloat(camSens.value));
+        });
+        const camFov = document.getElementById("setting-camera-fov");
+        if (camFov) camFov.addEventListener("input", () => {
+            const el = document.getElementById("camera-fov-val");
+            if (el) el.innerText = Math.round(Number(camFov.value)) + "°";
+            engine.applyCameraFov?.(parseFloat(camFov.value));
         });
         const camMove = document.getElementById("setting-camera-move-speed");
         if (camMove) camMove.addEventListener("input", () => {
@@ -12501,6 +12549,7 @@ window.uiManager = {
         window.historyManager.isRestoring = true;
         try {
             await engine.loadMapData(data);
+            await this.applySavedSettings(false);
         } catch (e) {
             console.error("loadMapData failed:", e);
             window.historyManager.isRestoring = false;
@@ -12559,6 +12608,152 @@ window.uiManager = {
         uiManager.setMergeMode(uiManager.mergeMode || "none");
     },
     hideExportModal: () => document.getElementById("export-modal").classList.add("hidden"),
+    settingsStorageKey: "mmcg_saved_settings_snapshot_55",
+    _readSavedSettings: function() {
+        try {
+            const raw = localStorage.getItem(this.settingsStorageKey);
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) {
+            console.warn("Failed to read saved settings", e);
+            return null;
+        }
+    },
+    _collectSettingsSnapshot: function() {
+        const modal = document.getElementById("settings-modal");
+        const values = {};
+        if (modal) {
+            modal.querySelectorAll('input[id^="setting-"], select[id^="setting-"], textarea[id^="setting-"]').forEach(el => {
+                if (!el.id) return;
+                if (el.type === "checkbox") values[el.id] = !!el.checked;
+                else values[el.id] = el.value;
+            });
+        }
+        return {
+            version: 1,
+            savedAt: Date.now(),
+            values,
+            customSkyboxDataUrl: engine.customSkyboxDataUrl || null,
+            customSkyboxName: engine.customSkyboxName || null
+        };
+    },
+    _syncSettingsLabels: function() {
+        const val = id => document.getElementById(id)?.value;
+        const txt = (id, value) => { const el = document.getElementById(id); if (el) el.innerText = value; };
+        if (val("setting-sun-angle") !== undefined) txt("sun-angle-val", val("setting-sun-angle") + "°");
+        if (val("setting-sun-vertical") !== undefined) txt("sun-vertical-val", val("setting-sun-vertical") + "°");
+        if (val("setting-camera-sensitivity") !== undefined) txt("camera-sensitivity-val", Number(val("setting-camera-sensitivity")).toFixed(2));
+        if (val("setting-camera-fov") !== undefined) txt("camera-fov-val", Math.round(Number(val("setting-camera-fov"))) + "°");
+        if (val("setting-camera-move-speed") !== undefined) txt("camera-move-speed-val", Number(val("setting-camera-move-speed")).toFixed(1));
+        if (val("setting-hitbox-opacity") !== undefined) txt("hitbox-opacity-val", Math.round(Number(val("setting-hitbox-opacity")) * 100) + "%");
+        if (val("setting-joystick-opacity") !== undefined) txt("joystick-opacity-val", Math.round(Number(val("setting-joystick-opacity")) * 100) + "%");
+        if (val("setting-joystick-size") !== undefined) txt("joystick-size-val", val("setting-joystick-size") + "px");
+        if (val("setting-shadow-quality") !== undefined) {
+            const sqVals = [128, 256, 512, 1024, 2048];
+            txt("shadow-quality-val", sqVals[parseInt(val("setting-shadow-quality"), 10)] ?? 512);
+        }
+        if (val("setting-ao-intensity") !== undefined) txt("ao-intensity-val", Number(val("setting-ao-intensity")).toFixed(2));
+        if (val("setting-bloom-strength") !== undefined) txt("bloom-strength-val", Number(val("setting-bloom-strength")).toFixed(2));
+        if (val("setting-reflection-distance") !== undefined) txt("reflection-distance-val", val("setting-reflection-distance") + "m");
+        if (val("setting-reflection-sharpness") !== undefined) txt("reflection-sharpness-val", val("setting-reflection-sharpness"));
+        if (val("setting-dof-focus") !== undefined) txt("dof-focus-val", Number(val("setting-dof-focus")).toFixed(1) + "m");
+        if (val("setting-dof-range") !== undefined) txt("dof-range-val", Number(val("setting-dof-range")).toFixed(1) + "m");
+        if (val("setting-dof-blur") !== undefined) txt("dof-blur-val", Number(val("setting-dof-blur")).toFixed(1) + "px");
+        if (val("setting-draw-distance") !== undefined) txt("draw-distance-val", val("setting-draw-distance") + "m");
+        if (val("setting-pixel-ratio") !== undefined) txt("pixel-ratio-val", Number(val("setting-pixel-ratio")).toFixed(2) + "x");
+        if (val("setting-texture-quality") !== undefined) engine.previewTextureQualityLabel?.(parseInt(val("setting-texture-quality"), 10));
+    },
+    _applySettingsSnapshotObject: async function(snapshot, persistLegacy = true) {
+        if (!snapshot || !snapshot.values) return false;
+        const values = snapshot.values;
+        Object.entries(values).forEach(([id, value]) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (el.type === "checkbox") el.checked = !!value;
+            else el.value = String(value);
+        });
+        this._syncSettingsLabels();
+        if (snapshot.customSkyboxDataUrl && values["setting-skybox"] === "custom" && engine.setCustomSkybox) {
+            try { await engine.setCustomSkybox(snapshot.customSkyboxDataUrl, snapshot.customSkyboxName || "Custom Skybox"); } catch (e) { console.warn("Saved custom skybox restore failed", e); }
+            const skyLabel = document.getElementById("skybox-file-name");
+            if (skyLabel) skyLabel.innerText = snapshot.customSkyboxName || "Custom Skybox";
+        }
+        try {
+            if (values["setting-ui-scale"] !== undefined) this.applyInterfaceScale(values["setting-ui-scale"], persistLegacy);
+            if (values["setting-camera-sensitivity"] !== undefined) engine.applyCameraSensitivity?.(parseFloat(values["setting-camera-sensitivity"]));
+            if (values["setting-camera-fov"] !== undefined) engine.applyCameraFov?.(parseFloat(values["setting-camera-fov"]));
+            if (values["setting-camera-move-speed"] !== undefined) engine.applyCameraMoveSpeed?.(parseFloat(values["setting-camera-move-speed"]));
+            if (values["setting-hitbox-opacity"] !== undefined) engine.applyHitboxOpacity?.(parseFloat(values["setting-hitbox-opacity"]), persistLegacy);
+            if (values["setting-joystick-enabled"] !== undefined) engine.applyJoystickEnabled?.(!!values["setting-joystick-enabled"], persistLegacy);
+            if (values["setting-joystick-floating"] !== undefined) engine.applyJoystickFloating?.(!!values["setting-joystick-floating"], persistLegacy);
+            if (values["setting-joystick-opacity"] !== undefined) engine.applyJoystickOpacity?.(parseFloat(values["setting-joystick-opacity"]));
+            if (values["setting-joystick-size"] !== undefined) engine.applyJoystickSize?.(parseInt(values["setting-joystick-size"], 10));
+            if (values["setting-grid"] !== undefined) engine.toggleGridVisibility?.(!!values["setting-grid"]);
+            if (values["setting-light-contour"] !== undefined) engine.toggleLightContour?.(!!values["setting-light-contour"]);
+            if (values["setting-draw-distance"] !== undefined) engine.applyDrawDistance?.(parseFloat(values["setting-draw-distance"]));
+            if (values["setting-texture-quality"] !== undefined) await engine.applyTextureQualitySetting?.(parseInt(values["setting-texture-quality"], 10));
+            if (values["setting-pixel-ratio"] !== undefined) engine.applyPixelRatio?.(parseFloat(values["setting-pixel-ratio"]));
+            if (values["setting-show-fps"] !== undefined) engine.applyFpsCounterVisibility?.(!!values["setting-show-fps"]);
+            if (values["setting-pixel-smoothing"] !== undefined) engine.applyPixelSmoothing?.(!!values["setting-pixel-smoothing"]);
+            engine.updateEnvironment?.();
+            engine.updateGraphics?.();
+            if (engine.worldPaused) engine._pauseNeedsCapture = true;
+        } catch (e) {
+            console.warn("Apply saved settings failed", e);
+        }
+        return true;
+    },
+    applySavedSettings: async function(showToast = false) {
+        const snapshot = this._readSavedSettings();
+        if (!snapshot) return false;
+        const ok = await this._applySettingsSnapshotObject(snapshot, true);
+        if (ok && showToast) this._showSettingsSavedToast("Settings loaded");
+        return ok;
+    },
+    _showSettingsSavedToast: function(text = "Settings saved") {
+        const old = document.getElementById("settings-save-toast");
+        if (old) old.remove();
+        const ind = document.createElement("div");
+        ind.id = "settings-save-toast";
+        ind.className = "fixed bottom-10 left-1/2 -translate-x-1/2 text-white px-6 py-3 text-sm font-bold z-[120] modal-enter uppercase text-center";
+        ind.style.background = "rgba(94,196,110,0.92)";
+        ind.style.border = "1px solid rgba(255,255,255,0.22)";
+        ind.style.letterSpacing = "0.12em";
+        ind.innerText = text;
+        document.body.appendChild(ind);
+        setTimeout(() => {
+            ind.style.opacity = "0";
+            ind.style.transition = "opacity 0.25s";
+            setTimeout(() => ind.remove(), 260);
+        }, 1800);
+    },
+    saveSettings: async function() {
+        const snapshot = this._collectSettingsSnapshot();
+        try {
+            try {
+                localStorage.setItem(this.settingsStorageKey, JSON.stringify(snapshot));
+            } catch (storageErr) {
+                if (snapshot.customSkyboxDataUrl) {
+                    console.warn("Settings snapshot was too large; saving without embedded custom skybox image.", storageErr);
+                    snapshot.customSkyboxDataUrl = null;
+                    snapshot.customSkyboxName = null;
+                    localStorage.setItem(this.settingsStorageKey, JSON.stringify(snapshot));
+                } else {
+                    throw storageErr;
+                }
+            }
+            await this._applySettingsSnapshotObject(snapshot, true);
+            this._showSettingsSavedToast("Settings saved");
+            const btn = document.getElementById("btn-save-settings");
+            if (btn) {
+                const old = btn.innerText;
+                btn.innerText = "Saved ✓";
+                setTimeout(() => { btn.innerText = old; }, 1200);
+            }
+        } catch (e) {
+            console.error("Save settings failed", e);
+            alert("Settings save failed: " + (e?.message || e));
+        }
+    },
     showSettingsModal: () => {
         const modal = document.getElementById("settings-modal");
         const sel = document.getElementById("setting-ui-scale");
@@ -12568,6 +12763,13 @@ window.uiManager = {
             camSens.value = localStorage.getItem("mmcg_camera_sens_55") || "1";
             const lbl = document.getElementById("camera-sensitivity-val");
             if (lbl) lbl.innerText = Number(camSens.value).toFixed(2);
+        }
+        const camFov = document.getElementById("setting-camera-fov");
+        if (camFov) {
+            const fovVal = Math.min(120, Math.max(20, parseFloat(localStorage.getItem("mmcg_camera_fov_55") || String(engine.cameraFov || 60)) || 60));
+            camFov.value = String(fovVal);
+            const lbl = document.getElementById("camera-fov-val");
+            if (lbl) lbl.innerText = Math.round(fovVal) + "°";
         }
         const camMove = document.getElementById("setting-camera-move-speed");
         if (camMove) {
@@ -13975,5 +14177,5 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
 
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1c97df0cce6dbdb',t:'MTc4NDI5Mzg4MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1da1f66af61e436',t:'MTc4NDQ2ODI2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1da1f66af61e436',t:'MTc4NDQ2ODI2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1db52393c60b689',t:'MTc4NDQ4MDgzMw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
