@@ -1907,16 +1907,16 @@
                         <div id="material-panel" class="p-3 flex flex-col gap-2 text-sm transition" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
                             <label data-i18n="cubeMaterial" class="td-label">Cube Material (Tag)</label>
                             <div class="flex items-center gap-1">
-                                <div class="flex-1 relative" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
-                                    <select id="sel-texture" class="bg-transparent text-[var(--td-text)] p-2 outline-none w-full pr-6 cursor-pointer text-sm" style="background-color: var(--td-bg-2);">
-                                        <option value="grid">Grid</option>
-                                        <option value="Glass">Glass</option>
-                                        <option value="GBWater">GBWater</option>
-                                    </select>
-                                    <div class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style="color: var(--td-text-dim);">
-                                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="10" height="10"><path d="M5 8l5 5 5-5"/></svg>
-                                    </div>
-                                </div>
+                                <select id="sel-texture" class="hidden">
+                                    <option value="grid">Grid</option>
+                                    <option value="Glass">Glass</option>
+                                    <option value="GBWater">GBWater</option>
+                                </select>
+                                <button id="texture-picker-trigger" onclick="uiManager.openTexturePickerModal()" class="flex-1 flex items-center gap-2 p-1.5 transition" style="background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text);" onmouseover="this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.borderColor='var(--td-border)'">
+                                    <img id="texture-picker-trigger-img" src="" alt="" draggable="false" style="width: 28px; height: 28px; object-fit: cover; border: 1px solid var(--td-border); background: #000; flex-shrink: 0;">
+                                    <span id="texture-picker-trigger-label" class="text-sm" style="flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Grid</span>
+                                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="10" height="10" style="color: var(--td-text-dim); flex-shrink: 0;"><path d="M5 8l5 5 5-5"/></svg>
+                                </button>
                                 <button onclick="document.getElementById('file-texture').click()" data-i18n-title="titleImport" class="px-2 py-2 transition" style="background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text-dim);" onmouseover="this.style.color='var(--td-accent)'; this.style.borderColor='var(--td-accent)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'" title="Import image">
                                     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M3 17V5a2 2 0 012-2h7l3 3v11a1 1 0 01-1 1H5a2 2 0 01-2-1zM13 3v4h4M7 13l2-3 2 3 2-2 2 2"/></svg>
                                 </button>
@@ -8915,6 +8915,7 @@ void main(){
                 sel.appendChild(opt);
             }
             document.getElementById("sel-texture").value = texVal;
+            if (typeof uiManager !== "undefined") uiManager._syncTexturePickerTrigger();
             const normalLabel = document.getElementById("normal-map-label");
             if (normalLabel) {
                 const texKey = obj.userData.texture || "grid";
@@ -12244,6 +12245,7 @@ window.uiManager = {
         const texSel = document.getElementById("sel-texture");
         if (texSel) {
             texSel.addEventListener("change", () => {
+                uiManager._syncTexturePickerTrigger();
                 const nl = document.getElementById("normal-map-label");
                 if (nl && engine.selectedBlocks && engine.selectedBlocks.length) {
                     const tk = engine.selectedBlocks[0].userData.texture || "grid";
@@ -12255,6 +12257,7 @@ window.uiManager = {
                     }
                 }
             });
+            uiManager._syncTexturePickerTrigger();
         }
         const reflect = document.getElementById("inp-reflect");
         if (reflect) reflect.addEventListener("input", () => {
@@ -12555,6 +12558,71 @@ window.uiManager = {
                 engine.resumeWorld("auto");
             } catch (e) {}
         }
+    },
+    openTexturePickerModal: function() {
+        if (!engine.selectedBlocks.length || engine.selectedBlocks.includes(engine.spawnPointObj)) {
+            alert("Select a cube first to choose a texture");
+            return;
+        }
+        const overlay = document.getElementById("texture-picker-modal-overlay");
+        if (!overlay) return;
+        const search = document.getElementById("texture-picker-search");
+        if (search) search.value = "";
+        this._refreshTexturePickerBody();
+        overlay.classList.remove("hidden");
+    },
+    closeTexturePickerModal: function() {
+        const overlay = document.getElementById("texture-picker-modal-overlay");
+        if (!overlay) return;
+        overlay.classList.add("hidden");
+    },
+    _texturePickerPreview: function(value) {
+        const key = canonicalTextureKey(value);
+        const tex = baseTextures[key] || activeProjectCustomTextures[value];
+        return tex?.userData?.sourceDataUrl || tex?.userData?.originalDataUrl || "";
+    },
+    _syncTexturePickerTrigger: function() {
+        const sel = document.getElementById("sel-texture");
+        const img = document.getElementById("texture-picker-trigger-img");
+        const label = document.getElementById("texture-picker-trigger-label");
+        if (!sel || !img || !label) return;
+        const opt = sel.options[sel.selectedIndex];
+        label.innerText = opt ? opt.textContent : sel.value;
+        const preview = this._texturePickerPreview(sel.value);
+        img.src = preview;
+        img.style.visibility = preview ? "visible" : "hidden";
+    },
+    _refreshTexturePickerBody: function() {
+        const body = document.getElementById("texture-picker-modal-body");
+        const sel = document.getElementById("sel-texture");
+        if (!body || !sel) return;
+        const query = (document.getElementById("texture-picker-search")?.value || "").trim().toLowerCase();
+        const currentValue = sel.value;
+        body.innerHTML = "";
+        const options = Array.from(sel.options).filter(opt => !query || opt.textContent.toLowerCase().includes(query) || opt.value.toLowerCase().includes(query));
+        if (!options.length) {
+            body.innerHTML = '<div class="collection-empty-hint">No textures match your search.</div>';
+            return;
+        }
+        options.forEach(opt => {
+            const el = document.createElement("div");
+            el.className = "collection-item" + (opt.value === currentValue ? " selected" : "");
+            const preview = this._texturePickerPreview(opt.value);
+            el.innerHTML = `
+                        ${preview ? `<img class="collection-item-img" src="${preview}" alt="${opt.textContent}" draggable="false">` : `<div class="collection-item-img" style="display:flex;align-items:center;justify-content:center;color:var(--td-text-dim);font-size:9px;">N/A</div>`}
+                        <div class="collection-item-info">
+                            <div class="collection-item-name">${opt.textContent}</div>
+                        </div>
+                    `;
+            el.addEventListener("click", () => {
+                sel.value = opt.value;
+                sel.dispatchEvent(new Event("change", {
+                    bubbles: true
+                }));
+                this.closeTexturePickerModal();
+            });
+            body.appendChild(el);
+        });
     },
     openAIBuilderModal: function() {
         const overlay = document.getElementById("ai-builder-modal-overlay");
@@ -14560,6 +14628,20 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                 <div class="collection-modal-footer">
                     <button class="ai-cancel-btn" id="ai-cancel-btn" style="display:none" onclick="aiBuilder.cancel()">Cancel</button>
                     <button class="ai-build-btn" id="ai-build-btn" style="flex:1" onclick="aiBuilder.run()">✦ Build</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="texture-picker-modal-overlay" class="collection-modal-overlay hidden" onclick="if(event.target===this)uiManager.closeTexturePickerModal()">
+            <div class="collection-modal">
+                <div class="collection-modal-header">
+                    <span class="collection-modal-title">Choose Texture</span>
+                    <button class="collection-modal-close" onclick="uiManager.closeTexturePickerModal()">✕</button>
+                </div>
+                <div class="collection-modal-toolbar" style="padding-bottom: 10px;">
+                    <input type="text" id="texture-picker-search" placeholder="Search texture…" class="td-input" style="flex: 1; padding: 8px 10px; font-size: 12px;" oninput="uiManager._refreshTexturePickerBody()">
+                </div>
+                <div class="collection-modal-body" id="texture-picker-modal-body">
                 </div>
             </div>
         </div>
