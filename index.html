@@ -1784,7 +1784,7 @@
             <div class="flex-1 w-full relative pointer-events-none z-30">
 
 
-                <div class="absolute top-4 right-4 sm:right-[280px] flex gap-2 pointer-events-auto">
+                <div class="absolute top-4 right-4 flex gap-2 pointer-events-auto">
                     <button onclick="engine.addSpawnPoint()" class="px-3 py-2 text-xs flex items-center gap-2 transition uppercase tracking-[0.1em]" style="background: rgba(94,196,110,0.12); border: 1px solid rgba(94,196,110,0.4); color: var(--td-ok);" onmouseover="this.style.background='rgba(94,196,110,0.2)'" onmouseout="this.style.background='rgba(94,196,110,0.12)'">
                         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M10 2C6 2 4 6 4 10s2 8 6 8 6-4 6-8-2-8-6-8zM10 2v16M4 10h12"/></svg>
                         <span data-i18n="spawnBtn">Spawn</span>
@@ -3314,7 +3314,7 @@ window.historyManager = {
     },
     takeSnapshot: function() {
         if (this.isRestoring) return;
-        if (window.engine && typeof engine.requestShadowUpdate === "function") engine.requestShadowUpdate();
+        if (window.engine && typeof engine.requestCustomLightsShadowUpdate === "function") engine.requestCustomLightsShadowUpdate();
         const state = {
             blocks: engine.blocks.map(b => engine.serializeObject(b)),
             lights: engine.manualLights.map(l => engine.serializeObject(l)),
@@ -4620,6 +4620,11 @@ function isWaterLike(textureId, matType) {
     return matType === "Water" || textureId === "GBWater";
 }
 
+function isShadowCaster(textureId, matType) {
+    const tex = canonicalTextureKey(textureId);
+    return !isWaterLike(tex, matType) && tex !== "Glass";
+}
+
 function createBlockGeometry(textureId = "grid", matType = "Concrete") {
     const water = isWaterLike(textureId, matType);
     const geo = water ? new THREE.BoxGeometry(1, 1, 1, 32, 6, 32) : new THREE.BoxGeometry(1, 1, 1);
@@ -5162,13 +5167,14 @@ function createMaterial(textureId, matType, colorHex, extra = {}) {
     const hasAlpha = !!(texture && texture.userData && texture.userData.hasAlpha) || isGlass;
     const baseColor = new THREE.Color(colorHex || 16777215);
     const manualLightSpec = Math.max(0, Math.min(1, window.engine?.manualLightSpecularStrength ?? .35));
+    const useEnvMap = window.engine?.isMobile ? (isWater || isGlass || isMetal) : true;
     const props = {
         map: isGlass ? null : texture,
         color: baseColor,
         roughness: Math.min(1, Math.max(.02, reflectBlur)),
         metalness: isMetal ? .85 : isWater || isGlass ? 0 : preset.metalness || 0,
         envMapIntensity: reflectivity,
-        envMap: window.engine?.getActiveEnvironmentMap?.() || null,
+        envMap: (useEnvMap && window.engine?.getActiveEnvironmentMap) ? window.engine.getActiveEnvironmentMap() : null,
         normalMap: isGlass ? null : normalMapTex,
         normalScale: normalMapTex && !isGlass ? new THREE.Vector2(1, 1) : undefined,
         specularIntensity: manualLightSpec,
@@ -5895,7 +5901,7 @@ const engine = {
                 }
             },
             vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-            fragmentShader: `\n                        precision highp float;\n                        uniform sampler2D tDiffuse;\n                        uniform sampler2D tDepth;\n                        uniform vec2      resolution;       /* full output size — aspect + IGN noise */\n                        uniform vec2      uDepthResolution; /* half-res depth texture — texel offsets */\n                        uniform float     intensity;\n                        uniform float     bias;\n                        uniform float     uFar;\n                        uniform float     uTanHalfFovX;\n                        uniform float     uTanHalfFovY;\n                        varying vec2 vUv;\n\n                        /* Unpacking лandnotйbutй глубandны andз RGBA8 (кросс-платформенbut, without hardware depth-textures) */\n                        float unpackDepth(vec4 rgba) {\n                            const vec4 bitShifts = vec4(1.0/16777216.0, 1.0/65536.0, 1.0/256.0, 1.0);\n                            return dot(rgba, bitShifts);\n                        }\n                        /* .x = лandnotйonя глубandon (view-space -Z, метры), .y = 1.0 if это «notбо» (notт геометрandand) */\n                        vec2 readDepth(vec2 uv) {\n                            vec4 raw = texture2D(tDepth, uv);\n                            if (raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);\n                            return vec2(unpackDepth(raw) * uFar, 0.0);\n                        }\n                        /* Reconstruct view-space position from UV + known linear depth */\n                        vec3 getViewPos(vec2 uv, float linZ) {\n                            vec2 ndc = uv * 2.0 - 1.0;\n                            return vec3(ndc.x * uTanHalfFovX * linZ, ndc.y * uTanHalfFovY * linZ, -linZ);\n                        }\n\n                        /* Interleaved Gradient Noise — temporally stable, no banding */\n                        float IGN(vec2 pix) {\n                            return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));\n                        }\n\n                        void main() {\n                            vec4  col  = texture2D(tDiffuse, vUv);\n                            vec2  centerD = readDepth(vUv);\n                            if (centerD.y > 0.5) { gl_FragColor = col; return; }\n                            \n                            // Safety: if AO intensity is very low, skip to avoid black screen\n                            if (intensity < 0.15) { gl_FragColor = col; return; }\n\n                            vec2  texel  = 1.0 / uDepthResolution; /* depth-tex res for correct neighbor offsets */\n                            float aspect = resolution.x / resolution.y;\n\n                            /* ── View-space position + depth ───────────────────────────────── */\n                            vec3  pos   = getViewPos(vUv, centerD.x);\n                            float depth = max(0.001, centerD.x);\n\n                            /* ── Stable normal reconstruction (view-space) ─────────────────────\n                               Previously used a hard if/else "best neighbour" pick based on which\n                               side had the smaller depth delta. On perfectly flat, coplanar seams\n                               (adjacent unit cubes sharing an edge) the L/R (or U/D) depth deltas\n                               are nearly identical — sub-pixel camera jitter between frames flips\n                               which side "wins" every frame, causing the reconstructed normal to\n                               jump discretely along cube seams. That produced moving dark bands\n                               that were not real corners. Fix: always use a symmetric central\n                               difference, but softly fall back toward the closer sample only when\n                               a real depth discontinuity (edge/corner) is detected, using a smooth\n                               weight instead of a hard branch — no more frame-to-frame flip. */\n                            vec2 dR  = readDepth(vUv + vec2( texel.x, 0.0));\n                            vec2 dL  = readDepth(vUv - vec2( texel.x, 0.0));\n                            vec2 dU  = readDepth(vUv + vec2(0.0,  texel.y));\n                            vec2 dDn = readDepth(vUv - vec2(0.0,  texel.y));\n\n                            vec3 pR = getViewPos(vUv + vec2( texel.x, 0.0), dR.x);\n                            vec3 pL = getViewPos(vUv - vec2( texel.x, 0.0), dL.x);\n                            vec3 pU = getViewPos(vUv + vec2(0.0,  texel.y), dU.x);\n                            vec3 pD = getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);\n\n                            /* Depth-discontinuity weight: 0 = hard edge (use single closer side),\n                               1 = flat / continuous (use symmetric central difference). A smooth\n                               transition between the two removes the per-frame flip entirely. */\n                            float edgeScale = max(0.001, centerD.x) * 0.06;\n                            float wx = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dR.x - dL.x));\n                            float wy = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dU.x - dDn.x));\n\n                            vec3 dXCentral = (pR - pL) * 0.5;\n                            vec3 dYCentral = (pU - pD) * 0.5;\n                            vec3 dXEdge = (abs(dR.x - centerD.x) < abs(centerD.x - dL.x)) ? (pR - pos) : (pos - pL);\n                            vec3 dYEdge = (abs(dU.x - centerD.x) < abs(centerD.x - dDn.x)) ? (pU - pos) : (pos - pD);\n\n                            vec3 dX = mix(dXEdge, dXCentral, wx);\n                            vec3 dY = mix(dYEdge, dYCentral, wy);\n\n                            vec3 N = normalize(cross(dX, dY));\n                            /* Ensure N points toward camera (+z in OpenGL view space) */\n                            if (N.z < 0.0) N = -N;\n\n                            /* ── Per-pixel rotation — IGN gives stable, uncorrelated noise ── */\n                            float rotA = IGN(floor(vUv * resolution)) * 6.28318530;\n\n                            /* ── RTX-style two-scale AO: tight contact pass (crisp corner darkening)\n                               + wide bounce pass (soft broad-range falloff, like GI occlusion in\n                               ray-traced renders). Combining a small tight radius with a larger soft\n                               radius makes corners read as dense, dark creases instead of a uniform\n                               grey haze — the hallmark of screen-space GI/AO in modern engines. */\n                            const float WRAD_TIGHT = 0.55;  /* crisp contact radius (units) — corners, seams */\n                            const float WRAD_WIDE  = 2.6;   /* broad soft radius (units) — room-scale occlusion */\n\n                            float screenRY_T = clamp(WRAD_TIGHT / (depth * uTanHalfFovY * 2.0), 0.003, 0.09);\n                            float screenRX_T = screenRY_T / aspect;\n                            float screenRY_W = clamp(WRAD_WIDE  / (depth * uTanHalfFovY * 2.0), 0.006, 0.16);\n                            float screenRX_W = screenRY_W / aspect;\n\n                            /* ── golden-angle hemisphere sampling, evaluated at two radii per ring ── */\n                            // Reduced from 16→8→6 samples: each pixel does 2 depth reads per sample\n                            // (tight+wide), so this is the AO pass's main cost. 6 is still enough\n                            // for a stable result since the tight/wide combine + smoothstep already\n                            // hides sampling noise.\n                            const int   S  = 6;\n                            const float GA = 2.39996322972865332;\n                            float aoTight = 0.0, aoWide = 0.0;\n                            float wTight  = 0.0, wWide  = 0.0;\n\n                            for (int i = 0; i < S; i++) {\n                                float fi    = float(i) + 0.5;\n                                float r     = sqrt(fi / float(S));\n                                float angle = rotA + fi * GA;\n                                vec2  dirT  = vec2(cos(angle) * r, sin(angle) * r);\n\n                                vec2 uvT = clamp(vUv + vec2(dirT.x * screenRX_T, dirT.y * screenRY_T), vec2(0.001), vec2(0.999));\n                                vec2 sDT = readDepth(uvT);\n                                if (sDT.y > 0.5) { wTight += 1.0; } else {\n                                    vec3  sPosT = getViewPos(uvT, sDT.x);\n                                    vec3  sVecT = sPosT - pos;\n                                    float sLenT = length(sVecT);\n                                    if (sLenT < 0.001) { wTight += 1.0; }\n                                    else {\n                                        float nDotT  = dot(N, sVecT / sLenT);\n                                        float rCheckT = 1.0 - smoothstep(0.0, WRAD_TIGHT, sLenT);\n                                        aoTight += max(0.0, nDotT - bias) * rCheckT;\n                                        wTight  += 1.0;\n                                    }\n                                }\n\n                                vec2 uvW = clamp(vUv + vec2(dirT.x * screenRX_W, dirT.y * screenRY_W), vec2(0.001), vec2(0.999));\n                                vec2 sDW = readDepth(uvW);\n                                if (sDW.y > 0.5) { wWide += 1.0; } else {\n                                    vec3  sPosW = getViewPos(uvW, sDW.x);\n                                    vec3  sVecW = sPosW - pos;\n                                    float sLenW = length(sVecW);\n                                    if (sLenW < 0.001) { wWide += 1.0; }\n                                    else {\n                                        float nDotW  = dot(N, sVecW / sLenW);\n                                        float rCheckW = 1.0 - smoothstep(0.0, WRAD_WIDE, sLenW);\n                                        aoWide += max(0.0, nDotW - bias * 0.5) * rCheckW;\n                                        wWide  += 1.0;\n                                    }\n                                }\n                            }\n\n                            if (wTight > 0.0) aoTight /= wTight;\n                            if (wWide  > 0.0) aoWide  /= wWide;\n\n                            aoTight = clamp(aoTight * intensity * 3.6, 0.0, 0.75);\n                            aoWide  = clamp(aoWide  * intensity * 2.0, 0.0, 0.55);\n                            aoTight = aoTight * aoTight * (3.0 - 2.0 * aoTight);\n                            aoWide  = aoWide  * aoWide  * (3.0 - 2.0 * aoWide);\n\n                            /* Combine: tight dominates in creases, wide fills in the rest. */\n                            float ao = 1.0 - (1.0 - aoTight) * (1.0 - aoWide * 0.6);\n                            ao = clamp(ao, 0.0, 0.88);\n\n                            /* Deep, punchy corner shadows (RTX-like) while still protecting midtones. */\n                            float aoFactor = 1.0 - ao * mix(0.35, 0.62, aoTight);\n                            gl_FragColor = vec4(col.rgb * aoFactor, col.a);\n                        }\n                    `
+            fragmentShader: `\n                        precision highp float;\n                        uniform sampler2D tDiffuse;\n                        uniform sampler2D tDepth;\n                        uniform vec2      resolution;       /* full output size — aspect + IGN noise */\n                        uniform vec2      uDepthResolution; /* half-res depth texture — texel offsets */\n                        uniform float     intensity;\n                        uniform float     bias;\n                        uniform float     uFar;\n                        uniform float     uTanHalfFovX;\n                        uniform float     uTanHalfFovY;\n                        varying vec2 vUv;\n\n                        /* Unpacking лandnotйbutй глубandны andз RGBA8 (кросс-платформенbut, without hardware depth-textures) */\n                        float unpackDepth(vec4 rgba) {\n                            const vec4 bitShifts = vec4(1.0/16777216.0, 1.0/65536.0, 1.0/256.0, 1.0);\n                            return dot(rgba, bitShifts);\n                        }\n                        /* .x = лandnotйonя глубandon (view-space -Z, метры), .y = 1.0 if это «notбо» (notт геометрandand) */\n                        vec2 readDepth(vec2 uv) {\n                            vec4 raw = texture2D(tDepth, uv);\n                            if (raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);\n                            return vec2(unpackDepth(raw) * uFar, 0.0);\n                        }\n                        /* Reconstruct view-space position from UV + known linear depth */\n                        vec3 getViewPos(vec2 uv, float linZ) {\n                            vec2 ndc = uv * 2.0 - 1.0;\n                            return vec3(ndc.x * uTanHalfFovX * linZ, ndc.y * uTanHalfFovY * linZ, -linZ);\n                        }\n\n                        /* Interleaved Gradient Noise — temporally stable, no banding */\n                        float IGN(vec2 pix) {\n                            return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));\n                        }\n\n                        void main() {\n                            vec4  col  = texture2D(tDiffuse, vUv);\n                            vec2  centerD = readDepth(vUv);\n                            if (centerD.y > 0.5) { gl_FragColor = col; return; }\n                            \n                            // Safety: if AO intensity is very low, skip to avoid black screen\n                            if (intensity < 0.15) { gl_FragColor = col; return; }\n\n                            vec2  texel  = 1.0 / uDepthResolution; /* depth-tex res for correct neighbor offsets */\n                            float aspect = resolution.x / resolution.y;\n\n                            /* ── View-space position + depth ───────────────────────────────── */\n                            vec3  pos   = getViewPos(vUv, centerD.x);\n                            float depth = max(0.001, centerD.x);\n\n                            /* ── Stable normal reconstruction (view-space) ─────────────────────\n                               Previously used a hard if/else "best neighbour" pick based on which\n                               side had the smaller depth delta. On perfectly flat, coplanar seams\n                               (adjacent unit cubes sharing an edge) the L/R (or U/D) depth deltas\n                               are nearly identical — sub-pixel camera jitter between frames flips\n                               which side "wins" every frame, causing the reconstructed normal to\n                               jump discretely along cube seams. That produced moving dark bands\n                               that were not real corners. Fix: always use a symmetric central\n                               difference, but softly fall back toward the closer sample only when\n                               a real depth discontinuity (edge/corner) is detected, using a smooth\n                               weight instead of a hard branch — no more frame-to-frame flip. */\n                            vec2 dR  = readDepth(vUv + vec2( texel.x, 0.0));\n                            vec2 dL  = readDepth(vUv - vec2( texel.x, 0.0));\n                            vec2 dU  = readDepth(vUv + vec2(0.0,  texel.y));\n                            vec2 dDn = readDepth(vUv - vec2(0.0,  texel.y));\n\n                            vec3 pR = getViewPos(vUv + vec2( texel.x, 0.0), dR.x);\n                            vec3 pL = getViewPos(vUv - vec2( texel.x, 0.0), dL.x);\n                            vec3 pU = getViewPos(vUv + vec2(0.0,  texel.y), dU.x);\n                            vec3 pD = getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);\n\n                            /* Depth-discontinuity weight: 0 = hard edge (use single closer side),\n                               1 = flat / continuous (use symmetric central difference). A smooth\n                               transition between the two removes the per-frame flip entirely. */\n                            float edgeScale = max(0.001, centerD.x) * 0.06;\n                            float wx = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dR.x - dL.x));\n                            float wy = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dU.x - dDn.x));\n\n                            vec3 dXCentral = (pR - pL) * 0.5;\n                            vec3 dYCentral = (pU - pD) * 0.5;\n                            vec3 dXEdge = (abs(dR.x - centerD.x) < abs(centerD.x - dL.x)) ? (pR - pos) : (pos - pL);\n                            vec3 dYEdge = (abs(dU.x - centerD.x) < abs(centerD.x - dDn.x)) ? (pU - pos) : (pos - pD);\n\n                            vec3 dX = mix(dXEdge, dXCentral, wx);\n                            vec3 dY = mix(dYEdge, dYCentral, wy);\n\n                            vec3 N = normalize(cross(dX, dY));\n                            /* Ensure N points toward camera (+z in OpenGL view space) */\n                            if (N.z < 0.0) N = -N;\n\n                            /* ── Per-pixel rotation — IGN gives stable, uncorrelated noise ── */\n                            float rotA = IGN(floor(vUv * resolution)) * 6.28318530;\n\n                            /* ── RTX-style two-scale AO: tight contact pass (crisp corner darkening)\n                               + wide bounce pass (soft broad-range falloff, like GI occlusion in\n                               ray-traced renders). Combining a small tight radius with a larger soft\n                               radius makes corners read as dense, dark creases instead of a uniform\n                               grey haze — the hallmark of screen-space GI/AO in modern engines. */\n                            const float WRAD_TIGHT = 0.55;  /* crisp contact radius (units) — corners, seams */\n                            const float WRAD_WIDE  = 2.6;   /* broad soft radius (units) — room-scale occlusion */\n\n                            float screenRY_T = clamp(WRAD_TIGHT / (depth * uTanHalfFovY * 2.0), 0.003, 0.09);\n                            float screenRX_T = screenRY_T / aspect;\n                            float screenRY_W = clamp(WRAD_WIDE  / (depth * uTanHalfFovY * 2.0), 0.006, 0.16);\n                            float screenRX_W = screenRY_W / aspect;\n\n                            /* ── golden-angle hemisphere sampling, evaluated at two radii per ring ── */\n                            // Reduced from 16→8→6 samples: each pixel does 2 depth reads per sample\n                            // (tight+wide), so this is the AO pass's main cost. 6 is still enough\n                            // for a stable result since the tight/wide combine + smoothstep already\n                            // hides sampling noise.\n                            const int   S  = ${this.isMobile ? 4 : 6};\n                            const float GA = 2.39996322972865332;\n                            float aoTight = 0.0, aoWide = 0.0;\n                            float wTight  = 0.0, wWide  = 0.0;\n\n                            for (int i = 0; i < S; i++) {\n                                float fi    = float(i) + 0.5;\n                                float r     = sqrt(fi / float(S));\n                                float angle = rotA + fi * GA;\n                                vec2  dir  = vec2(cos(angle) * r, sin(angle) * r);\n\n                                if (i == 0 || i == 2 || i == 4) {\n                                    vec2 uvT = clamp(vUv + vec2(dir.x * screenRX_T, dir.y * screenRY_T), vec2(0.001), vec2(0.999));\n                                    vec2 sDT = readDepth(uvT);\n                                    if (sDT.y > 0.5) { wTight += 1.0; } else {\n                                        vec3  sPosT = getViewPos(uvT, sDT.x);\n                                        vec3  sVecT = sPosT - pos;\n                                        float sLenT = length(sVecT);\n                                        if (sLenT < 0.001) { wTight += 1.0; }\n                                        else {\n                                            float nDotT  = dot(N, sVecT / sLenT);\n                                            float rCheckT = 1.0 - smoothstep(0.0, WRAD_TIGHT, sLenT);\n                                            aoTight += max(0.0, nDotT - bias) * rCheckT;\n                                            wTight  += 1.0;\n                                        }\n                                    }\n                                } else {\n                                    vec2 uvW = clamp(vUv + vec2(dir.x * screenRX_W, dir.y * screenRY_W), vec2(0.001), vec2(0.999));\n                                    vec2 sDW = readDepth(uvW);\n                                    if (sDW.y > 0.5) { wWide += 1.0; } else {\n                                        vec3  sPosW = getViewPos(uvW, sDW.x);\n                                        vec3  sVecW = sPosW - pos;\n                                        float sLenW = length(sVecW);\n                                        if (sLenW < 0.001) { wWide += 1.0; }\n                                        else {\n                                            float nDotW  = dot(N, sVecW / sLenW);\n                                            float rCheckW = 1.0 - smoothstep(0.0, WRAD_WIDE, sLenW);\n                                            aoWide += max(0.0, nDotW - bias * 0.5) * rCheckW;\n                                            wWide  += 1.0;\n                                        }\n                                    }\n                                }\n                            }\n\n                            if (wTight > 0.0) aoTight /= wTight;\n                            if (wWide  > 0.0) aoWide  /= wWide;\n\n                            aoTight = clamp(aoTight * intensity * 3.6, 0.0, 0.75);\n                            aoWide  = clamp(aoWide  * intensity * 2.0, 0.0, 0.55);\n                            aoTight = aoTight * aoTight * (3.0 - 2.0 * aoTight);\n                            aoWide  = aoWide  * aoWide  * (3.0 - 2.0 * aoWide);\n\n                            /* Combine: tight dominates in creases, wide fills in the rest. */\n                            float ao = 1.0 - (1.0 - aoTight) * (1.0 - aoWide * 0.6);\n                            ao = clamp(ao, 0.0, 0.88);\n\n                            /* Deep, punchy corner shadows (RTX-like) while still protecting midtones. */\n                            float aoFactor = 1.0 - ao * mix(0.35, 0.62, aoTight);\n                            gl_FragColor = vec4(col.rgb * aoFactor, col.a);\n                        }\n                    `
         };
         this.ssaoPass = new ShaderPass(_aoShader);
         this.ssaoPass.material.depthTest = false;
@@ -5991,9 +5997,9 @@ const engine = {
         this.scene.add(this.skyEnvGroup);
         this.initStarsAndMoon();
         this.initClouds();
-        this.ambientLight = new THREE.AmbientLight(16777215, .88);
+        this.ambientLight = new THREE.AmbientLight(16777215, .22);
         this.scene.add(this.ambientLight);
-        this.hemiLight = new THREE.HemisphereLight(15267071, 13088412, .42);
+        this.hemiLight = new THREE.HemisphereLight(15267071, 13088412, .12);
         this.scene.add(this.hemiLight);
         this.dirLight = new THREE.DirectionalLight(16773852, .86);
         this.dirLight.position.set(100, 150, 100);
@@ -6008,7 +6014,8 @@ const engine = {
         this.dirLight.shadow.camera.bottom = -45;
         this.dirLight.shadow.bias = -12e-5;
         this.dirLight.shadow.normalBias = .018;
-        this.dirLight.shadow.radius = 3.5;
+        const smoothingEnabled = document.getElementById("setting-texture-smoothing") ? document.getElementById("setting-texture-smoothing").checked : false;
+        this.dirLight.shadow.radius = smoothingEnabled ? 4.5 : 1.0;
         this.scene.add(this.dirLight);
         this.scene.add(this.dirLight.target);
         this.gridHelper = new THREE.GridHelper(300, 150, 1976635, 988970);
@@ -6066,7 +6073,7 @@ const engine = {
         });
         this.transformControl.addEventListener("change", () => {
             if (this.selectedBlocks.length > 0) {
-                this.requestShadowUpdate();
+                this.requestCustomLightsShadowUpdate();
                 this.updateUIFromObject();
                 if (this.transformControl.getMode() === "scale") {
                     this.selectedBlocks.forEach(obj => {
@@ -6417,7 +6424,7 @@ const engine = {
         const old = mesh.material;
         mesh.material = this.acquireCubeMaterialFor(mesh);
         this.releaseCubeMaterial(old);
-        mesh.castShadow = visible && (document.getElementById("setting-shadows")?.checked ?? true) && !isWaterLike(mesh.userData?.texture, mesh.userData?.materialType);
+        mesh.castShadow = visible && (document.getElementById("setting-shadows")?.checked ?? true) && isShadowCaster(mesh.userData?.texture, mesh.userData?.materialType);
     },
     releaseCubeMaterial: function(mat) {
         if (!mat) return;
@@ -7023,7 +7030,7 @@ const engine = {
             reflectivity: initialReflect,
             reflectBlur: initialBlur
         }));
-        mesh.castShadow = !isWaterLike(tex, matT);
+        mesh.castShadow = isShadowCaster(tex, matT);
         mesh.receiveShadow = true;
         mesh.position.copy(origin).addScaledVector(basis.right, localPos.x).addScaledVector(basis.up, localPos.y).addScaledVector(basis.forward, localPos.z);
         mesh.scale.set(scale.x, scale.y, scale.z);
@@ -7046,6 +7053,7 @@ const engine = {
         this.updateCubeUVs(mesh);
         this.scene.add(mesh);
         this.blocks.push(mesh);
+        this.setupStaticMesh(mesh);
         return mesh;
     },
     createShapeCubeTransformed: function(origin, basis, localPos, localRotDeg, localScale, groupId, shapeType) {
@@ -7056,7 +7064,7 @@ const engine = {
             reflectivity: initialReflect,
             reflectBlur: initialBlur
         }));
-        mesh.castShadow = !isWaterLike(tex, matT);
+        mesh.castShadow = isShadowCaster(tex, matT);
         mesh.receiveShadow = true;
         mesh.position.copy(origin).addScaledVector(basis.right, localPos.x).addScaledVector(basis.up, localPos.y).addScaledVector(basis.forward, localPos.z);
         const basisMatrix = (new THREE.Matrix4).makeBasis(basis.right, basis.up, basis.forward.clone().multiplyScalar(-1));
@@ -7083,6 +7091,7 @@ const engine = {
         this.updateCubeUVs(mesh);
         this.scene.add(mesh);
         this.blocks.push(mesh);
+        this.setupStaticMesh(mesh);
         return mesh;
     },
     spawnCollectionObject: function(item) {
@@ -7127,7 +7136,7 @@ const engine = {
                 reflectBlur: initialBlur
             });
             const mesh = new THREE.Mesh(createBlockGeometry(tex, matT), mat);
-            mesh.castShadow = !isWaterLike(tex, matT);
+            mesh.castShadow = isShadowCaster(tex, matT);
             mesh.receiveShadow = true;
             mesh.position.set(origin.x + (mapped.pos?.x || 0), origin.y + (mapped.pos?.y || 0), origin.z + (mapped.pos?.z || 0));
             if (mapped.quat && Number.isFinite(mapped.quat.w)) {
@@ -7169,6 +7178,7 @@ const engine = {
             this.updateCubeUVs(mesh);
             this.scene.add(mesh);
             this.blocks.push(mesh);
+            this.setupStaticMesh(mesh);
             this.registerCullable(mesh);
             this.updateCullingAround(mesh);
             created.push(mesh);
@@ -7213,7 +7223,7 @@ const engine = {
         const initialBlur = preset.roughness;
         const mat = this.acquireCubeMaterial(tex, matT, col, { reflectivity: initialReflect, reflectBlur: initialBlur });
         const mesh = new THREE.Mesh(createBlockGeometry(tex, matT), mat);
-        mesh.castShadow = !isWaterLike(tex, matT);
+        mesh.castShadow = isShadowCaster(tex, matT);
         mesh.receiveShadow = true;
         mesh.position.set(origin.x + (mapped.pos?.x || 0), origin.y + (mapped.pos?.y || 0), origin.z + (mapped.pos?.z || 0));
         if (mapped.quat && Number.isFinite(mapped.quat.w)) {
@@ -7248,6 +7258,7 @@ const engine = {
         this.updateCubeUVs(mesh);
         this.scene.add(mesh);
         this.blocks.push(mesh);
+        this.setupStaticMesh(mesh);
         this.registerCullable(mesh);
         this.updateCullingAround(mesh);
         return mesh;
@@ -7535,7 +7546,7 @@ const engine = {
             mat4.makeBasis(localX, localY, normal);
             quat.setFromRotationMatrix(mat4);
             const mesh = new THREE.Mesh(baseBoxGeo.clone(), sharedMat);
-            mesh.castShadow = !isWaterLike(tex, matT);
+            mesh.castShadow = isShadowCaster(tex, matT);
             mesh.receiveShadow = true;
             mesh.position.copy(center);
             mesh.quaternion.copy(quat);
@@ -7559,6 +7570,7 @@ const engine = {
             this.updateCubeUVs(mesh);
             this.scene.add(mesh);
             this.blocks.push(mesh);
+            this.setupStaticMesh(mesh);
             this.registerCullable(mesh);
             this.updateCullingAround(mesh);
             created.push(mesh);
@@ -7665,11 +7677,55 @@ const engine = {
         const s = mesh.scale;
         return Math.abs(s.x - 1) < .001 && Math.abs(s.y - 1) < .001 && Math.abs(s.z - 1) < .001 && Math.abs(mesh.rotation.x) < .001 && Math.abs(mesh.rotation.y) < .001 && Math.abs(mesh.rotation.z) < .001;
     },
+    setupStaticMesh: function(mesh) {
+        if (!mesh) return;
+        mesh.updateMatrix();
+        mesh.matrixAutoUpdate = false;
+    },
+    updateSelectionMatrices: function(prevSelection, newSelection) {
+        if (prevSelection) {
+            prevSelection.forEach(b => {
+                if (b && b.userData?.type === "cube") {
+                    b.updateMatrix();
+                    b.matrixAutoUpdate = false;
+                }
+            });
+        }
+        if (newSelection) {
+            newSelection.forEach(b => {
+                if (b && b.userData?.type === "cube") {
+                    b.matrixAutoUpdate = true;
+                }
+            });
+        }
+    },
     registerCullable: function(mesh) {
         if (!this.isCullable(mesh)) return;
         const key = this.cullKey(mesh.position.x, mesh.position.y, mesh.position.z);
         mesh.userData._cullKey = key;
         this.faceCullMap.set(key, mesh);
+    },
+    unsetupStaticMesh: function(mesh) {
+        if (!mesh) return;
+        mesh.updateMatrix();
+        mesh.matrixAutoUpdate = false;
+    },
+    updateSelectionMatrices: function(prevSelection, newSelection) {
+        if (prevSelection) {
+            prevSelection.forEach(b => {
+                if (b && b.userData?.type === "cube") {
+                    b.updateMatrix();
+                    b.matrixAutoUpdate = false;
+                }
+            });
+        }
+        if (newSelection) {
+            newSelection.forEach(b => {
+                if (b && b.userData?.type === "cube") {
+                    b.matrixAutoUpdate = true;
+                }
+            });
+        }
     },
     unregisterCullable: function(mesh) {
         if (!mesh || !mesh.userData) return;
@@ -7701,12 +7757,20 @@ const engine = {
             return;
         }
         const dirs = [ [ 1, 0, 0 ], [ -1, 0, 0 ], [ 0, 1, 0 ], [ 0, -1, 0 ], [ 0, 0, 1 ], [ 0, 0, -1 ] ];
+        let occludedCount = 0;
         for (let f = 0; f < 6; f++) {
             const d = dirs[f];
             const neighborKey = this.cullKey(mesh.position.x + d[0], mesh.position.y + d[1], mesh.position.z + d[2]);
             const neighbor = this.faceCullMap.get(neighborKey);
             const occluded = !!neighbor && this.isCullable(neighbor);
             this.setFaceHidden(mesh, f, occluded);
+            if (occluded) occludedCount++;
+        }
+        mesh.userData._allFacesOccluded = (occludedCount === 6);
+        if (mesh.userData._allFacesOccluded) {
+            mesh.visible = false;
+        } else if (!mesh.userData._distanceCulled) {
+            mesh.visible = true;
         }
     },
     updateCullingAround: function(mesh) {
@@ -7738,7 +7802,7 @@ const engine = {
             reflectivity: initialReflect,
             reflectBlur: initialBlur
         }));
-        mesh.castShadow = !isWaterLike(tex, matT);
+        mesh.castShadow = isShadowCaster(tex, matT);
         mesh.receiveShadow = true;
         const resolvedMaterialName = matName || resolveGoreBoxMaterialName(tex, matT);
         const resolvedSourceTag = sourceTag || matT;
@@ -7780,6 +7844,7 @@ const engine = {
         this.updateCubeUVs(mesh);
         this.scene.add(mesh);
         this.blocks.push(mesh);
+        this.setupStaticMesh(mesh);
         this.registerCullable(mesh);
         this.updateCullingAround(mesh);
         if (!this.isMultiSelectMode) this.deselect();
@@ -7861,11 +7926,14 @@ const engine = {
         }
         light.position.set(0, 0, 0);
         light.castShadow = mesh.userData.castShadow !== false && (document.getElementById("setting-shadows")?.checked ?? true);
-        light.shadow.mapSize.width = 512;
-        light.shadow.mapSize.height = 512;
+        const lightShadowSize = Math.min(1024, this.getShadowSizeSetting());
+        light.shadow.mapSize.width = lightShadowSize;
+        light.shadow.mapSize.height = lightShadowSize;
+        const smoothingEnabled = document.getElementById("setting-texture-smoothing")?.checked ?? false;
         light.shadow.bias = -25e-5;
         light.shadow.normalBias = .035;
-        light.shadow.radius = 3;
+        light.shadow.radius = smoothingEnabled ? 4.0 : 1.0;
+        light.shadow.autoUpdate = false;
         light.userData.manualLightOwner = mesh;
         mesh.add(light);
         mesh.userData.lightSource = light;
@@ -7904,7 +7972,10 @@ const engine = {
                 light.penumbra = .35;
                 this.updateManualLightTarget(mesh);
             }
-            if (light.shadow) light.shadow.needsUpdate = true;
+            if (light.shadow) {
+                light.shadow.autoUpdate = false;
+                light.shadow.needsUpdate = true;
+            }
         }
         this.recalculateManualLightSpecular();
     },
@@ -8097,7 +8168,7 @@ const engine = {
     deselect: function() {
         this.releaseTransformGroup();
         this.selectedBlocks = [];
-        this.transformControl.detach();
+        if (this.transformControl) this.transformControl.detach();
         [ "inp-pos-x", "inp-pos-y", "inp-pos-z", "inp-rot-x", "inp-rot-y", "inp-rot-z", "inp-sca-x", "inp-sca-y", "inp-sca-z" ].forEach(id => {
             const el = document.getElementById(id);
             if (el) {
@@ -8113,6 +8184,11 @@ const engine = {
     buildTransformGroup: function() {
         this.releaseTransformGroup();
         if (this.selectedBlocks.length === 0) return;
+        this.selectedBlocks.forEach(b => {
+            if (b && b.userData?.type === "cube") {
+                b.matrixAutoUpdate = true;
+            }
+        });
         if (this.selectedBlocks.length === 1) {
             this.transformControl.attach(this.selectedBlocks[0]);
             return;
@@ -8129,7 +8205,13 @@ const engine = {
         this.transformControl.attach(this.transformGroup);
     },
     releaseTransformGroup: function() {
-        this.transformControl.detach();
+        if (this.transformControl) this.transformControl.detach();
+        this.selectedBlocks.forEach(b => {
+            if (b && b.userData?.type === "cube") {
+                b.updateMatrix();
+                b.matrixAutoUpdate = false;
+            }
+        });
         if (this.transformGroup.parent) {
             while (this.transformGroup.children.length > 0) {
                 this.scene.attach(this.transformGroup.children[0]);
@@ -8181,7 +8263,7 @@ const engine = {
             }
             const newGeo = createBlockGeometry(data.userData.texture, data.userData.materialType);
             const mesh = new THREE.Mesh(newGeo, this.acquireCubeMaterial(data.userData.texture, data.userData.materialType, data.userData.colorHex));
-            mesh.castShadow = !isWaterLike(data.userData.texture, data.userData.materialType);
+            mesh.castShadow = isShadowCaster(data.userData.texture, data.userData.materialType);
             mesh.receiveShadow = true;
             applySerializedTransform(mesh, data);
             mesh.userData = data.userData;
@@ -8193,6 +8275,7 @@ const engine = {
             this.updateCubeUVs(mesh);
             this.scene.add(mesh);
             this.blocks.push(mesh);
+            this.setupStaticMesh(mesh);
             duplicated.push(mesh);
             this.flashDuplicateHighlight(mesh);
         });
@@ -8400,7 +8483,7 @@ const engine = {
         return this.drawDistance;
     },
     getBlockCullDistance: function(obj) {
-        const size = obj.getWorldScale(this._cullScaleVec || (this._cullScaleVec = new THREE.Vector3));
+        const size = obj.scale;
         const maxDim = Math.max(Math.abs(size.x), Math.abs(size.y), Math.abs(size.z), .05);
         const sizeFactor = THREE.MathUtils.clamp(Math.sqrt(maxDim), .25, 5);
         return Math.max(12, this.drawDistance * sizeFactor);
@@ -8415,19 +8498,23 @@ const engine = {
         for (const obj of this.blocks) {
             if (!obj || obj.userData?.type !== "cube") continue;
             const isSelected = this.selectedBlocks.includes(obj);
-            if (isSelected || this.transformControl?.dragging) {
+            if (isSelected || (this.transformControl && this.transformControl.dragging)) {
                 obj.visible = true;
                 obj.userData._distanceCulled = false;
                 visibleCount++;
                 continue;
             }
             const maxDist = this.getBlockCullDistance(obj);
-            const worldPos = obj.getWorldPosition(this._cullTempVec || (this._cullTempVec = new THREE.Vector3));
+            const worldPos = obj.position;
             const distSq = camPos.distanceToSquared(worldPos);
             const culled = distSq > maxDist * maxDist;
             obj.userData._distanceCulled = culled;
-            obj.visible = !culled;
-            if (!culled) visibleCount++;
+            if (obj.userData._allFacesOccluded) {
+                obj.visible = false;
+            } else {
+                obj.visible = !culled;
+            }
+            if (!culled && !obj.userData._allFacesOccluded) visibleCount++;
         }
         this._lastVisibleBlockCount = visibleCount;
     },
@@ -8522,6 +8609,22 @@ const engine = {
         this.syncAllObjectMaterials(false);
         return currentTextureMaxResolution;
     },
+    getShadowSizeSetting: function() {
+        const shadowSizes = [ 128, 256, 512, 1024, 2048 ];
+        const shadowQualityIdx = parseInt(document.getElementById("setting-shadow-quality")?.value ?? "2", 10);
+        let shadowSize = shadowSizes[shadowQualityIdx] ?? 512;
+        if (this.isMobile && shadowSize > 1024) shadowSize = 1024;
+        return shadowSize;
+    },
+    requestCustomLightsShadowUpdate: function() {
+        this.manualLights.forEach(l => {
+            const light = l.userData?.lightSource;
+            if (light && light.shadow) {
+                light.shadow.needsUpdate = true;
+            }
+        });
+        this.requestShadowUpdate();
+    },
     requestShadowUpdate: function() {
         if (this.renderer && this.renderer.shadowMap) this.renderer.shadowMap.needsUpdate = true;
     },
@@ -8529,11 +8632,44 @@ const engine = {
         const shadowsEnabled = document.getElementById("setting-shadows").checked;
         this.renderer.shadowMap.enabled = shadowsEnabled;
         this.dirLight.castShadow = shadowsEnabled;
-        this.manualLights.forEach(l => this.applyManualLightSettings(l));
-        if (this.shadowCatcher) this.shadowCatcher.visible = false;
+
+        const smoothingEnabled = document.getElementById("setting-texture-smoothing")?.checked ?? false;
+        const targetShadowMapType = smoothingEnabled ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+        if (this.renderer && this.renderer.shadowMap) {
+            if (this.renderer.shadowMap.type !== targetShadowMapType) {
+                this.renderer.shadowMap.type = targetShadowMapType;
+                this.renderer.shadowMap.needsUpdate = true;
+                this.scene.traverse(child => {
+                    if (child.isMesh && child.material) {
+                        const mats = Array.isArray(child.material) ? child.material : [ child.material ];
+                        mats.forEach(m => m.needsUpdate = true);
+                    }
+                });
+            }
+        }
+
         const shadowSizes = [ 128, 256, 512, 1024, 2048 ];
         const shadowQualityIdx = parseInt(document.getElementById("setting-shadow-quality")?.value ?? "2", 10);
-        const shadowSize = shadowSizes[shadowQualityIdx] ?? 512;
+        let shadowSize = shadowSizes[shadowQualityIdx] ?? 512;
+        if (this.isMobile && shadowSize > 1024) shadowSize = 1024;
+
+        this.manualLights.forEach(l => {
+            const light = l.userData?.lightSource;
+            if (light && light.shadow) {
+                const targetSize = Math.min(1024, shadowSize);
+                if (light.shadow.mapSize.width !== targetSize) {
+                    light.shadow.mapSize.width = targetSize;
+                    light.shadow.mapSize.height = targetSize;
+                    if (light.shadow.map) {
+                        light.shadow.map.dispose();
+                        light.shadow.map = null;
+                    }
+                }
+                light.shadow.radius = smoothingEnabled ? 4.0 : 1.0;
+            }
+            this.applyManualLightSettings(l);
+        });
+        if (this.shadowCatcher) this.shadowCatcher.visible = false;
         const sqValEl = document.getElementById("shadow-quality-val");
         if (sqValEl) sqValEl.innerText = shadowSize;
         if (this.dirLight.shadow.mapSize.width !== shadowSize) {
@@ -8552,7 +8688,7 @@ const engine = {
         this.dirLight.shadow.camera.far = 250;
         this.dirLight.shadow.bias = -12e-5;
         this.dirLight.shadow.normalBias = .018;
-        this.dirLight.shadow.radius = 3.5;
+        this.dirLight.shadow.radius = smoothingEnabled ? 4.5 : 1.0;
         this.dirLight.shadow.camera.updateProjectionMatrix();
         this.renderer.shadowMap.needsUpdate = true;
         const bloomEnabled = document.getElementById("setting-bloom").checked;
@@ -8600,7 +8736,7 @@ const engine = {
         this.updateLocalReflections(true);
         this.scene.traverse(child => {
             if (child.isMesh && child.material) {
-                child.castShadow = shadowsEnabled && child.userData?.type !== "spawn" && child.userData?.type !== "light" && !isWaterLike(child.userData?.texture, child.userData?.materialType);
+                child.castShadow = shadowsEnabled && child.userData?.type !== "spawn" && child.userData?.type !== "light" && isShadowCaster(child.userData?.texture, child.userData?.materialType);
                 child.receiveShadow = shadowsEnabled && child.userData?.type !== "spawn" && child.userData?.type !== "light";
                 child.material.needsUpdate = true;
             }
@@ -8724,9 +8860,9 @@ const engine = {
         if (skybox === "day") {
             this.dirLight.intensity = .86;
             this.dirLight.color.setHex(16773852);
-            this.ambientLight.intensity = .88;
+            this.ambientLight.intensity = .22;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .42;
+                this.hemiLight.intensity = .12;
                 this.hemiLight.color.setHex(15267071);
                 this.hemiLight.groundColor.setHex(13088412);
             }
@@ -8736,9 +8872,9 @@ const engine = {
         } else if (skybox === "sunrise") {
             this.dirLight.intensity = .72;
             this.dirLight.color.setHex(16761482);
-            this.ambientLight.intensity = .62;
+            this.ambientLight.intensity = .16;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .32;
+                this.hemiLight.intensity = .10;
                 this.hemiLight.color.setHex(16770240);
                 this.hemiLight.groundColor.setHex(12098176);
             }
@@ -8748,9 +8884,9 @@ const engine = {
         } else if (skybox === "dusk") {
             this.dirLight.intensity = .62;
             this.dirLight.color.setHex(16742212);
-            this.ambientLight.intensity = .52;
+            this.ambientLight.intensity = .12;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .25;
+                this.hemiLight.intensity = .08;
                 this.hemiLight.color.setHex(16756864);
                 this.hemiLight.groundColor.setHex(9401445);
             }
@@ -8761,9 +8897,9 @@ const engine = {
         } else if (skybox === "night") {
             this.dirLight.intensity = .08;
             this.dirLight.color.setHex(8956671);
-            this.ambientLight.intensity = .22;
+            this.ambientLight.intensity = .04;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .1;
+                this.hemiLight.intensity = .02;
                 this.hemiLight.color.setHex(10402047);
                 this.hemiLight.groundColor.setHex(1909296);
             }
@@ -8775,9 +8911,9 @@ const engine = {
         } else if (skybox === "midnight") {
             this.dirLight.intensity = .035;
             this.dirLight.color.setHex(6715391);
-            this.ambientLight.intensity = .12;
+            this.ambientLight.intensity = .02;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .06;
+                this.hemiLight.intensity = .01;
                 this.hemiLight.color.setHex(8228095);
                 this.hemiLight.groundColor.setHex(527124);
             }
@@ -8790,9 +8926,9 @@ const engine = {
             bgColor = "#000000";
             this.dirLight.intensity = .78;
             this.dirLight.color.setHex(16777215);
-            this.ambientLight.intensity = .72;
+            this.ambientLight.intensity = .18;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .3;
+                this.hemiLight.intensity = .10;
                 this.hemiLight.color.setHex(16777215);
                 this.hemiLight.groundColor.setHex(11579568);
             }
@@ -8884,7 +9020,7 @@ const engine = {
         }
         this.syncAllObjectMaterials(false);
         this.updateLocalReflections(true);
-        this.requestShadowUpdate();
+        this.requestCustomLightsShadowUpdate();
     },
     initWeatherParticles: function() {
         if (this.weatherParticles) {
@@ -13640,5 +13776,5 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
 
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1c97df0cce6dbdb',t:'MTc4NDI5Mzg4MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1da1f66af61e436',t:'MTc4NDQ2ODI2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
