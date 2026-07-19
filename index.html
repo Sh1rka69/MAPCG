@@ -3597,7 +3597,38 @@ Object.values(baseTextures).forEach(tex => {
     } catch (e) {}
 });
 
-const TEXTURE_CACHE_KEY = "mapcg_base_textures_v3";
+const GITHUB_REPO_OWNER = "Sh1rka69";
+
+const GITHUB_REPO_NAME = "MAPCG";
+
+const GITHUB_REPO_BRANCH = "main";
+
+async function fetchGitHubFolderManifest(folderPath) {
+    const url = `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/contents/${encodeURIComponent(folderPath)}?ref=${GITHUB_REPO_BRANCH}`;
+    const resp = await fetch(url, {
+        headers: {
+            Accept: "application/vnd.github+json"
+        },
+        cache: "no-cache"
+    });
+    if (!resp.ok) throw new Error("GitHub API " + resp.status + " for " + folderPath);
+    const list = await resp.json();
+    if (!Array.isArray(list)) throw new Error("Unexpected GitHub API response for " + folderPath);
+    return list.filter(e => e.type === "file").map(e => ({
+        name: e.name,
+        sha: e.sha,
+        download_url: e.download_url,
+        size: e.size
+    }));
+}
+
+function manifestVersionHash(entries) {
+    return entries.map(e => e.name + ":" + e.sha).sort().join("|");
+}
+
+const TEXTURE_CACHE_KEY = "mapcg_base_textures_v4";
+
+const TEXTURE_MANIFEST_CACHE_KEY = "mapcg_base_textures_manifest_v4";
 
 function populateTextureSelect(names) {
     const sel = document.getElementById("sel-texture");
@@ -3625,6 +3656,61 @@ function applyTextureData(data) {
     console.log("[MapCG] " + names.length + " GoreBox textures ready.");
 }
 
+async function loadTexturesFromFolderEntries(entries) {
+    const data = {};
+    for (const entry of entries) {
+        const basename = entry.name;
+        if (!basename || !/\.(png|jpg|jpeg|webp)$/i.test(basename)) continue;
+        const name = basename.replace(/\.(png|jpg|jpeg|webp)$/i, "");
+        const resp = await fetch(entry.download_url, {
+            cache: "no-cache"
+        });
+        if (!resp.ok) continue;
+        const blob = await resp.blob();
+        const dataUrl = await new Promise(res => {
+            const r = new FileReader;
+            r.onload = e => res(e.target.result);
+            r.readAsDataURL(blob);
+        });
+        data[name] = dataUrl;
+    }
+    return data;
+}
+
+async function initBaseTextures() {
+    let cachedData = null;
+    let cachedManifestHash = null;
+    try {
+        cachedData = await localforage.getItem(TEXTURE_CACHE_KEY);
+        cachedManifestHash = await localforage.getItem(TEXTURE_MANIFEST_CACHE_KEY);
+        if (cachedData && Object.keys(cachedData).length > 0) {
+            applyTextureData(cachedData);
+        }
+    } catch (e) {}
+    try {
+        const entries = await fetchGitHubFolderManifest("BaseTextures");
+        const freshHash = manifestVersionHash(entries);
+        if (freshHash === cachedManifestHash && cachedData && Object.keys(cachedData).length > 0) {
+            return;
+        }
+        const data = await loadTexturesFromFolderEntries(entries);
+        if (Object.keys(data).length > 0) {
+            applyTextureData(data);
+            try {
+                await localforage.setItem(TEXTURE_CACHE_KEY, data);
+                await localforage.setItem(TEXTURE_MANIFEST_CACHE_KEY, freshHash);
+            } catch (e) {}
+            return;
+        }
+    } catch (e) {
+        console.warn("[MapCG] BaseTextures folder fetch failed — using cache if available.", e && e.message || e);
+    }
+    if (!cachedData || Object.keys(cachedData).length === 0) {
+        const btn = document.getElementById("tex-load-btn");
+        if (btn) btn.style.display = "flex";
+    }
+}
+
 async function loadTexturesFromZipBuffer(buffer) {
     const zip = await JSZip.loadAsync(buffer);
     const data = {};
@@ -3642,31 +3728,6 @@ async function loadTexturesFromZipBuffer(buffer) {
         data[name] = dataUrl;
     }
     return data;
-}
-
-async function initBaseTextures() {
-    try {
-        const cached = await localforage.getItem(TEXTURE_CACHE_KEY);
-        if (cached && Object.keys(cached).length > 0) {
-            applyTextureData(cached);
-            return;
-        }
-    } catch (e) {}
-    try {
-        const resp = await fetch("./BaseTextures.zip");
-        if (resp.ok) {
-            const data = await loadTexturesFromZipBuffer(await resp.arrayBuffer());
-            applyTextureData(data);
-            try {
-                await localforage.setItem(TEXTURE_CACHE_KEY, data);
-            } catch (e) {}
-            return;
-        }
-    } catch (e) {
-        console.warn("[MapCG] Auto-fetch failed — showing manual load button.");
-    }
-    const btn = document.getElementById("tex-load-btn");
-    if (btn) btn.style.display = "flex";
 }
 
 async function handleManualTexZip(event) {
@@ -3698,15 +3759,59 @@ async function handleManualTexZip(event) {
 async function clearTextureCache() {
     try {
         await localforage.removeItem(TEXTURE_CACHE_KEY);
+        await localforage.removeItem(TEXTURE_MANIFEST_CACHE_KEY);
     } catch (e) {}
     location.reload();
 }
 
 initBaseTextures();
 
-const MUSIC_CACHE_KEY = "mapcg_music_v2_blobs";
+const MUSIC_CACHE_KEY = "mapcg_music_v3_blobs";
+
+const MUSIC_MANIFEST_CACHE_KEY = "mapcg_music_manifest_v3";
 
 const musicTracks = [];
+
+const MUSIC_EXT_MIME = {
+    mp3: "audio/mpeg",
+    ogg: "audio/ogg",
+    wav: "audio/wav",
+    m4a: "audio/mp4",
+    aac: "audio/aac",
+    opus: "audio/ogg",
+    flac: "audio/flac"
+};
+
+async function loadMusicFromFolderEntries(entries) {
+    const data = [];
+    for (const entry of entries) {
+        const basename = entry.name;
+        if (!basename || basename.startsWith(".") || basename.startsWith("_")) continue;
+        const m = basename.match(/\.(mp3|ogg|wav|m4a|aac|opus|flac)$/i);
+        if (!m) continue;
+        const name = basename.slice(0, -m[0].length);
+        const ext = m[1].toLowerCase();
+        const mime = MUSIC_EXT_MIME[ext] || "audio/mpeg";
+        try {
+            const resp = await fetch(entry.download_url, {
+                cache: "no-cache"
+            });
+            if (!resp.ok) continue;
+            const rawBlob = await resp.blob();
+            const blob = new Blob([ await rawBlob.arrayBuffer() ], {
+                type: mime
+            });
+            data.push({
+                name: name,
+                blob: blob
+            });
+            console.log("[MapCG] Music: fetched ✓ " + basename + " → " + (blob.size / 1024 / 1024).toFixed(2) + " MB (" + mime + ")");
+        } catch (err) {
+            console.error("[MapCG] Music: FAILED to fetch " + basename, err);
+        }
+    }
+    return data;
+}
 
 async function loadMusicFromZipBuffer(buffer) {
     console.log("[MapCG] Music: JSZip.loadAsync starting...");
@@ -3799,46 +3904,50 @@ function showMusicLoadBtn() {
 
 async function initMusic() {
     console.log("[MapCG] Music: initMusic() start");
+    let cached = null;
+    let cachedManifestHash = null;
     try {
-        const cached = await localforage.getItem(MUSIC_CACHE_KEY);
+        cached = await localforage.getItem(MUSIC_CACHE_KEY);
+        cachedManifestHash = await localforage.getItem(MUSIC_MANIFEST_CACHE_KEY);
         if (cached && Array.isArray(cached) && cached.length > 0) {
             console.log("[MapCG] Music: loaded " + cached.length + " tracks from IndexedDB cache.");
             applyMusicData(cached);
-            return;
         }
     } catch (e) {
         console.warn("[MapCG] Music: cache read error:", e);
     }
     try {
-        console.log("[MapCG] Music: trying fetch(./Music.zip)...");
-        const resp = await fetch("./Music.zip", {
-            cache: "no-cache"
-        });
-        console.log("[MapCG] Music: fetch response", resp.status, resp.headers.get("content-type"));
-        if (resp.ok) {
-            const buf = await resp.arrayBuffer();
-            const data = await loadMusicFromZipBuffer(buf);
-            if (data.length > 0) {
-                applyMusicData(data);
-                try {
-                    await localforage.setItem(MUSIC_CACHE_KEY, data.map(t => ({
-                        name: t.name,
-                        blob: t.blob
-                    })));
-                    console.log("[MapCG] Music: cached in IndexedDB.");
-                } catch (e) {
-                    console.warn("[MapCG] Music: cache write error:", e);
-                }
-                return;
-            } else {
-                console.warn("[MapCG] Music: ZIP fetched but contains no audio files.");
+        console.log("[MapCG] Music: fetching folder manifest...");
+        const entries = await fetchGitHubFolderManifest("Music");
+        const freshHash = manifestVersionHash(entries);
+        if (freshHash === cachedManifestHash && cached && cached.length > 0) {
+            console.log("[MapCG] Music: manifest unchanged, using cache.");
+            return;
+        }
+        const data = await loadMusicFromFolderEntries(entries);
+        if (data.length > 0) {
+            applyMusicData(data);
+            try {
+                await localforage.setItem(MUSIC_CACHE_KEY, data.map(t => ({
+                    name: t.name,
+                    blob: t.blob
+                })));
+                await localforage.setItem(MUSIC_MANIFEST_CACHE_KEY, freshHash);
+                console.log("[MapCG] Music: cached in IndexedDB.");
+            } catch (e) {
+                console.warn("[MapCG] Music: cache write error:", e);
             }
+            return;
+        } else {
+            console.warn("[MapCG] Music: folder fetched but contains no audio files.");
         }
     } catch (e) {
-        console.warn("[MapCG] Music.zip auto-fetch failed:", e && e.message || e);
+        console.warn("[MapCG] Music folder auto-fetch failed:", e && e.message || e);
     }
-    console.log("[MapCG] Music: falling back to manual load button.");
-    showMusicLoadBtn();
+    if (!cached || cached.length === 0) {
+        console.log("[MapCG] Music: falling back to manual load button.");
+        showMusicLoadBtn();
+    }
 }
 
 async function handleManualMusicZip(event) {
@@ -4381,7 +4490,9 @@ const guideBgFx = {
 
 window.guideBgFx = guideBgFx;
 
-const SUBJECTS_CACHE_KEY = "mapcg_subjects_collection_v1";
+const SUBJECTS_CACHE_KEY = "mapcg_subjects_collection_v2";
+
+const SUBJECTS_MANIFEST_CACHE_KEY = "mapcg_subjects_manifest_v2";
 
 let subjectsCacheApplied = false;
 
@@ -4425,6 +4536,57 @@ function parseSubjectCubes(rawArr) {
             z: 1
         }
     }));
+}
+
+async function loadSubjectsFromFolderEntries(entries) {
+    const groups = {};
+    for (const entry of entries) {
+        const basename = entry.name;
+        const m = basename && basename.match(/\.(png|jpe?g|webp|json)$/i);
+        if (!m) continue;
+        const name = basename.slice(0, -m[0].length);
+        const ext = m[1].toLowerCase();
+        if (!groups[name]) groups[name] = {};
+        try {
+            const resp = await fetch(entry.download_url, {
+                cache: "no-cache"
+            });
+            if (!resp.ok) continue;
+            if (ext === "json") {
+                groups[name].cubesRaw = await resp.text();
+            } else {
+                const blob = await resp.blob();
+                groups[name].image = await new Promise(res => {
+                    const r = new FileReader;
+                    r.onload = e => res(e.target.result);
+                    r.readAsDataURL(blob);
+                });
+            }
+        } catch (err) {
+            console.warn("[MapCG] Subjects: failed to fetch " + basename, err);
+        }
+    }
+    const items = [];
+    for (const [name, g] of Object.entries(groups)) {
+        if (!g.image || !g.cubesRaw) continue;
+        let rawArr;
+        try {
+            const trimmed = g.cubesRaw.trim().replace(/,\s*$/, "");
+            rawArr = JSON.parse(trimmed.startsWith("[") ? trimmed : "[" + trimmed + "]");
+        } catch (e) {
+            console.warn('[MapCG] Failed to parse JSON model "' + name + '":', e);
+            continue;
+        }
+        const cubes = parseSubjectCubes(rawArr);
+        if (!cubes.length) continue;
+        items.push({
+            name: name,
+            cubeCount: cubes.length,
+            image: g.image,
+            cubes: cubes
+        });
+    }
+    return items;
 }
 
 async function loadSubjectsFromZipBuffer(buffer) {
@@ -4472,42 +4634,55 @@ async function loadSubjectsFromZipBuffer(buffer) {
     return items;
 }
 
-function applySubjectsData(items) {
+function applySubjectsData(items, replaceAll) {
     if (!Array.isArray(items) || !items.length) return 0;
     if (!Array.isArray(uiManager._collectionData)) uiManager._collectionData = [];
-    items.forEach(item => {
-        const idx = uiManager._collectionData.findIndex(x => x.name === item.name);
-        if (idx >= 0) uiManager._collectionData[idx] = item; else uiManager._collectionData.push(item);
-    });
+    if (replaceAll) {
+        uiManager._collectionData = items.slice();
+    } else {
+        items.forEach(item => {
+            const idx = uiManager._collectionData.findIndex(x => x.name === item.name);
+            if (idx >= 0) uiManager._collectionData[idx] = item; else uiManager._collectionData.push(item);
+        });
+    }
     uiManager._refreshCollectionModalBody();
     return items.length;
 }
 
 async function initSubjectsCollection() {
+    let cachedManifestHash = null;
     if (!subjectsCacheApplied) {
         subjectsCacheApplied = true;
         try {
             const cached = await localforage.getItem(SUBJECTS_CACHE_KEY);
-            if (Array.isArray(cached) && cached.length) applySubjectsData(cached);
+            cachedManifestHash = await localforage.getItem(SUBJECTS_MANIFEST_CACHE_KEY);
+            if (Array.isArray(cached) && cached.length) applySubjectsData(cached, true);
         } catch (e) {}
     }
     if (subjectsNetworkLoading) return;
     subjectsNetworkLoading = true;
     try {
-        const resp = await fetch("./CollectionOfSubjects.zip", {
-            cache: "no-cache"
-        });
-        if (resp.ok) {
-            const items = await loadSubjectsFromZipBuffer(await resp.arrayBuffer());
-            if (items.length) {
-                applySubjectsData(items);
-                try {
-                    await localforage.setItem(SUBJECTS_CACHE_KEY, uiManager._collectionData);
-                } catch (e) {}
-            }
+        const entries = await fetchGitHubFolderManifest("CollectionOfSubjects");
+        const freshHash = manifestVersionHash(entries);
+        if (cachedManifestHash === null) {
+            try {
+                cachedManifestHash = await localforage.getItem(SUBJECTS_MANIFEST_CACHE_KEY);
+            } catch (e) {}
+        }
+        if (freshHash === cachedManifestHash && Array.isArray(uiManager._collectionData) && uiManager._collectionData.length) {
+            subjectsNetworkLoading = false;
+            return;
+        }
+        const items = await loadSubjectsFromFolderEntries(entries);
+        if (items.length) {
+            applySubjectsData(items, true);
+            try {
+                await localforage.setItem(SUBJECTS_CACHE_KEY, uiManager._collectionData);
+                await localforage.setItem(SUBJECTS_MANIFEST_CACHE_KEY, freshHash);
+            } catch (e) {}
         }
     } catch (e) {
-        console.warn('[MapCG] CollectionOfSubjects.zip is unavailable (offline/local launch) — use the "+ ADD COLLECTION" button.');
+        console.warn('[MapCG] CollectionOfSubjects folder is unavailable (offline/local launch) — use the "+ ADD COLLECTION" button.', e && e.message || e);
     } finally {
         subjectsNetworkLoading = false;
     }
@@ -12329,7 +12504,7 @@ window.uiManager = {
         const data = this._collectionData || [];
         body.innerHTML = "";
         if (!data.length) {
-            body.innerHTML = '<div class="collection-empty-hint">Collection is empty for now.<br>Loading CollectionOfSubjects.zip from the repository —<br>or click "+ ADD COLLECTION" to choose an archive manually.</div>';
+            body.innerHTML = '<div class="collection-empty-hint">Collection is empty for now.<br>Loading CollectionOfSubjects from the repository —<br>or click "+ ADD COLLECTION" to choose an archive manually.</div>';
             return;
         }
         data.forEach((item, idx) => {
