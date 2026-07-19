@@ -2729,6 +2729,14 @@
                         </div>
 
                         <label class="flex items-center gap-2 mt-2 cursor-pointer">
+                            <input type="checkbox" id="setting-adaptive-res" checked onchange="engine.applyAdaptiveResolution?.(this.checked);">
+                            <span class="text-xs" style="color: var(--td-text-dim);">Adaptive Resolution (auto-lower res to hold FPS)</span>
+                        </label>
+                        <label class="flex items-center gap-2 mt-2 cursor-pointer">
+                            <input type="checkbox" id="setting-occlusion-culling" checked onchange="engine.applyOcclusionCulling?.(this.checked);">
+                            <span class="text-xs" style="color: var(--td-text-dim);">Occlusion Culling (skip cubes hidden behind others)</span>
+                        </label>
+                        <label class="flex items-center gap-2 mt-2 cursor-pointer">
                             <input type="checkbox" id="setting-pixel-smoothing" onchange="engine.applyPixelSmoothing(this.checked);">
                             <span class="text-xs" style="color: var(--td-text-dim);" data-i18n="pixelSmoothing">Pixel Smoothing</span>
                         </label>
@@ -5382,6 +5390,11 @@ const engine = {
     drawDistance: 350,
     distanceCullingEnabled: true,
     _cullingTimer: 0,
+    adaptiveResEnabled: true,
+    _adaptiveResTimer: 0,
+    _adaptiveResBaseRatio: .7,
+    _adaptiveResCurrentScale: 1,
+    _adaptiveResFpsHistory: [],
     _lastVisibleBlockCount: 0,
     outlines: [],
     clock: new THREE.Clock,
@@ -5867,6 +5880,7 @@ const engine = {
         this.renderer.shadowMap.type = this.isMobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
         this.renderer.shadowMap.autoUpdate = false;
         this.renderer.shadowMap.needsUpdate = true;
+        this._initOcclusionCulling();
         this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
         this.pmremGenerator.compileEquirectangularShader();
         this.scene = new THREE.Scene;
@@ -6301,6 +6315,8 @@ void main(){
         this.applyCameraFov(parseFloat(localStorage.getItem("mmcg_camera_fov_55") || "60"));
         this.applyCameraMoveSpeed(parseFloat(localStorage.getItem("mmcg_camera_move_55") || "1"));
         this.applyPixelRatio(parseFloat(localStorage.getItem("mmcg_pixel_ratio_55") || "0.8"));
+        this.applyAdaptiveResolution(localStorage.getItem("mmcg_adaptive_res_55") !== "0");
+        this.applyOcclusionCulling(localStorage.getItem("mmcg_occlusion_culling_55") !== "0");
         this.applyFpsCounterVisibility(localStorage.getItem("mmcg_show_fps_55") === "1");
         this.applyPixelSmoothing(localStorage.getItem("mmcg_pixel_smoothing_55") === "1");
         this.applyHitboxOpacity(parseFloat(localStorage.getItem("mmcg_hitbox_opacity_55") || "0.8"), false);
@@ -6409,7 +6425,7 @@ void main(){
     onWindowResize: function() {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
-        const scale = this.currentPixelRatio || 1;
+        const scale = (this.currentPixelRatio || 1) * (this.adaptiveResEnabled ? this._adaptiveResCurrentScale || 1 : 1);
         const w = Math.floor(window.innerWidth * scale);
         const h = Math.floor(window.innerHeight * scale);
         this.renderer.setSize(w, h, false);
@@ -6514,7 +6530,78 @@ void main(){
             }
             if (this.updateDepthEncodingUniforms) this.updateDepthEncodingUniforms();
         }
+        this._adaptiveResBaseRatio = safe;
+        this._adaptiveResCurrentScale = 1;
         return safe;
+    },
+    applyAdaptiveResolution: function(value = null) {
+        const enabled = value !== null && value !== undefined ? !!value : localStorage.getItem("mmcg_adaptive_res_55") !== "0";
+        this.adaptiveResEnabled = enabled;
+        localStorage.setItem("mmcg_adaptive_res_55", enabled ? "1" : "0");
+        const cb = document.getElementById("setting-adaptive-res");
+        if (cb) cb.checked = enabled;
+        if (!enabled) {
+            this._adaptiveResCurrentScale = 1;
+            this._adaptiveResFpsHistory.length = 0;
+            this.applyPixelRatio(this._adaptiveResBaseRatio);
+        }
+        return enabled;
+    },
+    updateAdaptiveResolution: function(rawDt) {
+        if (!this.adaptiveResEnabled || !this.renderer || this.worldPaused || gameplay.isPlaytest === undefined) return;
+        if (!rawDt || rawDt <= 0) return;
+        this._adaptiveResTimer = (this._adaptiveResTimer || 0) + rawDt;
+        this._adaptiveResFpsHistory.push(1 / rawDt);
+        if (this._adaptiveResFpsHistory.length > 30) this._adaptiveResFpsHistory.shift();
+        if (this._adaptiveResTimer < .5) return;
+        this._adaptiveResTimer = 0;
+        if (this._adaptiveResFpsHistory.length < 5) return;
+        const avgFps = this._adaptiveResFpsHistory.reduce((a, b) => a + b, 0) / this._adaptiveResFpsHistory.length;
+        const targetFps = this.isMobile ? 45 : 55;
+        const lowFps = this.isMobile ? 34 : 42;
+        const recoverFps = this.isMobile ? 52 : 58;
+        let scale = this._adaptiveResCurrentScale || 1;
+        const minScale = .45;
+        if (avgFps < lowFps) {
+            const deficit = THREE.MathUtils.clamp((targetFps - avgFps) / targetFps, 0, 1);
+            scale = Math.max(minScale, scale - deficit * .18);
+        } else if (avgFps > recoverFps && scale < 1) {
+            scale = Math.min(1, scale + .06);
+        }
+        if (Math.abs(scale - this._adaptiveResCurrentScale) > .01) {
+            this._adaptiveResCurrentScale = scale;
+            const effectiveRatio = Math.max(.2, this._adaptiveResBaseRatio * scale);
+            this._applyEffectivePixelRatio(effectiveRatio);
+        }
+    },
+    _applyEffectivePixelRatio: function(safe) {
+        if (!this.renderer) return;
+        const w = Math.floor(window.innerWidth * safe);
+        const h = Math.floor(window.innerHeight * safe);
+        this.renderer.setPixelRatio(1);
+        this.renderer.setSize(w, h, false);
+        if (this.composer) this.composer.setSize(w, h);
+        if (this._depthTarget) this._depthTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
+        if (this._rtHistoryTarget) {
+            this._rtHistoryTarget.setSize(w, h);
+            this._rtHistoryReady = false;
+        }
+        if (this.ssaoPass?.uniforms) {
+            this.ssaoPass.uniforms.resolution.value.set(w, h);
+            this.ssaoPass.uniforms.uDepthResolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
+            this.ssaoPass.uniforms.tDepth.value = this._depthTarget.texture;
+        }
+        if (this.rtPass?.uniforms) {
+            this.rtPass.uniforms.resolution.value.set(w, h);
+            this.rtPass.uniforms.uDepthResolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
+            this.rtPass.uniforms.tDepth.value = this._depthTarget.texture;
+            this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
+        }
+        if (this.dofPass?.uniforms) {
+            this.dofPass.uniforms.resolution.value.set(w, h);
+            this.dofPass.uniforms.tDepth.value = this._depthTarget.texture;
+        }
+        if (this.updateDepthEncodingUniforms) this.updateDepthEncodingUniforms();
     },
     applyFpsCounterVisibility: function(value = null) {
         const enabled = value !== null && value !== undefined ? !!value : localStorage.getItem("mmcg_show_fps_55") === "1";
@@ -8734,6 +8821,111 @@ void main(){
         const sizeFactor = THREE.MathUtils.clamp(Math.sqrt(maxDim), .25, 5);
         return Math.max(12, this.drawDistance * sizeFactor);
     },
+    _initOcclusionCulling: function() {
+        const gl = this.renderer.getContext();
+        this._occlusionSupported = !!(gl && gl instanceof WebGL2RenderingContext);
+        if (!this._occlusionSupported) {
+            console.warn("[occlusion] WebGL2 not available, occlusion culling disabled (frustum + distance culling still active)");
+            return;
+        }
+        this._occGl = gl;
+        this._occQueryPool = [];
+        this._occPending = [];
+        this._occResults = new WeakMap();
+        this._occLastCamKey = "";
+        this._occBoxGeo = new THREE.BoxGeometry(1, 1, 1);
+        this._occBoxMat = new THREE.MeshBasicMaterial({
+            colorWrite: false,
+            depthWrite: false,
+            depthTest: true
+        });
+        this._occProbeMesh = new THREE.Mesh(this._occBoxGeo, this._occBoxMat);
+        this._occProbeMesh.frustumCulled = false;
+        this._occMaxQueriesPerFrame = this.isMobile ? 20 : 40;
+        this._occFrameCounter = 0;
+        this.occlusionCullingEnabled = localStorage.getItem("mmcg_occlusion_culling_55") !== "0";
+    },
+    applyOcclusionCulling: function(value = null) {
+        const enabled = value !== null && value !== undefined ? !!value : localStorage.getItem("mmcg_occlusion_culling_55") !== "0";
+        this.occlusionCullingEnabled = enabled;
+        localStorage.setItem("mmcg_occlusion_culling_55", enabled ? "1" : "0");
+        const cb = document.getElementById("setting-occlusion-culling");
+        if (cb) cb.checked = enabled;
+        if (!enabled) {
+            for (const entry of this._occPending || []) {
+                if (this._occGl && this._occGl.deleteQuery) this._occGl.deleteQuery(entry.query);
+            }
+            this._occPending.length = 0;
+            for (const obj of this.blocks || []) {
+                if (obj && obj.userData?.type === "cube" && !obj.userData._distanceCulled && !obj.userData._allFacesOccluded) obj.visible = true;
+            }
+        }
+        return enabled;
+    },
+    _occGetQuery: function() {
+        const gl = this._occGl;
+        return this._occQueryPool.pop() || gl.createQuery();
+    },
+    updateOcclusionCulling: function() {
+        if (!this._occlusionSupported || !this.occlusionCullingEnabled || !this.blocks || !this.camera) return;
+        const gl = this._occGl;
+        this._occFrameCounter++;
+        for (let i = this._occPending.length - 1; i >= 0; i--) {
+            const entry = this._occPending[i];
+            if (gl.getQueryParameter(entry.query, gl.QUERY_RESULT_AVAILABLE)) {
+                const anySamples = gl.getQueryParameter(entry.query, gl.QUERY_RESULT);
+                this._occResults.set(entry.obj, {
+                    visible: !!anySamples,
+                    frame: this._occFrameCounter
+                });
+                this._occQueryPool.push(entry.query);
+                this._occPending.splice(i, 1);
+            }
+        }
+        const camPos = this.camera.position;
+        const candidates = [];
+        for (const obj of this.blocks) {
+            if (!obj || obj.userData?.type !== "cube") continue;
+            if (obj.userData._distanceCulled || obj.userData._allFacesOccluded) continue;
+            if (this.selectedBlocks.includes(obj)) continue;
+            const boxSize = Math.max(obj.scale.x, obj.scale.y, obj.scale.z);
+            if (boxSize > 12) continue;
+            candidates.push(obj);
+        }
+        candidates.sort((a, b) => camPos.distanceToSquared(a.position) - camPos.distanceToSquared(b.position));
+        let issued = 0;
+        const cam = this.camera;
+        const prevAutoClear = this.renderer.autoClear;
+        const prevTarget = this.renderer.getRenderTarget();
+        const depthTarget = this._lastFrameUsedComposer ? this.composer.readBuffer : null;
+        this.renderer.autoClear = false;
+        this.renderer.setRenderTarget(depthTarget);
+        for (const obj of candidates) {
+            if (issued >= this._occMaxQueriesPerFrame) break;
+            const cached = this._occResults.get(obj);
+            const age = cached ? this._occFrameCounter - cached.frame : 999;
+            if (age < 6) {
+                if (cached && !cached.visible) obj.visible = false; else if (obj.userData._distanceCulled === false && !obj.userData._allFacesOccluded) obj.visible = true;
+                continue;
+            }
+            if (this._occPending.some(e => e.obj === obj)) continue;
+            this._occProbeMesh.position.copy(obj.position);
+            this._occProbeMesh.quaternion.copy(obj.quaternion);
+            this._occProbeMesh.scale.copy(obj.scale).multiplyScalar(1.02);
+            this._occProbeMesh.updateMatrixWorld(true);
+            const query = this._occGetQuery();
+            gl.beginQuery(gl.ANY_SAMPLES_PASSED_CONSERVATIVE, query);
+            this.renderer.render(this._occProbeMesh, cam);
+            gl.endQuery(gl.ANY_SAMPLES_PASSED_CONSERVATIVE);
+            this._occPending.push({
+                query: query,
+                obj: obj
+            });
+            issued++;
+        }
+        this.renderer.setRenderTarget(prevTarget);
+        this.renderer.autoClear = prevAutoClear;
+    },
     updateDistanceCulling: function(force = false, dt = 0) {
         if (!this.camera || !this.blocks) return;
         this._cullingTimer = (this._cullingTimer || 0) + (dt || 0);
@@ -8757,8 +8949,12 @@ void main(){
             obj.userData._distanceCulled = culled;
             if (obj.userData._allFacesOccluded) {
                 obj.visible = false;
+            } else if (culled) {
+                obj.visible = false;
             } else {
-                obj.visible = !culled;
+                const occ = this.occlusionCullingEnabled ? this._occResults?.get(obj) : null;
+                const occFresh = occ && this._occFrameCounter - occ.frame < 6;
+                obj.visible = occFresh ? occ.visible : true;
             }
             if (!culled && !obj.userData._allFacesOccluded) visibleCount++;
         }
@@ -10503,6 +10699,7 @@ void main(){
         const dt = this.worldPaused ? 0 : _rawDt;
         weatherUniforms.uTime.value += dt;
         this.updateDuplicateHighlights(dt);
+        this.updateAdaptiveResolution(_rawDt);
         if (this.fpsCounterEnabled) {
             this.fpsFrameCount++;
             this.fpsElapsed += _rawDt;
@@ -10713,6 +10910,7 @@ void main(){
                 }
             }
             const _useComposer = this.bloomPass.enabled || this.ssaoPass.enabled || this.rtPass?.enabled || this.dofPass?.enabled;
+            this._lastFrameUsedComposer = _useComposer;
             if (_useComposer) {
                 this.composer.render();
                 this._blitQuad = this._blitQuad || (() => {
@@ -10754,6 +10952,11 @@ void main(){
             this._renderSkipFrames = 0;
         } catch (err) {
             console.error("Scene render error:", err);
+        }
+        try {
+            this.updateOcclusionCulling();
+        } catch (err) {
+            console.error("Occlusion culling error:", err);
         }
     }
 };
