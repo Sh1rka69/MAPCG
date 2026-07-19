@@ -1911,7 +1911,6 @@
                                     <select id="sel-texture" class="bg-transparent text-[var(--td-text)] p-2 outline-none w-full pr-6 cursor-pointer text-sm" style="background-color: var(--td-bg-2);">
                                         <option value="grid">Grid</option>
                                         <option value="Glass">Glass</option>
-                                        <option value="plasma">Plasma</option>
                                         <option value="GBWater">GBWater</option>
                                     </select>
                                     <div class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style="color: var(--td-text-dim);">
@@ -3594,7 +3593,6 @@ function createWaterTexture() {
 const baseTextures = {
     grid: createGridTexture("#dddddd", "#ffffff"),
     Glass: createGridTexture("#ffffff", "#ffffff"),
-    plasma: createGridTexture("#00ffff", "#00ffff"),
     GBWater: createWaterTexture()
 };
 
@@ -4879,7 +4877,7 @@ function ensureBlockGeometryMatchesMaterial(mesh) {
 
 const BUILTIN_TEXTURE_KEYS = new Set([ "grid", "plain", "dark", "grass", "dirt", "sand", "snow", "wood", "metal", "carpet", "Glass", "GBWater" ]);
 
-const ALL_DEFAULT_TEXTURE_KEYS = [ "grid", "Glass", "plasma", "GBWater" ];
+const ALL_DEFAULT_TEXTURE_KEYS = [ "grid", "Glass", "GBWater" ];
 
 const MATERIAL_PRESETS = {
     Concrete: {
@@ -4964,6 +4962,7 @@ function canonicalTextureKey(name) {
     const lower = raw.toLowerCase();
     if (lower === "glass") return "Glass";
     if (lower === "gbwater") return "GBWater";
+    if (lower === "plasma") return "Plasma";
     return raw;
 }
 
@@ -4989,7 +4988,7 @@ function getFallbackGoreBoxTag(materialType) {
     return GOREBOX_FALLBACK_TAGS[materialType] || GOREBOX_FALLBACK_TAGS.Concrete;
 }
 
-const PROCEDURAL_TEXTURE_KEYS = new Set([ "grid", "plain", "dark", "Glass", "plasma", "GBWater" ]);
+const PROCEDURAL_TEXTURE_KEYS = new Set([ "grid", "plain", "dark", "Glass", "GBWater" ]);
 
 function resolveGoreBoxMaterialName(textureKey, materialType) {
     const tex = canonicalTextureKey(textureKey);
@@ -5392,7 +5391,7 @@ function createMaterial(textureId, matType, colorHex, extra = {}) {
     const isWater = isWaterLike(textureId, matType);
     const isMetal = textureId === "metal";
     const isGlass = textureId === "Glass";
-    const isPlasma = textureId === "plasma";
+    const isPlasma = textureId === "Plasma";
     const reflectivity = extra.reflectivity !== undefined ? extra.reflectivity : isGlass ? 2.35 : isMetal || isWater ? preset.envMapIntensity : Math.min(preset.envMapIntensity, .12);
     const reflectBlur = extra.reflectBlur !== undefined ? extra.reflectBlur : isGlass ? .035 : preset.roughness;
     const hasAlpha = !!(texture && texture.userData && texture.userData.hasAlpha) || isGlass;
@@ -5413,8 +5412,9 @@ function createMaterial(textureId, matType, colorHex, extra = {}) {
         clearcoatRoughness: Math.max(.08, .45 - manualLightSpec * .3)
     };
     if (isPlasma) {
-        props.emissive = new THREE.Color(65535);
-        props.emissiveIntensity = 2.5;
+        props.emissive = new THREE.Color(0, .55, .85);
+        props.emissiveIntensity = 1;
+        props.toneMapped = false;
     }
     if (hasAlpha || isWater || preset.transparent || isGlass) {
         props.transparent = true;
@@ -6074,7 +6074,7 @@ const engine = {
         this.camera.position.set(15, 20, 15);
         const _cw = window.innerWidth, _ch = window.innerHeight;
         const _compTarget = new THREE.WebGLRenderTarget(_cw, _ch, {
-            type: THREE.UnsignedByteType,
+            type: THREE.HalfFloatType,
             depthBuffer: true
         });
         this.composer = new EffectComposer(this.renderer, _compTarget);
