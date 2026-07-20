@@ -151,7 +151,7 @@ app.get('/health', (_, res) => res.json({ ok: true, rooms: rooms.size, time: now
 app.get('/rooms', (_, res) => res.json([...rooms.values()].map(publicRoom)));
 
 io.on('connection', socket => {
-  socket.emit('mp:hello', { id: socket.id, time: now(), rooms: [...rooms.values()].map(publicRoom) });
+  socket.emit('mp:hello', { id: socket.id, time: now(), objectDelta: true, version: 'delta-sync-v2', rooms: [...rooms.values()].map(publicRoom) });
 
   socket.on('mp:list_rooms', cb => {
     const list = [...rooms.values()].map(publicRoom).sort((a, b) => b.createdAt - a.createdAt);
@@ -198,7 +198,8 @@ io.on('connection', socket => {
       socketToRoom.set(socket.id, id);
       socket.join(id);
       socket.emit('mp:joined', {
-        room: publicRoom(room),
+        objectDelta: true,
+        room: { ...publicRoom(room), objectDelta: true },
         self: publicPlayer(player),
         players: [...room.players.values()].map(publicPlayer),
         mapData: room.mapData,
@@ -235,7 +236,8 @@ io.on('connection', socket => {
       socketToRoom.set(socket.id, room.id);
       socket.join(room.id);
       socket.emit('mp:joined', {
-        room: publicRoom(room),
+        objectDelta: true,
+        room: { ...publicRoom(room), objectDelta: true },
         self: publicPlayer(player),
         players: [...room.players.values()].map(publicPlayer),
         mapData: room.mapData,
