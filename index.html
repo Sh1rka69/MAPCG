@@ -14871,7 +14871,7 @@ window.multiplayerClient = {
                 guestsCanBuild: document.getElementById("mp-guests-build")?.checked !== false,
                 guestsCanChat: document.getElementById("mp-guests-chat")?.checked !== false
             },
-            mapData: this.collectMapData()
+            mapData: this.collectMapData({ includeAssets: true })
         };
         this.setStatus("Creating server and uploading current map...");
         this.socket.emit("mp:create_room", payload, res => {
@@ -14914,24 +14914,176 @@ window.multiplayerClient = {
         this.socket.emit("mp:set_permissions", { permissions }, res => { if (!res?.ok) this.toast(res?.error || "Permission update failed", "error"); });
     },
 
-    collectMapData: function() {
+    ensureNetIds: function() {
+        const seen = new Set;
+        const assign = (obj, prefix) => {
+            if (!obj || !obj.userData) return;
+            let id = obj.userData.netId;
+            if (!id || seen.has(id)) {
+                id = `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+                obj.userData.netId = id;
+            }
+            seen.add(id);
+        };
+        engine.blocks.forEach(b => assign(b, "cube"));
+        engine.manualLights.forEach(l => assign(l, "light"));
+        if (engine.spawnPointObj) assign(engine.spawnPointObj, "spawn");
+    },
+
+    collectMapData: function(options = {}) {
+        const includeAssets = options.includeAssets !== false;
+        this.ensureNetIds();
         const wasGrouped = engine.selectedBlocks?.length > 1;
         if (wasGrouped) engine.releaseTransformGroup();
         const mapBlocks = engine.blocks.map(b => engine.serializeObject(b));
         if (engine.spawnPointObj) mapBlocks.push(engine.serializeObject(engine.spawnPointObj));
         const mapLights = engine.manualLights.map(l => engine.serializeObject(l));
-        const localTexturesToSave = {};
-        for (let key in activeProjectCustomTextures) {
-            const tex = activeProjectCustomTextures[key];
-            if (tex?.userData?.originalDataUrl) localTexturesToSave[key] = { name: tex.userData.originalName, dataUrl: tex.userData.originalDataUrl };
-        }
-        const normalMapsToSave = {};
-        for (let key in activeProjectNormalMaps) {
-            const nm = activeProjectNormalMaps[key];
-            if (nm?.dataUrl) normalMapsToSave[key] = { name: nm.name, dataUrl: nm.dataUrl };
+        let localTexturesToSave = undefined;
+        let normalMapsToSave = undefined;
+        if (includeAssets) {
+            localTexturesToSave = {};
+            for (let key in activeProjectCustomTextures) {
+                const tex = activeProjectCustomTextures[key];
+                if (tex?.userData?.originalDataUrl) localTexturesToSave[key] = { name: tex.userData.originalName, dataUrl: tex.userData.originalDataUrl };
+            }
+            normalMapsToSave = {};
+            for (let key in activeProjectNormalMaps) {
+                const nm = activeProjectNormalMaps[key];
+                if (nm?.dataUrl) normalMapsToSave[key] = { name: nm.name, dataUrl: nm.dataUrl };
+            }
         }
         if (wasGrouped) engine.buildTransformGroup();
-        return { blocks: mapBlocks, lights: mapLights, env: engine.getEnvState(), projectCustomTextures: localTexturesToSave, projectNormalMaps: normalMapsToSave };
+        const result = { blocks: mapBlocks, lights: mapLights, env: engine.getEnvState() };
+        if (includeAssets) {
+            result.projectCustomTextures = localTexturesToSave;
+            result.projectNormalMaps = normalMapsToSave;
+        }
+        return result;
+    },
+
+    _objectNetId: function(obj) {
+        return obj?.userData?.netId || null;
+    },
+
+    _buildNetObjectMap: function() {
+        const map = new Map;
+        engine.blocks.forEach(b => { if (this._objectNetId(b)) map.set(this._objectNetId(b), b); });
+        engine.manualLights.forEach(l => { if (this._objectNetId(l)) map.set(this._objectNetId(l), l); });
+        if (engine.spawnPointObj && this._objectNetId(engine.spawnPointObj)) map.set(this._objectNetId(engine.spawnPointObj), engine.spawnPointObj);
+        return map;
+    },
+
+    _canFastApplyMapData: function(mapData) {
+        if (!mapData || !Array.isArray(mapData.blocks)) return false;
+        const all = [ ...(mapData.blocks || []), ...(mapData.lights || []) ];
+        return all.every(d => d && d.userData && d.userData.netId);
+    },
+
+    _removeRemoteObject: function(obj) {
+        if (!obj) return;
+        if (obj.userData?.type === "light") {
+            if (obj.userData.lightTarget) engine.scene.remove(obj.userData.lightTarget);
+            if (obj.userData.lightSource) obj.remove(obj.userData.lightSource);
+            engine.scene.remove(obj);
+            engine.manualLights = engine.manualLights.filter(l => l !== obj);
+            try { obj.geometry?.dispose?.(); obj.material?.dispose?.(); } catch(e) {}
+            return;
+        }
+        engine.scene.remove(obj);
+        if (obj !== engine.spawnPointObj) engine.unregisterCullable?.(obj);
+        if (obj !== engine.spawnPointObj) engine.releaseCubeMaterial?.(obj.material);
+        try { obj.geometry?.dispose?.(); } catch(e) {}
+        if (obj === engine.spawnPointObj) engine.spawnPointObj = null;
+        else engine.blocks = engine.blocks.filter(b => b !== obj);
+    },
+
+    _applySerializedToExisting: function(obj, data) {
+        if (!obj || !data) return;
+        if (engine.transformControl && engine.transformControl.object === obj) engine.transformControl.detach();
+        applySerializedTransform(obj, data);
+        if (obj.userData?.type === "light" || data.type === "light") {
+            const lightSource = obj.userData.lightSource;
+            const lightTarget = obj.userData.lightTarget;
+            obj.userData = { ...obj.userData, ...(data.userData || {}) };
+            if (lightSource) obj.userData.lightSource = lightSource;
+            if (lightTarget) obj.userData.lightTarget = lightTarget;
+            if (!obj.userData.type) obj.userData.type = "light";
+            engine.applyManualLightSettings?.(obj);
+            return;
+        }
+        const oldTex = obj.userData?.texture;
+        const oldMatType = obj.userData?.materialType;
+        const oldColor = obj.userData?.colorHex;
+        const oldVisible = obj.userData?.visible;
+        obj.userData = { ...obj.userData, ...(data.userData || {}) };
+        const texChanged = oldTex !== obj.userData.texture || oldMatType !== obj.userData.materialType;
+        const matChanged = texChanged || oldColor !== obj.userData.colorHex || oldVisible !== obj.userData.visible;
+        if (texChanged) {
+            try { obj.geometry?.dispose?.(); } catch(e) {}
+            obj.geometry = createBlockGeometry(obj.userData.texture || "grid", obj.userData.materialType || "Concrete");
+        }
+        if (matChanged) {
+            const oldMat = obj.material;
+            obj.material = engine.acquireCubeMaterialFor(obj);
+            engine.releaseCubeMaterial?.(oldMat);
+            obj.castShadow = obj.userData.visible !== false && isShadowCaster(obj.userData.texture, obj.userData.materialType);
+            obj.receiveShadow = obj.userData.visible !== false;
+        }
+        engine.updateCubeUVs?.(obj);
+        obj.matrixWorldNeedsUpdate = true;
+        engine.registerCullable?.(obj);
+        engine.updateCullingAround?.(obj);
+    },
+
+    _restoreSelectionByIds: function(ids) {
+        if (!ids || !ids.length) { engine.deselect(); return; }
+        const map = this._buildNetObjectMap();
+        const restored = ids.map(id => map.get(id)).filter(Boolean);
+        if (!restored.length) { engine.deselect(); return; }
+        engine.releaseTransformGroup();
+        engine.selectedBlocks = restored;
+        engine.buildTransformGroup();
+        engine.updateUIFromObject();
+        engine.updateSelectionPanels();
+    },
+
+    _fastApplyMapData: async function(mapData, reason = "remote") {
+        const selectedIds = (engine.selectedBlocks || []).map(o => this._objectNetId(o)).filter(Boolean);
+        const incomingIds = new Set;
+        const current = this._buildNetObjectMap();
+        const blocks = mapData.blocks || [];
+        const lights = mapData.lights || [];
+
+        for (const bData of blocks) {
+            const id = bData.userData?.netId;
+            if (!id) continue;
+            incomingIds.add(id);
+            let obj = current.get(id);
+            if (!obj) {
+                if (bData.type === "spawn") engine.addSpawnPoint(bData);
+                else engine.addCube(bData);
+                continue;
+            }
+            this._applySerializedToExisting(obj, bData);
+        }
+        for (const lData of lights) {
+            const id = lData.userData?.netId;
+            if (!id) continue;
+            incomingIds.add(id);
+            let obj = current.get(id);
+            if (!obj) engine.addLight(lData);
+            else this._applySerializedToExisting(obj, lData);
+        }
+
+        current.forEach((obj, id) => {
+            if (!incomingIds.has(id)) this._removeRemoteObject(obj);
+        });
+
+        engine.recalculateManualLightSpecular?.();
+        engine.updateLocalReflections?.(true);
+        engine.updateSelectionPanels?.();
+        this._restoreSelectionByIds(selectedIds);
+        this.setStatus("Map synced fast: " + reason, "ok");
     },
 
     applyMapData: async function(mapData, reason = "remote") {
@@ -14939,9 +15091,13 @@ window.multiplayerClient = {
         const prevRestore = window.historyManager.isRestoring;
         window.historyManager.isRestoring = true;
         try {
-            await engine.loadMapData(mapData || { blocks: [], lights: [], env: null });
-            engine.deselect();
-            this.setStatus("Map synced: " + reason, "ok");
+            if (this._canFastApplyMapData(mapData)) {
+                await this._fastApplyMapData(mapData, reason);
+            } else {
+                await engine.loadMapData(mapData || { blocks: [], lights: [], env: null });
+                engine.deselect();
+                this.setStatus("Map synced: " + reason, "ok");
+            }
         } catch (e) {
             console.error("[MP] Remote map apply failed", e);
             this.setStatus("Remote map apply failed: " + (e.message || e), "error");
@@ -14951,19 +15107,23 @@ window.multiplayerClient = {
         }
     },
 
-    scheduleSync: function(reason = "edit", delay = 650) {
+    scheduleSync: function(reason = "edit", delay = 180) {
         if (this.isApplyingRemote || !this.room || !this.socket?.connected) return;
         if (!this.canEdit()) return;
-        clearTimeout(this.syncTimer);
+        const minInterval = reason === "transform" ? 140 : 260;
         const since = performance.now() - this.lastSyncAt;
-        const wait = Math.max(delay, since < 700 ? 700 - since : 0);
-        this.syncTimer = setTimeout(() => this.sendMapUpdate(reason), wait);
+        clearTimeout(this.syncTimer);
+        if (since >= minInterval) {
+            this.sendMapUpdate(reason);
+        } else {
+            this.syncTimer = setTimeout(() => this.sendMapUpdate(reason), Math.max(delay, minInterval - since));
+        }
     },
 
     sendMapUpdate: function(reason = "edit") {
         if (!this.room || !this.socket?.connected || this.isApplyingRemote || !this.canEdit()) return;
         this.lastSyncAt = performance.now();
-        const mapData = this.collectMapData();
+        const mapData = this.collectMapData({ includeAssets: false });
         this.socket.emit("mp:map_update", { roomId: this.room.id, reason, mapData }, res => {
             if (!res?.ok) {
                 this.setStatus(res?.error || "Map update rejected", "error");
@@ -15027,7 +15187,7 @@ window.multiplayerClient = {
         setTimeout(() => {
             if (engine.transformControl) {
                 engine.transformControl.addEventListener("change", () => {
-                    if (multiplayerClient.room && !multiplayerClient.isApplyingRemote && engine.transformControl.dragging) multiplayerClient.scheduleSync("transform", 450);
+                    if (multiplayerClient.room && !multiplayerClient.isApplyingRemote && engine.transformControl.dragging) multiplayerClient.scheduleSync("transform", 80);
                 });
             }
         }, 1000);
@@ -15046,7 +15206,9 @@ window.multiplayerClient = {
         if (this.socket?.connected && this.room && (!this._lastPing || performance.now() - this._lastPing > 3000)) {
             this._lastPing = performance.now();
             const clientTime = Date.now();
-            this.socket.emit("mp:ping", { clientTime }, () => {});
+            this.socket.emit("mp:ping", { clientTime }, res => {
+                if (res?.ok && this.socket?.connected) this.socket.emit("mp:ping_report", { ping: Math.max(0, Date.now() - clientTime) });
+            });
         }
     },
 
