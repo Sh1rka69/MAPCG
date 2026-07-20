@@ -54,7 +54,8 @@ function publicRoom(room) {
     createdAt: room.createdAt,
     updatedAt: room.updatedAt,
     revision: room.revision,
-    permissions: room.permissions
+    permissions: room.permissions,
+    sharedEnv: room.sharedEnv || null
   };
 }
 function publicPlayer(player) {
@@ -132,6 +133,29 @@ function applyObjectUpdatesToRoom(room, objects = [], deletedIds = []) {
     }
   });
 }
+
+function pickSharedEnv(env = {}) {
+  if (!env || typeof env !== 'object') return null;
+  return {
+    skybox: cleanText(env.skybox || 'day', 32),
+    weather: cleanText(env.weather || 'clear', 32),
+    fogColor: cleanText(env.fogColor || '#8bc5eb', 16),
+    fogStart: Number.isFinite(Number(env.fogStart)) ? Number(env.fogStart) : 15,
+    fogEnd: Number.isFinite(Number(env.fogEnd)) ? Number(env.fogEnd) : 250,
+    sunAngle: Number.isFinite(Number(env.sunAngle)) ? Number(env.sunAngle) : 180,
+    sunVertical: Number.isFinite(Number(env.sunVertical)) ? Number(env.sunVertical) : 60,
+    customSkyboxDataUrl: typeof env.customSkyboxDataUrl === 'string' ? env.customSkyboxDataUrl : null,
+    customSkyboxName: typeof env.customSkyboxName === 'string' ? cleanText(env.customSkyboxName, 120) : null
+  };
+}
+function applySharedEnvToRoom(room, env) {
+  const shared = pickSharedEnv(env);
+  if (!shared) return null;
+  room.sharedEnv = shared;
+  ensureMapContainers(room);
+  room.mapData.env = { ...(room.mapData.env || {}), ...shared };
+  return shared;
+}
 function closeRoom(room, reason = 'Host left the server') {
   if (!room || !rooms.has(room.id)) return;
   io.to(room.id).emit('mp:room_closed', { roomId: room.id, reason });
@@ -180,10 +204,12 @@ io.on('connection', socket => {
           guestsCanChat: payload.permissions?.guestsCanChat !== false
         },
         mapData: payload.mapData || { blocks: [], lights: [], env: null },
+        sharedEnv: pickSharedEnv(payload.sharedEnv || payload.mapData?.env || {}),
         players: new Map(),
         chat: [],
         closeTimer: null
       };
+      applySharedEnvToRoom(room, room.sharedEnv || payload.sharedEnv || payload.mapData?.env || {});
       const player = {
         id: socket.id,
         nickname,
@@ -200,6 +226,7 @@ io.on('connection', socket => {
       socket.emit('mp:joined', {
         objectDelta: true,
         room: { ...publicRoom(room), objectDelta: true },
+        sharedEnv: room.sharedEnv || null,
         self: publicPlayer(player),
         players: [...room.players.values()].map(publicPlayer),
         mapData: room.mapData,
@@ -238,6 +265,7 @@ io.on('connection', socket => {
       socket.emit('mp:joined', {
         objectDelta: true,
         room: { ...publicRoom(room), objectDelta: true },
+        sharedEnv: room.sharedEnv || null,
         self: publicPlayer(player),
         players: [...room.players.values()].map(publicPlayer),
         mapData: room.mapData,
@@ -267,7 +295,8 @@ io.on('connection', socket => {
     room.mapData = {
       ...incomingMap,
       projectCustomTextures: incomingMap.projectCustomTextures || prevMap.projectCustomTextures || {},
-      projectNormalMaps: incomingMap.projectNormalMaps || prevMap.projectNormalMaps || {}
+      projectNormalMaps: incomingMap.projectNormalMaps || prevMap.projectNormalMaps || {},
+      env: { ...(incomingMap.env || prevMap.env || {}), ...(room.sharedEnv || {}) }
     };
     room.revision++;
     room.updatedAt = now();
@@ -285,6 +314,22 @@ io.on('connection', socket => {
     io.to(room.id).emit('mp:room_revision', { roomId: room.id, revision: room.revision, updatedAt: room.updatedAt });
     broadcastRoomList();
     cb?.({ ok: true, revision: room.revision });
+  });
+
+
+  socket.on('mp:env_update', (payload = {}, cb) => {
+    const room = rooms.get(String(payload.roomId || socketToRoom.get(socket.id) || ''));
+    if (!room) return cb?.({ ok: false, error: 'Room not found.' });
+    if (socket.id !== room.hostId) return cb?.({ ok: false, error: 'Only admin can change shared sky/weather.' });
+    const shared = applySharedEnvToRoom(room, payload.env || {});
+    if (!shared) return cb?.({ ok: false, error: 'Invalid environment update.' });
+    room.revision++;
+    room.updatedAt = now();
+    const packet = { roomId: room.id, revision: room.revision, authorId: socket.id, env: shared, updatedAt: room.updatedAt };
+    socket.to(room.id).emit('mp:env_update', packet);
+    io.to(room.id).emit('mp:room_revision', { roomId: room.id, revision: room.revision, updatedAt: room.updatedAt });
+    broadcastRoomList();
+    cb?.({ ok: true, revision: room.revision, env: shared });
   });
 
 
