@@ -216,7 +216,15 @@ io.on('connection', socket => {
     if (!room) return cb?.({ ok: false, error: 'Room not found.' });
     if (!hasEditPermission(room, socket.id)) return cb?.({ ok: false, error: 'No build permission.' });
     if (!payload.mapData || typeof payload.mapData !== 'object') return cb?.({ ok: false, error: 'Invalid map update.' });
-    room.mapData = payload.mapData;
+    const prevMap = room.mapData || {};
+    const incomingMap = payload.mapData;
+    // Regular editor sync packets intentionally omit heavy assets (custom textures / normal maps)
+    // to keep real-time editing responsive. Preserve those assets from the initial room upload.
+    room.mapData = {
+      ...incomingMap,
+      projectCustomTextures: incomingMap.projectCustomTextures || prevMap.projectCustomTextures || {},
+      projectNormalMaps: incomingMap.projectNormalMaps || prevMap.projectNormalMaps || {}
+    };
     room.revision++;
     room.updatedAt = now();
     const author = room.players.get(socket.id);
@@ -274,14 +282,16 @@ io.on('connection', socket => {
   });
 
   socket.on('mp:ping', (payload = {}, cb) => {
+    cb?.({ ok: true, serverTime: now(), clientTime: Number(payload.clientTime || 0) });
+  });
+
+  socket.on('mp:ping_report', (payload = {}) => {
     const room = roomOfSocket(socket);
-    const clientTime = Number(payload.clientTime || now());
     if (room && room.players.has(socket.id)) {
-      const rtt = Math.max(0, now() - clientTime);
+      const rtt = Math.max(0, Math.min(9999, Number(payload.ping || 0)));
       room.players.get(socket.id).ping = rtt;
       emitPlayers(room);
     }
-    cb?.({ ok: true, serverTime: now(), clientTime });
   });
 
   socket.on('mp:kick', (payload = {}, cb) => {
