@@ -14664,6 +14664,9 @@ window.multiplayerClient = {
     remoteAvatars: new Map,
     remoteObjectTargets: new Map,
     objectDeltaSupported: false,
+    isApplyingRemoteEnv: false,
+    lastSharedEnvHash: "",
+    _envSyncTimer: null,
     _smoothLoopStarted: false,
     _lastObjectSendAt: 0,
     _objectSendTimer: null,
@@ -14851,6 +14854,7 @@ window.multiplayerClient = {
         s.on("mp:permissions", data => { if (this.room) this.room.permissions = data.permissions || this.room.permissions; this.renderCurrentRoom(); });
         s.on("mp:map_update", data => this.onRemoteMapUpdate(data));
         s.on("mp:object_update", data => this.onRemoteObjectUpdate(data));
+        s.on("mp:env_update", data => this.onRemoteEnvUpdate(data));
         s.on("mp:room_revision", data => { if (this.room && data.roomId === this.room.id) { this.room.revision = data.revision; this.room.updatedAt = data.updatedAt; this.renderCurrentRoom(); } });
         s.on("mp:camera_update", data => this.updateRemoteAvatar(data.playerId, data.camera));
         s.on("mp:chat", msg => this.onChat(msg));
@@ -14878,6 +14882,7 @@ window.multiplayerClient = {
                 guestsCanBuild: document.getElementById("mp-guests-build")?.checked !== false,
                 guestsCanChat: document.getElementById("mp-guests-chat")?.checked !== false
             },
+            sharedEnv: this.getSharedEnvState(),
             mapData: this.collectMapData({ includeAssets: true })
         };
         this.setStatus("Creating server and uploading current map...");
@@ -14904,6 +14909,8 @@ window.multiplayerClient = {
         if (this.self?.role !== "admin" && data.mapData) {
             await this.applyMapData(data.mapData, "initial sync");
         }
+        if (data.sharedEnv) await this.applySharedEnvState(data.sharedEnv, true);
+        this.lastSharedEnvHash = this.hashSharedEnv(this.getSharedEnvState());
         this.renderAll();
         this.toast(this.self?.role === "admin" ? "Server started" : "Connected to server");
     },
@@ -14938,6 +14945,103 @@ window.multiplayerClient = {
         if (engine.spawnPointObj) assign(engine.spawnPointObj, "spawn");
     },
 
+    getSharedEnvState: function() {
+        const val = id => document.getElementById(id)?.value;
+        const env = {
+            skybox: val("setting-skybox") || "day",
+            weather: val("setting-weather") || "clear",
+            fogColor: val("setting-fog-color") || "#8bc5eb",
+            fogStart: parseFloat(val("setting-fog-start") || "15") || 15,
+            fogEnd: parseFloat(val("setting-fog-end") || "250") || 250,
+            sunAngle: parseFloat(val("setting-sun-angle") || "180") || 180,
+            sunVertical: parseFloat(val("setting-sun-vertical") || "60") || 60,
+            customSkyboxDataUrl: engine.customSkyboxDataUrl || null,
+            customSkyboxName: engine.customSkyboxName || null
+        };
+        if (env.skybox !== "custom") {
+            env.customSkyboxDataUrl = null;
+            env.customSkyboxName = null;
+        }
+        return env;
+    },
+
+    pickSharedEnv: function(env = {}) {
+        if (!env || typeof env !== "object") return {};
+        const out = {};
+        ["skybox", "weather", "fogColor", "fogStart", "fogEnd", "sunAngle", "sunVertical", "customSkyboxDataUrl", "customSkyboxName"].forEach(k => {
+            if (env[k] !== undefined) out[k] = env[k];
+        });
+        return out;
+    },
+
+    hashSharedEnv: function(env) {
+        try { return JSON.stringify(this.pickSharedEnv(env)); } catch(e) { return ""; }
+    },
+
+    mergeMapDataWithLocalGraphics: function(mapData) {
+        if (!mapData) return mapData;
+        const localEnv = engine.getEnvState ? engine.getEnvState() : {};
+        const shared = this.pickSharedEnv(mapData.env || {});
+        return { ...mapData, env: { ...localEnv, ...shared } };
+    },
+
+    applySharedEnvState: async function(env = {}, fromNetwork = false) {
+        const shared = this.pickSharedEnv(env);
+        this.isApplyingRemoteEnv = true;
+        try {
+            const setVal = (id, value) => { const el = document.getElementById(id); if (el && value !== undefined && value !== null) el.value = String(value); };
+            setVal("setting-skybox", shared.skybox || "day");
+            setVal("setting-weather", shared.weather || "clear");
+            setVal("setting-fog-color", shared.fogColor || "#8bc5eb");
+            setVal("setting-fog-start", shared.fogStart ?? 15);
+            setVal("setting-fog-end", shared.fogEnd ?? 250);
+            setVal("setting-sun-angle", shared.sunAngle ?? 180);
+            setVal("setting-sun-vertical", shared.sunVertical ?? 60);
+            const txt = (id, value) => { const el = document.getElementById(id); if (el) el.innerText = value; };
+            txt("sun-angle-val", (shared.sunAngle ?? 180) + "°");
+            txt("sun-vertical-val", (shared.sunVertical ?? 60) + "°");
+            const skyLabel = document.getElementById("skybox-file-name");
+            if ((shared.skybox || "day") === "custom" && shared.customSkyboxDataUrl) {
+                if (skyLabel) skyLabel.innerText = shared.customSkyboxName || "Custom Skybox";
+                await engine.setCustomSkybox?.(shared.customSkyboxDataUrl, shared.customSkyboxName || "Custom Skybox");
+            } else {
+                if (skyLabel) skyLabel.innerText = "No file";
+                engine.customSkyboxDataUrl = null;
+                engine.customSkyboxName = null;
+            }
+            engine.updateEnvironment?.();
+            this.lastSharedEnvHash = this.hashSharedEnv(this.getSharedEnvState());
+            if (fromNetwork) this.setStatus("Sky/weather synced from admin", "ok");
+        } finally {
+            this.isApplyingRemoteEnv = false;
+        }
+    },
+
+    scheduleEnvSync: function(delay = 250) {
+        if (!this.room || !this.socket?.connected || this.self?.role !== "admin" || this.isApplyingRemoteEnv) return;
+        clearTimeout(this._envSyncTimer);
+        this._envSyncTimer = setTimeout(() => this.sendEnvUpdate(), delay);
+    },
+
+    sendEnvUpdate: function() {
+        if (!this.room || !this.socket?.connected || this.self?.role !== "admin" || this.isApplyingRemoteEnv) return;
+        const env = this.getSharedEnvState();
+        const hash = this.hashSharedEnv(env);
+        if (hash === this.lastSharedEnvHash) return;
+        this.lastSharedEnvHash = hash;
+        this.socket.emit("mp:env_update", { roomId: this.room.id, env }, res => {
+            if (res?.ok && this.room) { this.room.revision = res.revision; this.renderCurrentRoom(); }
+            else if (res && !res.ok) this.setStatus(res.error || "Sky/weather update rejected", "error");
+        });
+    },
+
+    onRemoteEnvUpdate: async function(data) {
+        if (!this.room || data.roomId !== this.room.id || data.authorId === this.self?.id) return;
+        await this.applySharedEnvState(data.env || {}, true);
+        if (this.room) { this.room.revision = data.revision; this.room.updatedAt = data.updatedAt; }
+        this.renderCurrentRoom();
+    },
+
     collectMapData: function(options = {}) {
         const includeAssets = options.includeAssets !== false;
         this.ensureNetIds();
@@ -14968,7 +15072,7 @@ window.multiplayerClient = {
                 if (nm?.dataUrl) normalMapsToSave[key] = { name: nm.name, dataUrl: nm.dataUrl };
             }
         }
-        const result = { blocks: mapBlocks, lights: mapLights, env: engine.getEnvState() };
+        const result = { blocks: mapBlocks, lights: mapLights, env: this.getSharedEnvState() };
         if (includeAssets) {
             result.projectCustomTextures = localTexturesToSave;
             result.projectNormalMaps = normalMapsToSave;
@@ -15126,7 +15230,7 @@ window.multiplayerClient = {
             if (this._canFastApplyMapData(mapData)) {
                 await this._fastApplyMapData(mapData, reason);
             } else {
-                await engine.loadMapData(mapData || { blocks: [], lights: [], env: null });
+                await engine.loadMapData(this.mergeMapDataWithLocalGraphics(mapData || { blocks: [], lights: [], env: null }));
                 engine.deselect();
                 this.setStatus("Map synced: " + reason, "ok");
             }
@@ -15305,6 +15409,15 @@ window.multiplayerClient = {
     patchEditorHooks: function() {
         if (this._patched) return;
         this._patched = true;
+        const originalUpdateEnvironment = engine.updateEnvironment?.bind(engine);
+        if (originalUpdateEnvironment) engine.updateEnvironment = function(...args) {
+            const result = originalUpdateEnvironment(...args);
+            if (window.multiplayerClient && multiplayerClient.room && multiplayerClient.self?.role === "admin" && !multiplayerClient.isApplyingRemoteEnv) {
+                const hash = multiplayerClient.hashSharedEnv(multiplayerClient.getSharedEnvState());
+                if (hash !== multiplayerClient.lastSharedEnvHash) multiplayerClient.scheduleEnvSync(220);
+            }
+            return result;
+        };
         const mutatingMethods = ["addCube", "addCylinder", "addTriangle", "addSpawnPoint", "addLight", "deleteObject", "duplicateObject", "groupSelectedBlocks", "updateObjectFromUI", "spawnCollectionObject", "importGLBAsCubes", "importOBJAsCubes"];
         mutatingMethods.forEach(name => {
             const original = engine[name];
