@@ -14643,7 +14643,559 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         }
     }
 };
-    </script>
+    
+
+/**
+ * MAPCG Multiplayer Client
+ * Central Socket.IO collaboration layer. Backend stores rooms in memory only.
+ */
+window.multiplayerClient = {
+    socket: null,
+    serverUrl: localStorage.getItem("mapcg_mp_server_url") || "",
+    nickname: localStorage.getItem("mapcg_mp_nickname") || "Player" + Math.floor(Math.random() * 999),
+    room: null,
+    self: null,
+    players: [],
+    chat: [],
+    isApplyingRemote: false,
+    syncTimer: null,
+    lastSyncAt: 0,
+    lastCamSendAt: 0,
+    remoteAvatars: new Map,
+    _patched: false,
+    _ioLoading: null,
+
+    init: function() {
+        this.installUI();
+        this.patchEditorHooks();
+        this.renderStatus();
+        setInterval(() => this.tick(), 100);
+    },
+
+    normalizeUrl: function(url) {
+        let u = String(url || "").trim();
+        if (!u) return "";
+        if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+        return u.replace(/\/+$/, "");
+    },
+
+    canEdit: function() {
+        if (!this.room || !this.self) return true;
+        return this.self.role === "admin" || this.room.permissions?.guestsCanBuild === true;
+    },
+
+    setStatus: function(text, kind = "") {
+        const el = document.getElementById("mp-status-line");
+        if (!el) return;
+        el.textContent = text || "";
+        el.style.color = kind === "error" ? "var(--td-danger)" : kind === "ok" ? "var(--td-ok)" : "var(--td-text-dim)";
+    },
+
+    toast: function(text, kind = "ok") {
+        const old = document.getElementById("mp-toast");
+        if (old) old.remove();
+        const d = document.createElement("div");
+        d.id = "mp-toast";
+        d.className = "fixed bottom-10 left-1/2 -translate-x-1/2 px-7 py-3 text-sm font-bold z-[150] uppercase tracking-[0.12em] modal-enter";
+        d.style.background = kind === "error" ? "rgba(217,69,69,0.92)" : "rgba(94,196,110,0.92)";
+        d.style.color = "#fff";
+        d.style.border = "1px solid rgba(255,255,255,0.25)";
+        d.textContent = text;
+        document.body.appendChild(d);
+        setTimeout(() => { d.style.opacity = "0"; d.style.transition = "opacity .25s"; setTimeout(() => d.remove(), 260); }, 2200);
+    },
+
+    installUI: function() {
+        if (!document.getElementById("mp-style")) {
+            const st = document.createElement("style");
+            st.id = "mp-style";
+            st.textContent = `
+.mp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:125;display:flex;align-items:center;justify-content:center;pointer-events:auto}.mp-modal-overlay.hidden{display:none}.mp-modal{width:min(96vw,760px);max-height:90vh;overflow:auto;background:var(--td-bg-1);border:1px solid var(--td-border-strong);box-shadow:0 18px 60px rgba(0,0,0,.55)}.mp-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--td-border)}.mp-title{font-size:13px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#8fd6a8}.mp-body{padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:14px}.mp-card{background:var(--td-bg-2);border:1px solid var(--td-border);padding:12px}.mp-card h3{margin:0 0 10px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--td-accent)}.mp-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}.mp-input{background:var(--td-bg-1);border:1px solid var(--td-border);color:var(--td-text);padding:8px 9px;outline:none;font-size:12px;width:100%}.mp-input:focus{border-color:var(--td-accent)}.mp-btn{background:var(--td-bg-1);border:1px solid var(--td-border);color:var(--td-text);padding:8px 10px;font-size:11px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;cursor:pointer;white-space:nowrap}.mp-btn:hover{border-color:var(--td-accent);color:#fff}.mp-btn.green{background:rgba(94,196,110,.16);border-color:rgba(94,196,110,.48);color:var(--td-ok)}.mp-btn.orange{background:rgba(255,138,61,.16);border-color:rgba(255,138,61,.48);color:var(--td-accent)}.mp-btn.red{background:rgba(217,69,69,.12);border-color:rgba(217,69,69,.45);color:var(--td-danger)}.mp-list{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto}.mp-room,.mp-player,.mp-chat-line{background:var(--td-bg-1);border:1px solid var(--td-border);padding:8px;font-size:12px}.mp-room-top{display:flex;justify-content:space-between;gap:8px;color:#fff;font-weight:700}.mp-room-desc{color:var(--td-text-dim);font-size:11px;margin-top:3px}.mp-muted{color:var(--td-text-dim);font-size:11px}.mp-chat{position:fixed;right:16px;bottom:16px;width:min(420px,92vw);height:340px;background:rgba(14,14,17,.96);border:1px solid var(--td-border-strong);z-index:90;display:flex;flex-direction:column;pointer-events:auto}.mp-chat.hidden{display:none}.mp-chat-head{display:flex;justify-content:space-between;align-items:center;padding:9px 10px;border-bottom:1px solid var(--td-border);color:#8fd6a8;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}.mp-chat-body{flex:1;overflow:auto;padding:8px;display:flex;flex-direction:column;gap:5px}.mp-chat-form{display:flex;gap:6px;padding:8px;border-top:1px solid var(--td-border)}.mp-floating-btn{position:fixed;right:16px;bottom:16px;z-index:89;pointer-events:auto;background:rgba(94,196,110,.16);border:1px solid rgba(94,196,110,.48);color:var(--td-ok);padding:9px 12px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;display:none}.mp-floating-btn.show{display:block}@media(max-width:760px){.mp-body{grid-template-columns:1fr}.mp-modal{width:96vw}.mp-card{padding:10px}}`;
+            document.head.appendChild(st);
+        }
+
+        const toolbar = document.querySelector("#playtest-btn")?.parentElement;
+        if (toolbar && !document.getElementById("mp-toolbar-btn")) {
+            const btn = document.createElement("button");
+            btn.id = "mp-toolbar-btn";
+            btn.className = "flex items-center gap-2 px-3 py-1.5 text-xs uppercase tracking-[0.1em] transition";
+            btn.style.color = "var(--td-ok)";
+            btn.style.border = "1px solid rgba(94,196,110,0.32)";
+            btn.style.background = "rgba(94,196,110,0.08)";
+            btn.innerHTML = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="10" cy="10" r="3"/><path d="M3 10h4M13 10h4M10 3v4M10 13v4M5.5 5.5l2.5 2.5M12 12l2.5 2.5M14.5 5.5L12 8M8 12l-2.5 2.5"/></svg><span>Multiplayer</span>';
+            btn.onmouseover = () => { btn.style.background = "rgba(94,196,110,0.18)"; btn.style.color = "white"; };
+            btn.onmouseout = () => { btn.style.background = "rgba(94,196,110,0.08)"; btn.style.color = "var(--td-ok)"; };
+            btn.onclick = () => this.openModal();
+            toolbar.insertBefore(btn, document.getElementById("playtest-btn"));
+        }
+
+        if (!document.getElementById("mp-modal")) {
+            const overlay = document.createElement("div");
+            overlay.id = "mp-modal";
+            overlay.className = "mp-modal-overlay hidden";
+            overlay.onclick = e => { if (e.target === overlay) this.closeModal(); };
+            overlay.innerHTML = `
+<div class="mp-modal modal-enter">
+  <div class="mp-head"><div class="mp-title">⚡ MAPCG Multiplayer</div><button class="collection-modal-close" onclick="multiplayerClient.closeModal()">✕</button></div>
+  <div class="mp-body">
+    <div class="mp-card">
+      <h3>Connection</h3>
+      <label class="td-label block mb-1">Backend URL</label>
+      <input id="mp-server-url" class="mp-input" placeholder="https://your-mapcg-server.up.railway.app" value="${this.escape(this.serverUrl)}">
+      <label class="td-label block mt-2 mb-1">Nickname</label>
+      <input id="mp-nickname" class="mp-input" maxlength="32" value="${this.escape(this.nickname)}">
+      <div class="mp-row mt-3"><button class="mp-btn green" onclick="multiplayerClient.connect()">Connect</button><button class="mp-btn red" onclick="multiplayerClient.disconnect()">Disconnect</button><button class="mp-btn" onclick="multiplayerClient.refreshRooms()">Refresh</button></div>
+      <div id="mp-status-line" class="mp-muted"></div>
+    </div>
+    <div class="mp-card">
+      <h3>Create Server</h3>
+      <label class="td-label block mb-1">Server name</label>
+      <input id="mp-room-name" class="mp-input" maxlength="64" value="${this.escape(window.appState?.currentProjectName || "MAPCG Server")}">
+      <label class="td-label block mt-2 mb-1">Description</label>
+      <input id="mp-room-desc" class="mp-input" maxlength="220" placeholder="Collaborative map editing">
+      <label class="flex items-center gap-2 mt-3 cursor-pointer"><input type="checkbox" id="mp-guests-build" checked><span class="mp-muted">Guests can build/edit</span></label>
+      <label class="flex items-center gap-2 mt-1 cursor-pointer"><input type="checkbox" id="mp-guests-chat" checked><span class="mp-muted">Guests can chat</span></label>
+      <button class="mp-btn orange mt-3" onclick="multiplayerClient.createRoom()">Create from current project</button>
+    </div>
+    <div class="mp-card">
+      <h3>Online Servers</h3>
+      <div id="mp-room-list" class="mp-list"><div class="mp-muted">Connect to backend first.</div></div>
+    </div>
+    <div class="mp-card">
+      <h3>Current Server</h3>
+      <div id="mp-current-room" class="mp-muted">Not connected to a room.</div>
+      <div class="mp-row mt-2"><button class="mp-btn" onclick="multiplayerClient.toggleChat(true)">Open Chat</button><button class="mp-btn red" onclick="multiplayerClient.leaveRoom()">Leave</button></div>
+      <div class="mp-row" id="mp-admin-perms" style="display:none"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="mp-admin-guests-build" onchange="multiplayerClient.updatePermissions()"><span class="mp-muted">Guests build</span></label><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="mp-admin-guests-chat" onchange="multiplayerClient.updatePermissions()"><span class="mp-muted">Guests chat</span></label></div>
+      <div class="td-label mt-2 mb-1">Players</div>
+      <div id="mp-player-list" class="mp-list"></div>
+    </div>
+  </div>
+</div>`;
+            document.body.appendChild(overlay);
+        }
+
+        if (!document.getElementById("mp-chat")) {
+            const chat = document.createElement("div");
+            chat.id = "mp-chat";
+            chat.className = "mp-chat hidden";
+            chat.innerHTML = `<div class="mp-chat-head"><span>Server Chat</span><button class="collection-modal-close" onclick="multiplayerClient.toggleChat(false)">✕</button></div><div class="mp-chat-body" id="mp-chat-body"></div><div class="mp-chat-form"><input id="mp-chat-input" class="mp-input" maxlength="350" placeholder="Message..."><button class="mp-btn green" onclick="multiplayerClient.sendChat()">Send</button></div>`;
+            document.body.appendChild(chat);
+            document.getElementById("mp-chat-input").addEventListener("keydown", e => { if (e.key === "Enter") this.sendChat(); });
+        }
+        if (!document.getElementById("mp-chat-floating")) {
+            const b = document.createElement("button");
+            b.id = "mp-chat-floating";
+            b.className = "mp-floating-btn";
+            b.textContent = "Chat";
+            b.onclick = () => this.toggleChat(true);
+            document.body.appendChild(b);
+        }
+    },
+
+    escape: function(s) {
+        return String(s ?? "").replace(/[&<>'"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "'":"&#39;", '"':"&quot;" }[c]));
+    },
+
+    openModal: function() { this.installUI(); document.getElementById("mp-modal")?.classList.remove("hidden"); this.renderAll(); if (this.socket?.connected) this.refreshRooms(); },
+    closeModal: function() { document.getElementById("mp-modal")?.classList.add("hidden"); },
+    toggleChat: function(show = null) { const el = document.getElementById("mp-chat"); if (!el) return; if (show === null) el.classList.toggle("hidden"); else el.classList.toggle("hidden", !show); this.renderChat(); },
+
+    loadSocketIo: async function(url) {
+        if (window.io) return;
+        if (this._ioLoading) return this._ioLoading;
+        this._ioLoading = new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = url + "/socket.io/socket.io.js";
+            script.onload = () => window.io ? resolve() : reject(new Error("Socket.IO client did not load."));
+            script.onerror = () => reject(new Error("Could not load Socket.IO client from backend URL."));
+            document.head.appendChild(script);
+        });
+        return this._ioLoading;
+    },
+
+    connect: async function() {
+        try {
+            const url = this.normalizeUrl(document.getElementById("mp-server-url")?.value || this.serverUrl);
+            const nick = (document.getElementById("mp-nickname")?.value || this.nickname || "Player").trim().slice(0, 32);
+            if (!url) throw new Error("Enter backend URL first.");
+            this.serverUrl = url;
+            this.nickname = nick || "Player";
+            localStorage.setItem("mapcg_mp_server_url", url);
+            localStorage.setItem("mapcg_mp_nickname", this.nickname);
+            this.setStatus("Loading Socket.IO client...");
+            await this.loadSocketIo(url);
+            if (this.socket) this.socket.disconnect();
+            this.socket = window.io(url, { transports: ["websocket", "polling"], reconnection: true, reconnectionAttempts: Infinity, timeout: 20000 });
+            this.bindSocketEvents();
+            this.setStatus("Connecting...");
+        } catch (e) {
+            this.setStatus(e.message || String(e), "error");
+            this.toast("Multiplayer connect failed", "error");
+        }
+    },
+
+    bindSocketEvents: function() {
+        const s = this.socket;
+        s.on("connect", () => { this.setStatus("Connected to backend", "ok"); this.refreshRooms(); this.renderAll(); });
+        s.on("disconnect", reason => { this.setStatus("Disconnected: " + reason, "error"); this.room = null; this.self = null; this.players = []; this.clearAvatars(); this.renderAll(); });
+        s.on("mp:hello", data => { if (data.rooms) this.renderRooms(data.rooms); });
+        s.on("mp:rooms", rooms => this.renderRooms(rooms || []));
+        s.on("mp:joined", data => this.onJoined(data));
+        s.on("mp:players", players => { this.players = players || []; this.renderPlayers(); });
+        s.on("mp:permissions", data => { if (this.room) this.room.permissions = data.permissions || this.room.permissions; this.renderCurrentRoom(); });
+        s.on("mp:map_update", data => this.onRemoteMapUpdate(data));
+        s.on("mp:room_revision", data => { if (this.room && data.roomId === this.room.id) { this.room.revision = data.revision; this.room.updatedAt = data.updatedAt; this.renderCurrentRoom(); } });
+        s.on("mp:camera_update", data => this.updateRemoteAvatar(data.playerId, data.camera));
+        s.on("mp:chat", msg => this.onChat(msg));
+        s.on("mp:room_closed", data => { this.toast(data.reason || "Server closed", "error"); this.room = null; this.self = null; this.players = []; this.chat = []; this.clearAvatars(); this.renderAll(); });
+        s.on("mp:kicked", data => { this.toast(data.reason || "Kicked", "error"); this.leaveRoom(false); });
+        s.on("mp:error", e => this.setStatus(e.error || String(e), "error"));
+    },
+
+    disconnect: function() { if (this.socket) this.socket.disconnect(); this.socket = null; this.room = null; this.self = null; this.players = []; this.clearAvatars(); this.renderAll(); },
+
+    refreshRooms: function() {
+        if (!this.socket?.connected) { this.renderRooms([]); return; }
+        this.socket.emit("mp:list_rooms", res => { if (res?.ok) this.renderRooms(res.rooms || []); });
+    },
+
+    createRoom: function() {
+        if (!this.socket?.connected) return this.setStatus("Connect to backend first.", "error");
+        if (!window.appState?.currentProjectId) return this.setStatus("Open a project first, then create a server.", "error");
+        const payload = {
+            nickname: this.nickname,
+            name: document.getElementById("mp-room-name")?.value || window.appState.currentProjectName || "MAPCG Server",
+            description: document.getElementById("mp-room-desc")?.value || "",
+            projectName: window.appState.currentProjectName || "MAPCG Project",
+            permissions: {
+                guestsCanBuild: document.getElementById("mp-guests-build")?.checked !== false,
+                guestsCanChat: document.getElementById("mp-guests-chat")?.checked !== false
+            },
+            mapData: this.collectMapData()
+        };
+        this.setStatus("Creating server and uploading current map...");
+        this.socket.emit("mp:create_room", payload, res => {
+            if (!res?.ok) return this.setStatus(res?.error || "Create failed", "error");
+            this.setStatus("Server created", "ok");
+        });
+    },
+
+    joinRoom: function(roomId) {
+        if (!this.socket?.connected) return this.setStatus("Connect first.", "error");
+        this.socket.emit("mp:join_room", { roomId, nickname: this.nickname }, res => {
+            if (!res?.ok) this.setStatus(res?.error || "Join failed", "error");
+        });
+    },
+
+    onJoined: async function(data) {
+        this.room = data.room;
+        this.self = data.self;
+        this.players = data.players || [];
+        this.chat = data.chat || [];
+        this.setStatus("Joined: " + (this.room?.name || "server"), "ok");
+        if (this.self?.role !== "admin" && data.mapData) {
+            await this.applyMapData(data.mapData, "initial sync");
+        }
+        this.renderAll();
+        this.toast(this.self?.role === "admin" ? "Server started" : "Connected to server");
+    },
+
+    leaveRoom: function(emit = true) {
+        if (emit && this.socket?.connected) this.socket.emit("mp:leave_room");
+        this.room = null; this.self = null; this.players = []; this.chat = []; this.clearAvatars(); this.renderAll();
+    },
+
+    updatePermissions: function() {
+        if (!this.socket?.connected || !this.room || this.self?.role !== "admin") return;
+        const permissions = {
+            guestsCanBuild: document.getElementById("mp-admin-guests-build")?.checked !== false,
+            guestsCanChat: document.getElementById("mp-admin-guests-chat")?.checked !== false
+        };
+        this.socket.emit("mp:set_permissions", { permissions }, res => { if (!res?.ok) this.toast(res?.error || "Permission update failed", "error"); });
+    },
+
+    collectMapData: function() {
+        const wasGrouped = engine.selectedBlocks?.length > 1;
+        if (wasGrouped) engine.releaseTransformGroup();
+        const mapBlocks = engine.blocks.map(b => engine.serializeObject(b));
+        if (engine.spawnPointObj) mapBlocks.push(engine.serializeObject(engine.spawnPointObj));
+        const mapLights = engine.manualLights.map(l => engine.serializeObject(l));
+        const localTexturesToSave = {};
+        for (let key in activeProjectCustomTextures) {
+            const tex = activeProjectCustomTextures[key];
+            if (tex?.userData?.originalDataUrl) localTexturesToSave[key] = { name: tex.userData.originalName, dataUrl: tex.userData.originalDataUrl };
+        }
+        const normalMapsToSave = {};
+        for (let key in activeProjectNormalMaps) {
+            const nm = activeProjectNormalMaps[key];
+            if (nm?.dataUrl) normalMapsToSave[key] = { name: nm.name, dataUrl: nm.dataUrl };
+        }
+        if (wasGrouped) engine.buildTransformGroup();
+        return { blocks: mapBlocks, lights: mapLights, env: engine.getEnvState(), projectCustomTextures: localTexturesToSave, projectNormalMaps: normalMapsToSave };
+    },
+
+    applyMapData: async function(mapData, reason = "remote") {
+        this.isApplyingRemote = true;
+        const prevRestore = window.historyManager.isRestoring;
+        window.historyManager.isRestoring = true;
+        try {
+            await engine.loadMapData(mapData || { blocks: [], lights: [], env: null });
+            engine.deselect();
+            this.setStatus("Map synced: " + reason, "ok");
+        } catch (e) {
+            console.error("[MP] Remote map apply failed", e);
+            this.setStatus("Remote map apply failed: " + (e.message || e), "error");
+        } finally {
+            window.historyManager.isRestoring = prevRestore;
+            this.isApplyingRemote = false;
+        }
+    },
+
+    scheduleSync: function(reason = "edit", delay = 650) {
+        if (this.isApplyingRemote || !this.room || !this.socket?.connected) return;
+        if (!this.canEdit()) return;
+        clearTimeout(this.syncTimer);
+        const since = performance.now() - this.lastSyncAt;
+        const wait = Math.max(delay, since < 700 ? 700 - since : 0);
+        this.syncTimer = setTimeout(() => this.sendMapUpdate(reason), wait);
+    },
+
+    sendMapUpdate: function(reason = "edit") {
+        if (!this.room || !this.socket?.connected || this.isApplyingRemote || !this.canEdit()) return;
+        this.lastSyncAt = performance.now();
+        const mapData = this.collectMapData();
+        this.socket.emit("mp:map_update", { roomId: this.room.id, reason, mapData }, res => {
+            if (!res?.ok) {
+                this.setStatus(res?.error || "Map update rejected", "error");
+                if (!this.canEdit()) this.toast("No build permission", "error");
+            } else if (this.room) {
+                this.room.revision = res.revision;
+                this.renderCurrentRoom();
+            }
+        });
+    },
+
+    onRemoteMapUpdate: async function(data) {
+        if (!this.room || data.roomId !== this.room.id) return;
+        await this.applyMapData(data.mapData, "from " + (data.authorName || "player"));
+        if (this.room) { this.room.revision = data.revision; this.room.updatedAt = data.updatedAt; }
+        this.renderCurrentRoom();
+    },
+
+    patchEditorHooks: function() {
+        if (this._patched) return;
+        this._patched = true;
+        const mutatingMethods = ["addCube", "addCylinder", "addTriangle", "addSpawnPoint", "addLight", "deleteObject", "duplicateObject", "groupSelectedBlocks", "updateObjectFromUI", "spawnCollectionObject", "importGLBAsCubes", "importOBJAsCubes"];
+        mutatingMethods.forEach(name => {
+            const original = engine[name];
+            if (typeof original !== "function") return;
+            engine[name] = function(...args) {
+                if (window.multiplayerClient && multiplayerClient.room && !multiplayerClient.isApplyingRemote && !multiplayerClient.canEdit()) {
+                    multiplayerClient.toast("This server is read-only for guests", "error");
+                    return null;
+                }
+                const result = original.apply(this, args);
+                if (window.multiplayerClient && multiplayerClient.room && !multiplayerClient.isApplyingRemote) multiplayerClient.scheduleSync(name);
+                return result;
+            };
+        });
+        const originalTakeSnapshot = window.historyManager.takeSnapshot.bind(window.historyManager);
+        window.historyManager.takeSnapshot = function(...args) {
+            const res = originalTakeSnapshot(...args);
+            if (window.multiplayerClient && multiplayerClient.room && !multiplayerClient.isApplyingRemote) multiplayerClient.scheduleSync("snapshot");
+            return res;
+        };
+        const originalSaveCurrentMap = engine.saveCurrentMap?.bind(engine);
+        if (originalSaveCurrentMap) engine.saveCurrentMap = async function(...args) {
+            if (window.multiplayerClient && multiplayerClient.room && multiplayerClient.self?.role !== "admin") {
+                multiplayerClient.toast("Only the server admin can save this hosted map", "error");
+                return;
+            }
+            return originalSaveCurrentMap(...args);
+        };
+        ["showExportModal", "exportToGoreBoxZIP", "exportToGoreBoxZIPWithLighting", "exportToGLBZIP"].forEach(name => {
+            const original = uiManager[name];
+            if (typeof original !== "function") return;
+            uiManager[name] = function(...args) {
+                if (window.multiplayerClient && multiplayerClient.room && multiplayerClient.self?.role !== "admin") {
+                    multiplayerClient.toast("Export is available only for the server admin", "error");
+                    return;
+                }
+                return original.apply(this, args);
+            };
+        });
+        setTimeout(() => {
+            if (engine.transformControl) {
+                engine.transformControl.addEventListener("change", () => {
+                    if (multiplayerClient.room && !multiplayerClient.isApplyingRemote && engine.transformControl.dragging) multiplayerClient.scheduleSync("transform", 450);
+                });
+            }
+        }, 1000);
+    },
+
+    tick: function() {
+        const chatBtn = document.getElementById("mp-chat-floating");
+        if (chatBtn) chatBtn.classList.toggle("show", !!this.room);
+        if (this.room && this.socket?.connected) {
+            const t = performance.now();
+            if (t - this.lastCamSendAt > 1200 / 10) {
+                this.lastCamSendAt = t;
+                this.socket.emit("mp:camera_update", { camera: this.getCameraPacket() });
+            }
+        }
+        if (this.socket?.connected && this.room && (!this._lastPing || performance.now() - this._lastPing > 3000)) {
+            this._lastPing = performance.now();
+            const clientTime = Date.now();
+            this.socket.emit("mp:ping", { clientTime }, () => {});
+        }
+    },
+
+    getCameraPacket: function() {
+        if (!engine.camera) return null;
+        const p = engine.camera.position;
+        const q = engine.camera.quaternion;
+        return { pos: { x: p.x, y: p.y, z: p.z }, quat: { x: q.x, y: q.y, z: q.z, w: q.w } };
+    },
+
+    makeTextSprite: function(text, color = "#ffffff") {
+        const canvas = document.createElement("canvas");
+        canvas.width = 512; canvas.height = 128;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0,0,512,128);
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(4, 22, 504, 72);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(4, 22, 504, 72);
+        ctx.font = "700 34px Inter, Arial";
+        ctx.fillStyle = color;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(text || "Player").slice(0, 40), 256, 58);
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+        const spr = new THREE.Sprite(mat);
+        spr.scale.set(3.2, .8, 1);
+        return spr;
+    },
+
+    updateSpriteText: function(sprite, text, color) {
+        if (!sprite) return;
+        const parent = sprite.parent;
+        const pos = sprite.position.clone();
+        const scale = sprite.scale.clone();
+        parent?.remove(sprite);
+        try { sprite.material.map.dispose(); sprite.material.dispose(); } catch(e) {}
+        const ns = this.makeTextSprite(text, color);
+        ns.position.copy(pos); ns.scale.copy(scale);
+        parent?.add(ns);
+        return ns;
+    },
+
+    updateRemoteAvatar: function(playerId, camera) {
+        if (!playerId || playerId === this.self?.id || !camera || !engine.scene) return;
+        let av = this.remoteAvatars.get(playerId);
+        const player = this.players.find(p => p.id === playerId) || { nickname: "Player", color: "#8fd6a8" };
+        if (!av) {
+            const group = new THREE.Group();
+            const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(player.color || "#8fd6a8"), transparent: true, opacity: .85 });
+            const body = new THREE.Mesh(new THREE.ConeGeometry(.18, .55, 6), mat);
+            body.rotation.x = Math.PI / 2;
+            group.add(body);
+            const label = this.makeTextSprite(player.nickname, player.color || "#8fd6a8");
+            label.position.set(0, .55, 0);
+            group.add(label);
+            engine.scene.add(group);
+            av = { group, label, playerId, color: player.color || "#8fd6a8" };
+            this.remoteAvatars.set(playerId, av);
+        }
+        av.group.position.set(camera.pos.x, camera.pos.y, camera.pos.z);
+        if (camera.quat) av.group.quaternion.set(camera.quat.x, camera.quat.y, camera.quat.z, camera.quat.w);
+    },
+
+    clearAvatars: function() {
+        this.remoteAvatars.forEach(av => { try { engine.scene.remove(av.group); } catch(e) {} });
+        this.remoteAvatars.clear();
+    },
+
+    onChat: function(msg) {
+        this.chat.push(msg);
+        if (this.chat.length > 100) this.chat.splice(0, this.chat.length - 100);
+        this.renderChat();
+        const av = this.remoteAvatars.get(msg.playerId);
+        if (av) {
+            const old = av.label;
+            av.label = this.updateSpriteText(old, msg.nickname + ": " + msg.text, msg.color || av.color) || old;
+            av.label.position.set(0, .75, 0);
+            setTimeout(() => {
+                if (this.remoteAvatars.get(msg.playerId) === av) {
+                    av.label = this.updateSpriteText(av.label, msg.nickname, msg.color || av.color) || av.label;
+                    av.label.position.set(0, .55, 0);
+                }
+            }, 5000);
+        }
+    },
+
+    sendChat: function() {
+        const input = document.getElementById("mp-chat-input");
+        const text = (input?.value || "").trim();
+        if (!text || !this.socket?.connected || !this.room) return;
+        input.value = "";
+        this.socket.emit("mp:chat", { text }, res => { if (!res?.ok) this.toast(res?.error || "Chat rejected", "error"); });
+    },
+
+    renderRooms: function(rooms) {
+        const box = document.getElementById("mp-room-list");
+        if (!box) return;
+        if (!this.socket?.connected) { box.innerHTML = '<div class="mp-muted">Connect to backend first.</div>'; return; }
+        if (!rooms.length) { box.innerHTML = '<div class="mp-muted">No active servers yet.</div>'; return; }
+        box.innerHTML = rooms.map(r => `<div class="mp-room"><div class="mp-room-top"><span>${this.escape(r.name)}</span><span>${r.playerCount}/${r.maxPlayers}</span></div><div class="mp-room-desc">${this.escape(r.description || "No description")}</div><div class="mp-muted">Host: ${this.escape(r.hostName)} · Project: ${this.escape(r.projectName)} · rev ${r.revision}</div><button class="mp-btn green mt-2" onclick="multiplayerClient.joinRoom('${r.id}')">Join</button></div>`).join("");
+    },
+
+    renderPlayers: function() {
+        const box = document.getElementById("mp-player-list");
+        if (!box) return;
+        if (!this.players.length) { box.innerHTML = '<div class="mp-muted">No players.</div>'; return; }
+        box.innerHTML = this.players.map(p => `<div class="mp-player"><b style="color:${this.escape(p.color || '#fff')}">${this.escape(p.nickname)}</b><span class="mp-muted"> — ${p.role === 'admin' ? 'ADMIN' : 'guest'} · ping ${Math.round(p.ping || 0)}ms</span>${this.self?.role === 'admin' && p.id !== this.self?.id ? `<button class="mp-btn red" style="float:right;padding:4px 6px" onclick="multiplayerClient.kick('${p.id}')">Kick</button>` : ""}</div>`).join("");
+    },
+
+    renderCurrentRoom: function() {
+        const el = document.getElementById("mp-current-room");
+        const adm = document.getElementById("mp-admin-perms");
+        if (!el) return;
+        if (!this.room) { el.innerHTML = "Not connected to a room."; if (adm) adm.style.display = "none"; return; }
+        el.innerHTML = `<b style="color:#fff">${this.escape(this.room.name)}</b><div class="mp-muted">Role: ${this.self?.role === 'admin' ? 'ADMIN' : 'guest'} · revision ${this.room.revision || 1} · ${this.canEdit() ? 'editing allowed' : 'read-only'}</div>`;
+        if (adm) {
+            adm.style.display = this.self?.role === "admin" ? "flex" : "none";
+            const b = document.getElementById("mp-admin-guests-build"); if (b) b.checked = this.room.permissions?.guestsCanBuild !== false;
+            const c = document.getElementById("mp-admin-guests-chat"); if (c) c.checked = this.room.permissions?.guestsCanChat !== false;
+        }
+    },
+
+    renderChat: function() {
+        const box = document.getElementById("mp-chat-body");
+        if (!box) return;
+        box.innerHTML = this.chat.map(m => `<div class="mp-chat-line"><b style="color:${this.escape(m.color || '#fff')}">${this.escape(m.nickname)}</b><span class="mp-muted"> ${new Date(m.time).toLocaleTimeString()}</span><div>${this.escape(m.text)}</div></div>`).join("");
+        box.scrollTop = box.scrollHeight;
+    },
+
+    renderStatus: function() {
+        const top = document.getElementById("mp-toolbar-btn");
+        if (!top) return;
+        top.style.borderColor = this.room ? "rgba(94,196,110,0.75)" : "rgba(94,196,110,0.32)";
+        top.style.background = this.room ? "rgba(94,196,110,0.18)" : "rgba(94,196,110,0.08)";
+        top.title = this.room ? `Multiplayer: ${this.room.name}` : "Multiplayer";
+    },
+
+    renderAll: function() { this.renderCurrentRoom(); this.renderPlayers(); this.renderChat(); this.renderStatus(); },
+
+    kick: function(playerId) { if (this.socket?.connected) this.socket.emit("mp:kick", { playerId }, res => { if (!res?.ok) this.toast(res?.error || "Kick failed", "error"); }); }
+};
+
+setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
+
+</script>
 
         <div id="ai-builder-modal-overlay" class="collection-modal-overlay hidden" onclick="if(event.target===this)uiManager.closeAIBuilderModal()">
             <div class="collection-modal ai-modal">
