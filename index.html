@@ -14662,6 +14662,10 @@ window.multiplayerClient = {
     lastSyncAt: 0,
     lastCamSendAt: 0,
     remoteAvatars: new Map,
+    remoteObjectTargets: new Map,
+    _smoothLoopStarted: false,
+    _lastObjectSendAt: 0,
+    _objectSendTimer: null,
     _patched: false,
     _ioLoading: null,
 
@@ -14669,6 +14673,7 @@ window.multiplayerClient = {
         this.installUI();
         this.patchEditorHooks();
         this.renderStatus();
+        this.startSmoothLoop();
         setInterval(() => this.tick(), 100);
     },
 
@@ -14844,6 +14849,7 @@ window.multiplayerClient = {
         s.on("mp:players", players => { this.players = players || []; this.renderPlayers(); });
         s.on("mp:permissions", data => { if (this.room) this.room.permissions = data.permissions || this.room.permissions; this.renderCurrentRoom(); });
         s.on("mp:map_update", data => this.onRemoteMapUpdate(data));
+        s.on("mp:object_update", data => this.onRemoteObjectUpdate(data));
         s.on("mp:room_revision", data => { if (this.room && data.roomId === this.room.id) { this.room.revision = data.revision; this.room.updatedAt = data.updatedAt; this.renderCurrentRoom(); } });
         s.on("mp:camera_update", data => this.updateRemoteAvatar(data.playerId, data.camera));
         s.on("mp:chat", msg => this.onChat(msg));
@@ -15166,6 +15172,118 @@ window.multiplayerClient = {
         this.renderCurrentRoom();
     },
 
+    _serializedTransform: function(data) {
+        const pos = data?.pos ? new THREE.Vector3(data.pos.x || 0, data.pos.y || 0, data.pos.z || 0) : null;
+        let quat = null;
+        if (data?.quat && Number.isFinite(data.quat.w)) quat = new THREE.Quaternion(data.quat.x || 0, data.quat.y || 0, data.quat.z || 0, data.quat.w).normalize();
+        else if (data?.rot) quat = new THREE.Quaternion().setFromEuler(new THREE.Euler(data.rot.x || 0, data.rot.y || 0, data.rot.z || 0, data.rotOrder || "YXZ"));
+        const scl = data?.scl ? new THREE.Vector3(data.scl.x || 1, data.scl.y || 1, data.scl.z || 1) : null;
+        return { pos, quat, scl };
+    },
+
+    _hasVisualOrStructuralChange: function(obj, data) {
+        const ud = data?.userData || {};
+        if (!obj || !obj.userData) return true;
+        return obj.userData.texture !== ud.texture ||
+               obj.userData.materialType !== ud.materialType ||
+               obj.userData.colorHex !== ud.colorHex ||
+               obj.userData.visible !== ud.visible ||
+               obj.userData.tilingMode !== ud.tilingMode ||
+               obj.userData.materialName !== ud.materialName ||
+               obj.userData.sourceTag !== ud.sourceTag;
+    },
+
+    _queueRemoteTransform: function(obj, data, final = false) {
+        const tr = this._serializedTransform(data);
+        if (!tr.pos && !tr.quat && !tr.scl) return;
+        const id = data.userData?.netId;
+        if (!id) return;
+        obj.userData = { ...obj.userData, ...(data.userData || {}) };
+        if (final) {
+            applySerializedTransform(obj, data);
+            obj.updateMatrix?.();
+            obj.updateMatrixWorld?.(true);
+            this.remoteObjectTargets.delete(id);
+            return;
+        }
+        this.remoteObjectTargets.set(id, {
+            obj,
+            pos: tr.pos,
+            quat: tr.quat,
+            scl: tr.scl,
+            updatedAt: performance.now()
+        });
+    },
+
+    onRemoteObjectUpdate: function(data) {
+        if (!this.room || data.roomId !== this.room.id || data.authorId === this.self?.id) return;
+        const current = this._buildNetObjectMap();
+        (data.deletedIds || []).forEach(id => {
+            const obj = current.get(id);
+            if (obj) this._removeRemoteObject(obj);
+            this.remoteObjectTargets.delete(id);
+        });
+        (data.objects || []).forEach(objData => {
+            const id = objData?.userData?.netId;
+            if (!id) return;
+            let obj = current.get(id);
+            if (!obj) {
+                this.isApplyingRemote = true;
+                const prev = window.historyManager.isRestoring;
+                window.historyManager.isRestoring = true;
+                try {
+                    if (objData.type === "spawn") engine.addSpawnPoint(objData);
+                    else if (objData.type === "light") engine.addLight(objData);
+                    else engine.addCube(objData);
+                } finally {
+                    window.historyManager.isRestoring = prev;
+                    this.isApplyingRemote = false;
+                }
+                obj = this._buildNetObjectMap().get(id);
+                if (obj) obj.updateMatrixWorld?.(true);
+                return;
+            }
+            if (this._hasVisualOrStructuralChange(obj, objData)) this._applySerializedToExisting(obj, objData);
+            else this._queueRemoteTransform(obj, objData, !!data.final);
+        });
+        if (this.room) { this.room.revision = data.revision; this.room.updatedAt = data.updatedAt; }
+        this.renderCurrentRoom();
+    },
+
+    sendSelectedObjectUpdate: function(reason = "object_update", final = false, volatile = true) {
+        if (!this.room || !this.socket?.connected || this.isApplyingRemote || !this.canEdit()) return;
+        this.ensureNetIds();
+        try {
+            engine.transformGroup?.updateMatrixWorld?.(true);
+            engine.scene?.updateMatrixWorld?.(true);
+            engine.selectedBlocks?.forEach(obj => obj?.updateMatrixWorld?.(true));
+        } catch(e) {}
+        let objects = (engine.selectedBlocks || []).filter(Boolean);
+        if (!objects.length && engine.transformControl?.object && engine.transformControl.object !== engine.transformGroup) objects = [engine.transformControl.object];
+        objects = [...new Set(objects)].filter(o => o && o.userData && o.userData.netId);
+        if (!objects.length) return;
+        const payloadObjects = objects.map(o => engine.serializeObject(o));
+        const emitPayload = { roomId: this.room.id, reason, objects: payloadObjects, final: !!final, volatile: !!volatile && !final };
+        const emitFn = emitPayload.volatile && this.socket.volatile ? this.socket.volatile.emit.bind(this.socket.volatile) : this.socket.emit.bind(this.socket);
+        emitFn("mp:object_update", emitPayload, res => {
+            if (res?.ok && this.room) { this.room.revision = res.revision; this.renderCurrentRoom(); }
+            else if (res && !res.ok) this.setStatus(res.error || "Object update rejected", "error");
+        });
+    },
+
+    scheduleObjectUpdate: function(reason = "object_update", final = false) {
+        if (!this.room || !this.socket?.connected || this.isApplyingRemote || !this.canEdit()) return;
+        const minInterval = final ? 0 : 55;
+        const since = performance.now() - this._lastObjectSendAt;
+        clearTimeout(this._objectSendTimer);
+        const send = () => {
+            this._lastObjectSendAt = performance.now();
+            this.sendSelectedObjectUpdate(reason, final, !final);
+        };
+        if (final || since >= minInterval) send();
+        else this._objectSendTimer = setTimeout(send, minInterval - since);
+    },
+
     patchEditorHooks: function() {
         if (this._patched) return;
         this._patched = true;
@@ -15179,14 +15297,20 @@ window.multiplayerClient = {
                     return null;
                 }
                 const result = original.apply(this, args);
-                if (window.multiplayerClient && multiplayerClient.room && !multiplayerClient.isApplyingRemote) multiplayerClient.scheduleSync(name);
+                if (window.multiplayerClient && multiplayerClient.room && !multiplayerClient.isApplyingRemote) {
+                    if (name === "deleteObject" || name === "importGLBAsCubes" || name === "importOBJAsCubes") multiplayerClient.scheduleSync(name, 250);
+                    else multiplayerClient.scheduleObjectUpdate(name, true);
+                }
                 return result;
             };
         });
         const originalTakeSnapshot = window.historyManager.takeSnapshot.bind(window.historyManager);
         window.historyManager.takeSnapshot = function(...args) {
             const res = originalTakeSnapshot(...args);
-            if (window.multiplayerClient && multiplayerClient.room && !multiplayerClient.isApplyingRemote) multiplayerClient.scheduleSync("snapshot");
+            if (window.multiplayerClient && multiplayerClient.room && !multiplayerClient.isApplyingRemote) {
+                if (engine.selectedBlocks && engine.selectedBlocks.length) multiplayerClient.scheduleObjectUpdate("snapshot", true);
+                else multiplayerClient.scheduleSync("snapshot", 250);
+            }
             return res;
         };
         const originalSaveCurrentMap = engine.saveCurrentMap?.bind(engine);
@@ -15211,10 +15335,54 @@ window.multiplayerClient = {
         setTimeout(() => {
             if (engine.transformControl) {
                 engine.transformControl.addEventListener("change", () => {
-                    if (multiplayerClient.room && !multiplayerClient.isApplyingRemote && engine.transformControl.dragging) multiplayerClient.scheduleSync("transform", 80);
+                    if (multiplayerClient.room && !multiplayerClient.isApplyingRemote && engine.transformControl.dragging) multiplayerClient.scheduleObjectUpdate("transform", false);
+                });
+                engine.transformControl.addEventListener("dragging-changed", e => {
+                    if (multiplayerClient.room && !multiplayerClient.isApplyingRemote && !e.value) multiplayerClient.scheduleObjectUpdate("transform-final", true);
                 });
             }
         }, 1000);
+    },
+
+    startSmoothLoop: function() {
+        if (this._smoothLoopStarted) return;
+        this._smoothLoopStarted = true;
+        let last = performance.now();
+        const loop = () => {
+            const t = performance.now();
+            const dt = Math.min(0.05, (t - last) / 1000);
+            last = t;
+            this.updateSmooth(dt);
+            requestAnimationFrame(loop);
+        };
+        requestAnimationFrame(loop);
+    },
+
+    updateSmooth: function(dt) {
+        const objAlpha = 1 - Math.pow(0.0015, dt); // quick but smooth catch-up
+        this.remoteObjectTargets.forEach((target, id) => {
+            const obj = target.obj;
+            if (!obj || !obj.parent) { this.remoteObjectTargets.delete(id); return; }
+            if (target.pos) obj.position.lerp(target.pos, objAlpha);
+            if (target.quat) obj.quaternion.slerp(target.quat, objAlpha);
+            if (target.scl) obj.scale.lerp(target.scl, objAlpha);
+            obj.updateMatrix?.();
+            obj.updateMatrixWorld?.(true);
+            if (target.pos && obj.position.distanceToSquared(target.pos) < 0.0004 &&
+                (!target.scl || obj.scale.distanceToSquared(target.scl) < 0.0004) &&
+                (!target.quat || Math.abs(obj.quaternion.dot(target.quat)) > 0.9998)) {
+                if (target.pos) obj.position.copy(target.pos);
+                if (target.quat) obj.quaternion.copy(target.quat);
+                if (target.scl) obj.scale.copy(target.scl);
+                obj.updateMatrix?.(); obj.updateMatrixWorld?.(true);
+                this.remoteObjectTargets.delete(id);
+            }
+        });
+        const avAlpha = 1 - Math.pow(0.0008, dt);
+        this.remoteAvatars.forEach(av => {
+            if (av.targetPos) av.group.position.lerp(av.targetPos, avAlpha);
+            if (av.targetQuat) av.group.quaternion.slerp(av.targetQuat, avAlpha);
+        });
     },
 
     tick: function() {
@@ -15222,7 +15390,7 @@ window.multiplayerClient = {
         if (chatBtn) chatBtn.classList.toggle("show", !!this.room);
         if (this.room && this.socket?.connected) {
             const t = performance.now();
-            if (t - this.lastCamSendAt > 1200 / 10) {
+            if (t - this.lastCamSendAt > 1000 / 15) {
                 this.lastCamSendAt = t;
                 this.socket.emit("mp:camera_update", { camera: this.getCameraPacket() });
             }
@@ -15293,11 +15461,13 @@ window.multiplayerClient = {
             label.position.set(0, .55, 0);
             group.add(label);
             engine.scene.add(group);
-            av = { group, label, playerId, color: player.color || "#8fd6a8" };
+            av = { group, label, playerId, color: player.color || "#8fd6a8", targetPos: null, targetQuat: null };
             this.remoteAvatars.set(playerId, av);
+            if (camera.pos) group.position.set(camera.pos.x, camera.pos.y, camera.pos.z);
+            if (camera.quat) group.quaternion.set(camera.quat.x, camera.quat.y, camera.quat.z, camera.quat.w);
         }
-        av.group.position.set(camera.pos.x, camera.pos.y, camera.pos.z);
-        if (camera.quat) av.group.quaternion.set(camera.quat.x, camera.quat.y, camera.quat.z, camera.quat.w);
+        if (camera.pos) av.targetPos = new THREE.Vector3(camera.pos.x, camera.pos.y, camera.pos.z);
+        if (camera.quat) av.targetQuat = new THREE.Quaternion(camera.quat.x, camera.quat.y, camera.quat.z, camera.quat.w).normalize();
     },
 
     clearAvatars: function() {
