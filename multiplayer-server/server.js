@@ -14,7 +14,7 @@ const MAX_ROOMS = Number(process.env.MAX_ROOMS || 200);
 const MAX_PLAYERS_PER_ROOM = Number(process.env.MAX_PLAYERS_PER_ROOM || 16);
 const MAX_CHAT_HISTORY = 80;
 const MAX_CHAT_LEN = 350;
-const ROOM_IDLE_CLOSE_MS = 10_000; // host disconnect grace period
+const ROOM_IDLE_CLOSE_MS = Number(process.env.HOST_DISCONNECT_GRACE_MS || 120000); // host disconnect grace period (mobile networks can briefly drop)
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -89,6 +89,48 @@ function hasEditPermission(room, socketId) {
   if (!p) return false;
   if (p.role === 'admin') return true;
   return !!room.permissions?.guestsCanBuild;
+}
+
+function objectNetId(obj) {
+  return obj && obj.userData && obj.userData.netId ? String(obj.userData.netId) : '';
+}
+function ensureMapContainers(room) {
+  if (!room.mapData || typeof room.mapData !== 'object') room.mapData = { blocks: [], lights: [] };
+  if (!Array.isArray(room.mapData.blocks)) room.mapData.blocks = [];
+  if (!Array.isArray(room.mapData.lights)) room.mapData.lights = [];
+}
+function upsertByNetId(arr, obj) {
+  const id = objectNetId(obj);
+  if (!id) return false;
+  const idx = arr.findIndex(x => objectNetId(x) === id);
+  if (idx >= 0) arr[idx] = obj;
+  else arr.push(obj);
+  return true;
+}
+function removeByNetId(arr, id) {
+  const before = arr.length;
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (objectNetId(arr[i]) === id) arr.splice(i, 1);
+  }
+  return arr.length !== before;
+}
+function applyObjectUpdatesToRoom(room, objects = [], deletedIds = []) {
+  ensureMapContainers(room);
+  deletedIds.forEach(id => {
+    removeByNetId(room.mapData.blocks, String(id));
+    removeByNetId(room.mapData.lights, String(id));
+  });
+  objects.forEach(obj => {
+    if (!obj || !obj.userData || !obj.userData.netId) return;
+    const type = obj.type || obj.userData.type;
+    if (type === 'light') {
+      removeByNetId(room.mapData.blocks, objectNetId(obj));
+      upsertByNetId(room.mapData.lights, obj);
+    } else {
+      removeByNetId(room.mapData.lights, objectNetId(obj));
+      upsertByNetId(room.mapData.blocks, obj);
+    }
+  });
 }
 function closeRoom(room, reason = 'Host left the server') {
   if (!room || !rooms.has(room.id)) return;
@@ -240,6 +282,36 @@ io.on('connection', socket => {
     socket.to(room.id).emit('mp:map_update', packet);
     io.to(room.id).emit('mp:room_revision', { roomId: room.id, revision: room.revision, updatedAt: room.updatedAt });
     broadcastRoomList();
+    cb?.({ ok: true, revision: room.revision });
+  });
+
+
+  socket.on('mp:object_update', (payload = {}, cb) => {
+    const room = rooms.get(String(payload.roomId || socketToRoom.get(socket.id) || ''));
+    if (!room) return cb?.({ ok: false, error: 'Room not found.' });
+    if (!hasEditPermission(room, socket.id)) return cb?.({ ok: false, error: 'No build permission.' });
+    const objects = Array.isArray(payload.objects) ? payload.objects.slice(0, 2000) : [];
+    const deletedIds = Array.isArray(payload.deletedIds) ? payload.deletedIds.slice(0, 2000).map(String) : [];
+    if (!objects.length && !deletedIds.length) return cb?.({ ok: false, error: 'Empty object update.' });
+    applyObjectUpdatesToRoom(room, objects, deletedIds);
+    room.revision++;
+    room.updatedAt = now();
+    const author = room.players.get(socket.id);
+    const packet = {
+      roomId: room.id,
+      revision: room.revision,
+      authorId: socket.id,
+      authorName: author?.nickname || 'Player',
+      objects,
+      deletedIds,
+      final: !!payload.final,
+      reason: cleanText(payload.reason || 'object_update', 60),
+      updatedAt: room.updatedAt
+    };
+    const channel = socket.to(room.id);
+    if (payload.volatile && !payload.final) channel.volatile.emit('mp:object_update', packet);
+    else channel.emit('mp:object_update', packet);
+    io.to(room.id).emit('mp:room_revision', { roomId: room.id, revision: room.revision, updatedAt: room.updatedAt });
     cb?.({ ok: true, revision: room.revision });
   });
 
