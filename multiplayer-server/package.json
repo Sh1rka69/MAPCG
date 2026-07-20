@@ -1,0 +1,24 @@
+{
+  "name": "mapcg-multiplayer-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MAPCG real-time multiplayer backend using Socket.IO rooms.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "@socket.io/admin-ui": "^0.5.1",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
