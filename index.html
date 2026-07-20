@@ -14663,6 +14663,7 @@ window.multiplayerClient = {
     lastCamSendAt: 0,
     remoteAvatars: new Map,
     remoteObjectTargets: new Map,
+    objectDeltaSupported: false,
     _smoothLoopStarted: false,
     _lastObjectSendAt: 0,
     _objectSendTimer: null,
@@ -14843,7 +14844,7 @@ window.multiplayerClient = {
         const s = this.socket;
         s.on("connect", () => { this.setStatus("Connected to backend", "ok"); this.refreshRooms(); this.renderAll(); });
         s.on("disconnect", reason => { this.setStatus("Disconnected: " + reason, "error"); this.room = null; this.self = null; this.players = []; this.clearAvatars(); this.renderAll(); });
-        s.on("mp:hello", data => { if (data.rooms) this.renderRooms(data.rooms); });
+        s.on("mp:hello", data => { this.objectDeltaSupported = data?.objectDelta === true; if (data.rooms) this.renderRooms(data.rooms); });
         s.on("mp:rooms", rooms => this.renderRooms(rooms || []));
         s.on("mp:joined", data => this.onJoined(data));
         s.on("mp:players", players => { this.players = players || []; this.renderPlayers(); });
@@ -14895,6 +14896,7 @@ window.multiplayerClient = {
 
     onJoined: async function(data) {
         this.room = data.room;
+        if (data?.objectDelta === true || data?.room?.objectDelta === true) this.objectDeltaSupported = true;
         this.self = data.self;
         this.players = data.players || [];
         this.chat = data.chat || [];
@@ -15252,6 +15254,12 @@ window.multiplayerClient = {
 
     sendSelectedObjectUpdate: function(reason = "object_update", final = false, volatile = true) {
         if (!this.room || !this.socket?.connected || this.isApplyingRemote || !this.canEdit()) return;
+        // If the deployed backend is still the old version, do not silently lose edits.
+        // Fallback to the slower map snapshot sync until server.js is updated/redeployed.
+        if (!this.objectDeltaSupported) {
+            this.scheduleSync("fallback-" + reason, final ? 80 : 260);
+            return;
+        }
         this.ensureNetIds();
         try {
             engine.transformGroup?.updateMatrixWorld?.(true);
@@ -15264,11 +15272,21 @@ window.multiplayerClient = {
         if (!objects.length) return;
         const payloadObjects = objects.map(o => engine.serializeObject(o));
         const emitPayload = { roomId: this.room.id, reason, objects: payloadObjects, final: !!final, volatile: !!volatile && !final };
-        const emitFn = emitPayload.volatile && this.socket.volatile ? this.socket.volatile.emit.bind(this.socket.volatile) : this.socket.emit.bind(this.socket);
-        emitFn("mp:object_update", emitPayload, res => {
-            if (res?.ok && this.room) { this.room.revision = res.revision; this.renderCurrentRoom(); }
-            else if (res && !res.ok) this.setStatus(res.error || "Object update rejected", "error");
-        });
+        if (final && this.socket.timeout) {
+            this.socket.timeout(1600).emit("mp:object_update", emitPayload, (err, res) => {
+                if (err) {
+                    console.warn("[MP] object_update final timed out; falling back to full sync", err);
+                    this.objectDeltaSupported = false;
+                    this.scheduleSync("object-update-fallback", 80);
+                    return;
+                }
+                if (res?.ok && this.room) { this.room.revision = res.revision; this.renderCurrentRoom(); }
+                else if (res && !res.ok) this.setStatus(res.error || "Object update rejected", "error");
+            });
+        } else {
+            // Send to server reliably; server itself broadcasts intermediate movement as volatile.
+            this.socket.emit("mp:object_update", emitPayload);
+        }
     },
 
     scheduleObjectUpdate: function(reason = "object_update", final = false) {
