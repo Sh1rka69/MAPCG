@@ -15001,6 +15001,19 @@ window.multiplayerClient = {
         if (!obj || !data) return;
         if (engine.transformControl && engine.transformControl.object === obj) engine.transformControl.detach();
         applySerializedTransform(obj, data);
+        // Many editor cubes are static (matrixAutoUpdate=false) after transform-group release.
+        // If we only change position/quaternion/scale, Three.js keeps rendering the old matrix.
+        // Force matrix refresh immediately so remote movement of cubes/lights/spawn is visible.
+        obj.updateMatrix?.();
+        obj.updateMatrixWorld?.(true);
+        obj.matrixWorldNeedsUpdate = true;
+
+        if (obj === engine.spawnPointObj || obj.userData?.type === "spawn" || data.type === "spawn") {
+            obj.userData = { ...obj.userData, ...(data.userData || {}), type: "spawn" };
+            obj.updateMatrix?.();
+            obj.updateMatrixWorld?.(true);
+            return;
+        }
         if (obj.userData?.type === "light" || data.type === "light") {
             const lightSource = obj.userData.lightSource;
             const lightTarget = obj.userData.lightTarget;
@@ -15009,6 +15022,8 @@ window.multiplayerClient = {
             if (lightTarget) obj.userData.lightTarget = lightTarget;
             if (!obj.userData.type) obj.userData.type = "light";
             engine.applyManualLightSettings?.(obj);
+            obj.updateMatrix?.();
+            obj.updateMatrixWorld?.(true);
             return;
         }
         const oldTex = obj.userData?.texture;
@@ -15030,6 +15045,8 @@ window.multiplayerClient = {
             obj.receiveShadow = obj.userData.visible !== false;
         }
         engine.updateCubeUVs?.(obj);
+        obj.updateMatrix?.();
+        obj.updateMatrixWorld?.(true);
         obj.matrixWorldNeedsUpdate = true;
         engine.registerCullable?.(obj);
         engine.updateCullingAround?.(obj);
