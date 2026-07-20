@@ -14933,8 +14933,16 @@ window.multiplayerClient = {
     collectMapData: function(options = {}) {
         const includeAssets = options.includeAssets !== false;
         this.ensureNetIds();
-        const wasGrouped = engine.selectedBlocks?.length > 1;
-        if (wasGrouped) engine.releaseTransformGroup();
+        // IMPORTANT: do not release/rebuild the transform group here.
+        // During multiplayer dragging the selected Collection/AI object can be a multi-cube group.
+        // Detaching TransformControls while the user is dragging makes the arrows feel like they
+        // randomly stop responding. World-space serialization already works through getWorldPosition,
+        // so we only force matrices to be current and keep the gizmo attached.
+        try {
+            engine.transformGroup?.updateMatrixWorld?.(true);
+            engine.scene?.updateMatrixWorld?.(true);
+            engine.selectedBlocks?.forEach(obj => obj?.updateMatrixWorld?.(true));
+        } catch (e) {}
         const mapBlocks = engine.blocks.map(b => engine.serializeObject(b));
         if (engine.spawnPointObj) mapBlocks.push(engine.serializeObject(engine.spawnPointObj));
         const mapLights = engine.manualLights.map(l => engine.serializeObject(l));
@@ -14952,7 +14960,6 @@ window.multiplayerClient = {
                 if (nm?.dataUrl) normalMapsToSave[key] = { name: nm.name, dataUrl: nm.dataUrl };
             }
         }
-        if (wasGrouped) engine.buildTransformGroup();
         const result = { blocks: mapBlocks, lights: mapLights, env: engine.getEnvState() };
         if (includeAssets) {
             result.projectCustomTextures = localTexturesToSave;
