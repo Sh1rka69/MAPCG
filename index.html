@@ -14054,6 +14054,87 @@ window.aiBuilder = {
         return picks.slice(0, maxItems);
     },
 
+    /**
+     * Semantic reference picker (LLM-based): вместо жёстко закодированного словаря
+     * синонимов, шлёт полный список имён объектов коллекции (без картинок — только
+     * текст, дёшево) плюс запрос пользователя в Gemini и просит вернуть JSON-массив
+     * самых релевантных по СМЫСЛУ имён. Работает на любом языке, не требует ручной
+     * поддержки словаря, и масштабируется на любое число объектов в коллекции.
+     * При сетевой/парсинг ошибке — откатывается на старую keyword-эвристику
+     * (_pickReferenceItems), чтобы не оставить пользователя совсем без референсов.
+     */
+    _pickReferenceItemsSemantic: async function(promptText, maxItems = 4) {
+        const data = (window.uiManager && Array.isArray(uiManager._collectionData)) ? uiManager._collectionData : [];
+        if (!data.length) return [];
+        if (data.length <= maxItems) return data.slice();
+
+        const MAX_NAMES = 300;
+        const names = data.map(item => item.name);
+        const namesForPrompt = names.length > MAX_NAMES ? names.slice(0, MAX_NAMES) : names;
+
+        const pickerPrompt = `You are helping pick reference examples for a 3D voxel-style builder AI.
+Below is the full list of object names currently available in the reference collection (each is a real handmade 3D object made of cubes):
+${JSON.stringify(namesForPrompt)}
+
+The user wants to build: "${promptText}"
+
+Pick up to ${maxItems} names from the list above that are the MOST semantically relevant as visual/structural references for building what the user wants — consider meaning, not just literal word overlap (the user's request may be in any language, and object names are in English). For example if the user asks for a window, "uPVC window" is highly relevant even though the words don't share letters in another language. If the request involves round/cylindrical/spherical shapes, prefer references that include curved/rotated geometry when relevant. If truly nothing in the list is a reasonable reference, return fewer items or an empty array — do not force irrelevant picks just to fill the quota.
+
+Return ONLY a JSON object of the form {"picks": ["Exact Name From List", ...]}, using names EXACTLY as they appear in the list above (same casing/spelling). No explanations, no markdown. First character must be { and the last must be }.`;
+
+        this._log("Sending semantic reference request (" + namesForPrompt.length + " collection names)...");
+        const t0 = performance.now();
+
+        const response = await fetch(this.ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                messages: [
+                    { role: "user", content: pickerPrompt }
+                ],
+                temperature: 0.2,
+                max_tokens: 500
+            })
+        });
+
+        if (!response.ok) {
+            let msg = "Reference picker request failed (" + response.status + ")";
+            try {
+                const errJson = await response.json();
+                if (errJson?.error) msg = typeof errJson.error === "string" ? errJson.error : (errJson.error.message || msg);
+            } catch (e) {}
+            throw new Error(msg);
+        }
+
+        const data2 = await response.json();
+        const content = data2?.choices?.[0]?.message?.content;
+        if (!content || typeof content !== "string") {
+            throw new Error("Reference picker returned an empty response.");
+        }
+
+        let parsed;
+        try {
+            const jsonStart = content.indexOf("{");
+            const jsonEnd = content.lastIndexOf("}");
+            parsed = JSON.parse(jsonStart >= 0 && jsonEnd > jsonStart ? content.slice(jsonStart, jsonEnd + 1) : content);
+        } catch (e) {
+            throw new Error("Reference picker returned invalid JSON.");
+        }
+
+        const pickedNames = Array.isArray(parsed?.picks) ? parsed.picks : [];
+        this._log("Semantic picker responded in " + Math.round(performance.now() - t0) + " ms with: " + (pickedNames.length ? pickedNames.join(", ") : "(none)"));
+
+        const byExact = new Map(data.map(item => [item.name, item]));
+        const byLower = new Map(data.map(item => [item.name.toLowerCase().trim(), item]));
+        const resolved = [];
+        pickedNames.forEach(n => {
+            if (typeof n !== "string") return;
+            const match = byExact.get(n) || byLower.get(n.toLowerCase().trim());
+            if (match && !resolved.includes(match)) resolved.push(match);
+        });
+        return resolved.slice(0, maxItems);
+    },
+
     /** Собandрает спandсок really available into проекте materialName andз селекта textures. */
     _getAvailableTextureNames: function() {
         const sel = document.getElementById("sel-texture");
@@ -14335,7 +14416,13 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                 this._setStatus('<span class="ai-spinner"></span> Picking references and sending request...', "");
             }
 
-            const refs = this._pickReferenceItems(promptText, 4);
+            let refs = [];
+            try {
+                refs = await this._pickReferenceItemsSemantic(promptText, 4);
+            } catch (refErr) {
+                this._log("Semantic reference picker failed (" + (refErr?.message || String(refErr)) + "), falling back to keyword matching.", "warn");
+                refs = this._pickReferenceItems(promptText, 4);
+            }
             if (refs.length) {
                 this._setRefLine("References: " + refs.map(r => r.name).join(", "));
                 this._log("References picked from collection: " + refs.map(r => r.name).join(", "));
@@ -14664,6 +14751,9 @@ window.multiplayerClient = {
     remoteAvatars: new Map,
     remoteObjectTargets: new Map,
     objectDeltaSupported: false,
+    isApplyingRemoteEnv: false,
+    lastSharedEnvHash: "",
+    _envSyncTimer: null,
     _smoothLoopStarted: false,
     _lastObjectSendAt: 0,
     _objectSendTimer: null,
@@ -14851,6 +14941,7 @@ window.multiplayerClient = {
         s.on("mp:permissions", data => { if (this.room) this.room.permissions = data.permissions || this.room.permissions; this.renderCurrentRoom(); });
         s.on("mp:map_update", data => this.onRemoteMapUpdate(data));
         s.on("mp:object_update", data => this.onRemoteObjectUpdate(data));
+        s.on("mp:env_update", data => this.onRemoteEnvUpdate(data));
         s.on("mp:room_revision", data => { if (this.room && data.roomId === this.room.id) { this.room.revision = data.revision; this.room.updatedAt = data.updatedAt; this.renderCurrentRoom(); } });
         s.on("mp:camera_update", data => this.updateRemoteAvatar(data.playerId, data.camera));
         s.on("mp:chat", msg => this.onChat(msg));
@@ -14878,6 +14969,7 @@ window.multiplayerClient = {
                 guestsCanBuild: document.getElementById("mp-guests-build")?.checked !== false,
                 guestsCanChat: document.getElementById("mp-guests-chat")?.checked !== false
             },
+            sharedEnv: this.getSharedEnvState(),
             mapData: this.collectMapData({ includeAssets: true })
         };
         this.setStatus("Creating server and uploading current map...");
@@ -14904,6 +14996,8 @@ window.multiplayerClient = {
         if (this.self?.role !== "admin" && data.mapData) {
             await this.applyMapData(data.mapData, "initial sync");
         }
+        if (data.sharedEnv) await this.applySharedEnvState(data.sharedEnv, true);
+        this.lastSharedEnvHash = this.hashSharedEnv(this.getSharedEnvState());
         this.renderAll();
         this.toast(this.self?.role === "admin" ? "Server started" : "Connected to server");
     },
@@ -14938,6 +15032,103 @@ window.multiplayerClient = {
         if (engine.spawnPointObj) assign(engine.spawnPointObj, "spawn");
     },
 
+    getSharedEnvState: function() {
+        const val = id => document.getElementById(id)?.value;
+        const env = {
+            skybox: val("setting-skybox") || "day",
+            weather: val("setting-weather") || "clear",
+            fogColor: val("setting-fog-color") || "#8bc5eb",
+            fogStart: parseFloat(val("setting-fog-start") || "15") || 15,
+            fogEnd: parseFloat(val("setting-fog-end") || "250") || 250,
+            sunAngle: parseFloat(val("setting-sun-angle") || "180") || 180,
+            sunVertical: parseFloat(val("setting-sun-vertical") || "60") || 60,
+            customSkyboxDataUrl: engine.customSkyboxDataUrl || null,
+            customSkyboxName: engine.customSkyboxName || null
+        };
+        if (env.skybox !== "custom") {
+            env.customSkyboxDataUrl = null;
+            env.customSkyboxName = null;
+        }
+        return env;
+    },
+
+    pickSharedEnv: function(env = {}) {
+        if (!env || typeof env !== "object") return {};
+        const out = {};
+        ["skybox", "weather", "fogColor", "fogStart", "fogEnd", "sunAngle", "sunVertical", "customSkyboxDataUrl", "customSkyboxName"].forEach(k => {
+            if (env[k] !== undefined) out[k] = env[k];
+        });
+        return out;
+    },
+
+    hashSharedEnv: function(env) {
+        try { return JSON.stringify(this.pickSharedEnv(env)); } catch(e) { return ""; }
+    },
+
+    mergeMapDataWithLocalGraphics: function(mapData) {
+        if (!mapData) return mapData;
+        const localEnv = engine.getEnvState ? engine.getEnvState() : {};
+        const shared = this.pickSharedEnv(mapData.env || {});
+        return { ...mapData, env: { ...localEnv, ...shared } };
+    },
+
+    applySharedEnvState: async function(env = {}, fromNetwork = false) {
+        const shared = this.pickSharedEnv(env);
+        this.isApplyingRemoteEnv = true;
+        try {
+            const setVal = (id, value) => { const el = document.getElementById(id); if (el && value !== undefined && value !== null) el.value = String(value); };
+            setVal("setting-skybox", shared.skybox || "day");
+            setVal("setting-weather", shared.weather || "clear");
+            setVal("setting-fog-color", shared.fogColor || "#8bc5eb");
+            setVal("setting-fog-start", shared.fogStart ?? 15);
+            setVal("setting-fog-end", shared.fogEnd ?? 250);
+            setVal("setting-sun-angle", shared.sunAngle ?? 180);
+            setVal("setting-sun-vertical", shared.sunVertical ?? 60);
+            const txt = (id, value) => { const el = document.getElementById(id); if (el) el.innerText = value; };
+            txt("sun-angle-val", (shared.sunAngle ?? 180) + "°");
+            txt("sun-vertical-val", (shared.sunVertical ?? 60) + "°");
+            const skyLabel = document.getElementById("skybox-file-name");
+            if ((shared.skybox || "day") === "custom" && shared.customSkyboxDataUrl) {
+                if (skyLabel) skyLabel.innerText = shared.customSkyboxName || "Custom Skybox";
+                await engine.setCustomSkybox?.(shared.customSkyboxDataUrl, shared.customSkyboxName || "Custom Skybox");
+            } else {
+                if (skyLabel) skyLabel.innerText = "No file";
+                engine.customSkyboxDataUrl = null;
+                engine.customSkyboxName = null;
+            }
+            engine.updateEnvironment?.();
+            this.lastSharedEnvHash = this.hashSharedEnv(this.getSharedEnvState());
+            if (fromNetwork) this.setStatus("Sky/weather synced from admin", "ok");
+        } finally {
+            this.isApplyingRemoteEnv = false;
+        }
+    },
+
+    scheduleEnvSync: function(delay = 250) {
+        if (!this.room || !this.socket?.connected || this.self?.role !== "admin" || this.isApplyingRemoteEnv) return;
+        clearTimeout(this._envSyncTimer);
+        this._envSyncTimer = setTimeout(() => this.sendEnvUpdate(), delay);
+    },
+
+    sendEnvUpdate: function() {
+        if (!this.room || !this.socket?.connected || this.self?.role !== "admin" || this.isApplyingRemoteEnv) return;
+        const env = this.getSharedEnvState();
+        const hash = this.hashSharedEnv(env);
+        if (hash === this.lastSharedEnvHash) return;
+        this.lastSharedEnvHash = hash;
+        this.socket.emit("mp:env_update", { roomId: this.room.id, env }, res => {
+            if (res?.ok && this.room) { this.room.revision = res.revision; this.renderCurrentRoom(); }
+            else if (res && !res.ok) this.setStatus(res.error || "Sky/weather update rejected", "error");
+        });
+    },
+
+    onRemoteEnvUpdate: async function(data) {
+        if (!this.room || data.roomId !== this.room.id || data.authorId === this.self?.id) return;
+        await this.applySharedEnvState(data.env || {}, true);
+        if (this.room) { this.room.revision = data.revision; this.room.updatedAt = data.updatedAt; }
+        this.renderCurrentRoom();
+    },
+
     collectMapData: function(options = {}) {
         const includeAssets = options.includeAssets !== false;
         this.ensureNetIds();
@@ -14968,7 +15159,7 @@ window.multiplayerClient = {
                 if (nm?.dataUrl) normalMapsToSave[key] = { name: nm.name, dataUrl: nm.dataUrl };
             }
         }
-        const result = { blocks: mapBlocks, lights: mapLights, env: engine.getEnvState() };
+        const result = { blocks: mapBlocks, lights: mapLights, env: this.getSharedEnvState() };
         if (includeAssets) {
             result.projectCustomTextures = localTexturesToSave;
             result.projectNormalMaps = normalMapsToSave;
@@ -15126,7 +15317,7 @@ window.multiplayerClient = {
             if (this._canFastApplyMapData(mapData)) {
                 await this._fastApplyMapData(mapData, reason);
             } else {
-                await engine.loadMapData(mapData || { blocks: [], lights: [], env: null });
+                await engine.loadMapData(this.mergeMapDataWithLocalGraphics(mapData || { blocks: [], lights: [], env: null }));
                 engine.deselect();
                 this.setStatus("Map synced: " + reason, "ok");
             }
@@ -15305,6 +15496,15 @@ window.multiplayerClient = {
     patchEditorHooks: function() {
         if (this._patched) return;
         this._patched = true;
+        const originalUpdateEnvironment = engine.updateEnvironment?.bind(engine);
+        if (originalUpdateEnvironment) engine.updateEnvironment = function(...args) {
+            const result = originalUpdateEnvironment(...args);
+            if (window.multiplayerClient && multiplayerClient.room && multiplayerClient.self?.role === "admin" && !multiplayerClient.isApplyingRemoteEnv) {
+                const hash = multiplayerClient.hashSharedEnv(multiplayerClient.getSharedEnvState());
+                if (hash !== multiplayerClient.lastSharedEnvHash) multiplayerClient.scheduleEnvSync(220);
+            }
+            return result;
+        };
         const mutatingMethods = ["addCube", "addCylinder", "addTriangle", "addSpawnPoint", "addLight", "deleteObject", "duplicateObject", "groupSelectedBlocks", "updateObjectFromUI", "spawnCollectionObject", "importGLBAsCubes", "importOBJAsCubes"];
         mutatingMethods.forEach(name => {
             const original = engine[name];
