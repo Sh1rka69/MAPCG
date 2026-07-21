@@ -14080,7 +14080,7 @@ The user wants to build: "${promptText}"
 
 Pick up to ${maxItems} names from the list above that are the MOST semantically relevant as visual/structural references for building what the user wants — consider meaning, not just literal word overlap (the user's request may be in any language, and object names are in English). For example if the user asks for a window, "uPVC window" is highly relevant even though the words don't share letters in another language. If the request involves round/cylindrical/spherical shapes, prefer references that include curved/rotated geometry when relevant. If truly nothing in the list is a reasonable reference, return fewer items or an empty array — do not force irrelevant picks just to fill the quota.
 
-Return ONLY a JSON object of the form {"picks": ["Exact Name From List", ...]}, using names EXACTLY as they appear in the list above (same casing/spelling). No explanations, no markdown. First character must be { and the last must be }.`;
+Respond with ONLY raw JSON, nothing else — no markdown code fences, no explanation before or after. Do not think out loud, just answer directly. Exact format: {"picks": ["Exact Name From List", ...]}, using names EXACTLY as they appear in the list above (same casing/spelling).`;
 
         this._log("Sending semantic reference request (" + namesForPrompt.length + " collection names)...");
         const t0 = performance.now();
@@ -14089,11 +14089,12 @@ Return ONLY a JSON object of the form {"picks": ["Exact Name From List", ...]}, 
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+                mode: "vision",
                 messages: [
                     { role: "user", content: pickerPrompt }
                 ],
-                temperature: 0.2,
-                max_tokens: 500
+                temperature: 0.1,
+                max_tokens: 2000
             })
         });
 
@@ -14108,17 +14109,16 @@ Return ONLY a JSON object of the form {"picks": ["Exact Name From List", ...]}, 
 
         const data2 = await response.json();
         const content = data2?.choices?.[0]?.message?.content;
-        if (!content || typeof content !== "string") {
+        if (!content || typeof content !== "string" || !content.trim()) {
             throw new Error("Reference picker returned an empty response.");
         }
 
         let parsed;
         try {
-            const jsonStart = content.indexOf("{");
-            const jsonEnd = content.lastIndexOf("}");
-            parsed = JSON.parse(jsonStart >= 0 && jsonEnd > jsonStart ? content.slice(jsonStart, jsonEnd + 1) : content);
+            const match = content.match(/\{[\s\S]*\}/);
+            parsed = JSON.parse(match ? match[0] : content);
         } catch (e) {
-            throw new Error("Reference picker returned invalid JSON.");
+            throw new Error("Reference picker returned invalid JSON: " + content.slice(0, 120));
         }
 
         const pickedNames = Array.isArray(parsed?.picks) ? parsed.picks : [];
