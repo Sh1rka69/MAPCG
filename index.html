@@ -2726,6 +2726,25 @@
                         </div>
 
                         <label class="flex items-center gap-2 mb-2 cursor-pointer">
+                            <input type="checkbox" id="setting-dir-bake" onchange="engine.applyDirectionalBake(); window.historyManager.takeSnapshot();">
+                            <span class="text-xs font-semibold" style="color: var(--td-accent);">Directional Bake (Photoreal GI)</span>
+                        </label>
+                        <div class="pl-7 mb-2" id="dir-bake-controls" style="display:none;">
+                            <div class="flex items-center gap-2 mb-1">
+                                <label class="td-label" style="font-size: 9px; width: 62px;">Strength</label>
+                                <input type="range" id="setting-bake-gi-intensity" min="0" max="2" step="0.05" value="1" class="flex-1" oninput="document.getElementById('bake-gi-intensity-val').innerText=Number(this.value).toFixed(2);" onchange="engine.applyDirectionalBake(); window.historyManager.takeSnapshot();">
+                                <span id="bake-gi-intensity-val" class="mono text-xs w-8 text-right" style="color: var(--td-accent);">1.00</span>
+                            </div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <label class="td-label" style="font-size: 9px; width: 62px;">Radius</label>
+                                <input type="range" id="setting-bake-gi-radius" min="1" max="4" step="1" value="2" class="flex-1" oninput="document.getElementById('bake-gi-radius-val').innerText=this.value;" onchange="engine.applyDirectionalBake(); window.historyManager.takeSnapshot();">
+                                <span id="bake-gi-radius-val" class="mono text-xs w-8 text-right" style="color: var(--td-accent);">2</span>
+                            </div>
+                            <button onclick="engine.applyDirectionalBake();" class="w-full mt-1 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-accent); border: 1px solid var(--td-border);">Rebake Lighting</button>
+                            <p class="text-[10px] leading-tight mt-1" style="color: var(--td-text-muted);">Bakes soft ambient occlusion, sky-directional shading, and color bleeding between nearby cubes — a softer, photorealistic alternative to reflections. Rebake after editing the map.</p>
+                        </div>
+
+                        <label class="flex items-center gap-2 mb-2 cursor-pointer">
                             <input type="checkbox" id="setting-dof" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();">
                             <span class="text-xs font-semibold" style="color: var(--td-info);">Depth of Field</span>
                         </label>
@@ -6910,7 +6929,7 @@ void main(){
         const joyMoving = !!(this.mobileJoystick && this.mobileJoystick.active && (Math.abs(this.mobileJoystick.x || 0) > .02 || Math.abs(this.mobileJoystick.y || 0) > .02));
         if (keysMoving || dragging || joyMoving || this._cameraMovedThisFrame()) this.markInteraction();
         // Важно: НЕ выключаем SSAO / Reflections / DOF во время движения.
-        // Предыдущая версия ради FPS отключала пост-эффекты на лету, из-за чего картинка
+        // Предыдущая верси�� ради FPS отключала пост-эффекты на лету, из-за чего картинка
         // заметно мигала: эффекты пропадали при движении камеры и возвращались при остановке.
         // Теперь оптимизация во время работы идёт через adaptive resolution, culling, throttling
         // частиц/теней/queries, но выбранные пользователем графические эффекты остаются стабильными.
@@ -7013,11 +7032,12 @@ void main(){
             env: env,
             visible: visible,
             pbrEnabled: pbrEnabled,
-            nm: nm
+            nm: nm,
+            bakeGI: !!this._bakeGI
         };
     },
     _cubeMatSig: function(p) {
-        return p.tex + "|" + p.matT + "|" + String(p.col).toLowerCase() + "|" + (p.reflectivity == null ? "d" : Number(p.reflectivity).toFixed(4)) + "|" + (p.reflectBlur == null ? "d" : Number(p.reflectBlur).toFixed(4)) + "|" + p.glare.toFixed(3) + "|" + (p.env ? p.env.uuid : "none") + "|" + (p.visible ? 1 : 0) + "|" + (p.pbrEnabled ? 1 : 0) + "|" + p.nm;
+        return p.tex + "|" + p.matT + "|" + String(p.col).toLowerCase() + "|" + (p.reflectivity == null ? "d" : Number(p.reflectivity).toFixed(4)) + "|" + (p.reflectBlur == null ? "d" : Number(p.reflectBlur).toFixed(4)) + "|" + p.glare.toFixed(3) + "|" + (p.env ? p.env.uuid : "none") + "|" + (p.visible ? 1 : 0) + "|" + (p.pbrEnabled ? 1 : 0) + "|" + p.nm + "|" + (p.bakeGI ? "g" : "n");
     },
     buildCubeMaterial: function(p) {
         const mat = createMaterial(p.tex, p.matT, p.col, {
@@ -7041,6 +7061,7 @@ void main(){
             mat.transparent = true;
             mat.opacity = .3;
         }
+        mat.vertexColors = p.bakeGI === true && !isWater;
         mat.needsUpdate = true;
         return mat;
     },
@@ -7073,7 +7094,8 @@ void main(){
             env: this.getActiveEnvironmentMap(),
             visible: visible !== false,
             pbrEnabled: document.getElementById("setting-pbr-textures")?.checked ?? true,
-            nm: activeProjectNormalMaps[canonicalTextureKey(tex || "grid")] ? 1 : 0
+            nm: activeProjectNormalMaps[canonicalTextureKey(tex || "grid")] ? 1 : 0,
+            bakeGI: !!this._bakeGI
         };
         return this._acquireCubeMatBySig(this._cubeMatSig(p), p);
     },
@@ -7156,6 +7178,204 @@ void main(){
                 }
             });
         });
+    },
+    _giTexAvg: {},
+    getTextureAverageColor: function(textureId) {
+        textureId = canonicalTextureKey(textureId);
+        if (this._giTexAvg[textureId]) return this._giTexAvg[textureId];
+        let col = new THREE.Color(.6, .6, .6);
+        try {
+            const tex = getActiveTexture(textureId);
+            const img = tex && tex.image;
+            const iw = img && (img.width || img.naturalWidth);
+            if (img && iw) {
+                const c = document.createElement("canvas");
+                c.width = c.height = 8;
+                const ctx = c.getContext("2d", {
+                    willReadFrequently: true
+                });
+                ctx.drawImage(img, 0, 0, 8, 8);
+                const d = ctx.getImageData(0, 0, 8, 8).data;
+                let r = 0, g = 0, b = 0, n = 0;
+                for (let i = 0; i < d.length; i += 4) {
+                    if (d[i + 3] < 8) continue;
+                    r += d[i];
+                    g += d[i + 1];
+                    b += d[i + 2];
+                    n++;
+                }
+                if (n > 0) {
+                    const toLin = v => {
+                        v /= 255;
+                        return v <= .04045 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4);
+                    };
+                    col = new THREE.Color(toLin(r / n), toLin(g / n), toLin(b / n));
+                }
+            }
+        } catch (e) {}
+        this._giTexAvg[textureId] = col;
+        return col;
+    },
+    _ensureBakeColorAttr: function(mesh) {
+        if (!mesh || !mesh.geometry || mesh.userData?.type !== "cube") return;
+        const g = mesh.geometry;
+        const pos = g.attributes.position;
+        if (!pos) return;
+        if (g.attributes.color && g.attributes.color.count === pos.count) return;
+        const arr = new Float32Array(pos.count * 3);
+        arr.fill(1);
+        g.setAttribute("color", new THREE.BufferAttribute(arr, 3));
+    },
+    _removeBakeColorAttr: function(mesh) {
+        if (mesh && mesh.geometry && mesh.geometry.attributes.color) {
+            try {
+                mesh.geometry.deleteAttribute("color");
+            } catch (e) {}
+        }
+    },
+    computeDirectionalBake: function() {
+        if (!this.blocks) return;
+        const R = Math.max(1, Math.min(4, Math.round(this._bakeRadius ?? 2)));
+        const intensity = this._bakeIntensity ?? 1;
+        const aoStrength = .55, skyStrength = .35, bleedStrength = .85, bounceFill = .18;
+        const sky = this.hemiLight ? this.hemiLight.color : new THREE.Color(.8, .85, 1);
+        const ground = this.hemiLight ? this.hemiLight.groundColor : new THREE.Color(.5, .45, .4);
+        const sun = this.dirLight ? this.dirLight.color : new THREE.Color(1, 1, .95);
+        const norm = c => {
+            const l = Math.max(1e-4, c.r * .299 + c.g * .587 + c.b * .114);
+            return {
+                r: c.r / l,
+                g: c.g / l,
+                b: c.b / l
+            };
+        };
+        const skyN = norm(sky), groundN = norm(ground), sunN = norm(sun);
+        const map = new Map();
+        const keyf = (x, y, z) => x + "_" + y + "_" + z;
+        const gpos = b => ({
+            x: Math.round(b.position.x),
+            y: Math.round(b.position.y),
+            z: Math.round(b.position.z)
+        });
+        const albCache = new Map();
+        const albOf = b => {
+            const k = (b.userData.texture || "grid") + "|" + (b.userData.colorHex || "#fff");
+            let a = albCache.get(k);
+            if (!a) {
+                const t = this.getTextureAverageColor(b.userData.texture);
+                const c = new THREE.Color(b.userData.colorHex || "#ffffff");
+                a = {
+                    r: t.r * c.r,
+                    g: t.g * c.g,
+                    b: t.b * c.b
+                };
+                albCache.set(k, a);
+            }
+            return a;
+        };
+        const cubes = this.blocks.filter(b => b && b.userData && b.userData.type === "cube" && b.geometry && b.geometry.attributes.position && b.userData.visible !== false);
+        cubes.forEach(b => {
+            const g = gpos(b);
+            const kk = keyf(g.x, g.y, g.z);
+            let arr = map.get(kk);
+            if (!arr) {
+                arr = [];
+                map.set(kk, arr);
+            }
+            arr.push(b);
+        });
+        const FN = [ [ 1, 0, 0 ], [ -1, 0, 0 ], [ 0, 1, 0 ], [ 0, -1, 0 ], [ 0, 0, 1 ], [ 0, 0, -1 ] ];
+        cubes.forEach(b => {
+            this._ensureBakeColorAttr(b);
+            if (isWaterLike(b.userData.texture, b.userData.materialType)) return;
+            const colAttr = b.geometry.attributes.color;
+            if (!colAttr) return;
+            const g = gpos(b);
+            for (let f = 0; f < 6; f++) {
+                const n = FN[f];
+                let occ = 0, occMax = 0, br = 0, bg = 0, bb = 0, bw = 0;
+                for (let dx = -R; dx <= R; dx++) for (let dy = -R; dy <= R; dy++) for (let dz = -R; dz <= R; dz++) {
+                    if (dx === 0 && dy === 0 && dz === 0) continue;
+                    const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                    if (len > R + .001) continue;
+                    const dot = (n[0] * dx + n[1] * dy + n[2] * dz) / len;
+                    if (dot <= .06) continue;
+                    const w = dot / (len * len);
+                    occMax += w;
+                    const arr = map.get(keyf(g.x + dx, g.y + dy, g.z + dz));
+                    if (arr && arr.length) {
+                        occ += w;
+                        const a = albOf(arr[0]);
+                        br += a.r * w;
+                        bg += a.g * w;
+                        bb += a.b * w;
+                        bw += w;
+                    }
+                }
+                const aoNorm = occMax > 0 ? occ / occMax : 0;
+                const open = 1 - aoNorm;
+                let mr = 1, mg = 1, mb = 1;
+                const bright = 1 - aoStrength * aoNorm;
+                mr *= bright;
+                mg *= bright;
+                mb *= bright;
+                const skyMix = n[1] * .5 + .5;
+                const ambR = groundN.r + (skyN.r - groundN.r) * skyMix;
+                const ambG = groundN.g + (skyN.g - groundN.g) * skyMix;
+                const ambB = groundN.b + (skyN.b - groundN.b) * skyMix;
+                const sunAmt = Math.max(0, skyMix - .4) * .5;
+                const aR = ambR * (1 - sunAmt) + sunN.r * sunAmt;
+                const aG = ambG * (1 - sunAmt) + sunN.g * sunAmt;
+                const aB = ambB * (1 - sunAmt) + sunN.b * sunAmt;
+                const st = skyStrength * open;
+                mr *= 1 - st + aR * st;
+                mg *= 1 - st + aG * st;
+                mb *= 1 - st + aB * st;
+                if (bw > 0) {
+                    const r = br / bw, gc = bg / bw, bc = bb / bw;
+                    const l = r * .299 + gc * .587 + bc * .114;
+                    const bs = bleedStrength * aoNorm;
+                    mr += (r - l) * bs;
+                    mg += (gc - l) * bs;
+                    mb += (bc - l) * bs;
+                    const fill = bounceFill * aoNorm;
+                    mr += r * fill;
+                    mg += gc * fill;
+                    mb += bc * fill;
+                }
+                mr = 1 + (mr - 1) * intensity;
+                mg = 1 + (mg - 1) * intensity;
+                mb = 1 + (mb - 1) * intensity;
+                mr = Math.min(2.2, Math.max(.12, mr));
+                mg = Math.min(2.2, Math.max(.12, mg));
+                mb = Math.min(2.2, Math.max(.12, mb));
+                const base = f * 4;
+                for (let v = 0; v < 4; v++) {
+                    const idx = (base + v) * 3;
+                    colAttr.array[idx] = mr;
+                    colAttr.array[idx + 1] = mg;
+                    colAttr.array[idx + 2] = mb;
+                }
+            }
+            colAttr.needsUpdate = true;
+        });
+    },
+    applyDirectionalBake: function() {
+        const cb = document.getElementById("setting-dir-bake");
+        const on = cb ? cb.checked : false;
+        this._bakeIntensity = parseFloat(document.getElementById("setting-bake-gi-intensity")?.value ?? "1");
+        this._bakeRadius = parseInt(document.getElementById("setting-bake-gi-radius")?.value ?? "2", 10);
+        const controls = document.getElementById("dir-bake-controls");
+        if (controls) controls.style.display = on ? "" : "none";
+        this._bakeGI = on;
+        if (on) {
+            (this.blocks || []).forEach(b => this._ensureBakeColorAttr(b));
+            this.computeDirectionalBake();
+            this.syncAllObjectMaterials(true);
+        } else {
+            this.syncAllObjectMaterials(true);
+            (this.blocks || []).forEach(b => this._removeBakeColorAttr(b));
+        }
     },
     captureLocalReflection: function() {
         this.updateLocalReflections(false);
@@ -8351,6 +8571,7 @@ void main(){
     },
     setupStaticMesh: function(mesh) {
         if (!mesh) return;
+        if (this._bakeGI) this._ensureBakeColorAttr(mesh);
         mesh.updateMatrix();
         mesh.matrixAutoUpdate = false;
     },
@@ -8362,6 +8583,7 @@ void main(){
                     b.matrixAutoUpdate = false;
                 }
             });
+        });
         }
         if (newSelection) {
             newSelection.forEach(b => {
@@ -9605,7 +9827,10 @@ void main(){
             customSkyboxDataUrl: this.customSkyboxDataUrl || null,
             customSkyboxName: this.customSkyboxName || null,
             gridVisible: document.getElementById("setting-grid") ? document.getElementById("setting-grid").checked : true,
-            lightContour: document.getElementById("setting-light-contour") ? document.getElementById("setting-light-contour").checked : true
+            lightContour: document.getElementById("setting-light-contour") ? document.getElementById("setting-light-contour").checked : true,
+            dirBake: document.getElementById("setting-dir-bake") ? document.getElementById("setting-dir-bake").checked : false,
+            bakeGiIntensity: parseFloat(document.getElementById("setting-bake-gi-intensity")?.value || "1"),
+            bakeGiRadius: parseInt(document.getElementById("setting-bake-gi-radius")?.value || "2", 10)
         };
     },
     setCustomSkybox: function(dataUrl, fileName = "Custom Skybox") {
@@ -10914,6 +11139,17 @@ void main(){
                 document.getElementById("setting-light-contour").checked = data.env.lightContour !== false;
                 this.toggleLightContour(data.env.lightContour !== false);
             }
+            if (document.getElementById("setting-dir-bake")) {
+                document.getElementById("setting-dir-bake").checked = data.env.dirBake === true;
+                if (document.getElementById("setting-bake-gi-intensity")) {
+                    document.getElementById("setting-bake-gi-intensity").value = String(data.env.bakeGiIntensity ?? 1);
+                    if (document.getElementById("bake-gi-intensity-val")) document.getElementById("bake-gi-intensity-val").innerText = Number(data.env.bakeGiIntensity ?? 1).toFixed(2);
+                }
+                if (document.getElementById("setting-bake-gi-radius")) {
+                    document.getElementById("setting-bake-gi-radius").value = String(data.env.bakeGiRadius ?? 2);
+                    if (document.getElementById("bake-gi-radius-val")) document.getElementById("bake-gi-radius-val").innerText = String(data.env.bakeGiRadius ?? 2);
+                }
+            }
             this.customSkyboxDataUrl = data.env.customSkyboxDataUrl || null;
             this.customSkyboxName = data.env.customSkyboxName || null;
             const skyLabel = document.getElementById("skybox-file-name");
@@ -10959,6 +11195,7 @@ void main(){
         this.updateEnvironment();
         this.updateGraphics();
         this.syncAllObjectMaterials(true);
+        this.applyDirectionalBake();
         this.deselect();
         this.updateSelectionPanels();
     },
@@ -14296,7 +14533,7 @@ window.aiBuilder = {
             "лодка": ["boat", "ship"], "яхта": ["yacht", "boat", "ship"],
             "машandon": ["car", "vehicle"], "фоonрь": ["lamp", "light"],
             "лампа": ["lamp", "light"], "статуя": ["statue"], "gate": ["gate"],
-            "шар": ["sphere", "ball", "globe", "planet"], "сфера": ["sphere", "ball", "globe"],
+            "шар": ["sphere", "ball", "globe", "planet"], "сфе��а": ["sphere", "ball", "globe"],
             "мяч": ["ball", "sphere"], "гloboус": ["globe", "sphere", "planet"],
             "планета": ["planet", "sphere", "globe"], "круглый": ["round", "sphere", "ball"],
             "купол": ["dome", "sphere"],
