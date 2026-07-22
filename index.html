@@ -2563,6 +2563,13 @@
 
                         <p class="text-[10px] mt-1 leading-tight" style="color: var(--td-text-muted);">Sun position is fixed — it no longer moves on its own.</p>
 
+                        <label data-i18n="sceneBrightnessLabel" class="td-label block mt-3 mb-1">Scene Brightness</label>
+                        <div class="flex items-center gap-2">
+                            <input type="range" id="setting-scene-brightness" min="0.2" max="2.5" step="0.05" value="1" class="flex-1" oninput="document.getElementById('scene-brightness-val').innerText=Number(this.value).toFixed(2)+'x'; engine.applySceneBrightness(this.value);">
+                            <span id="scene-brightness-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">1.00x</span>
+                        </div>
+                        <p class="text-[10px] mt-1 leading-tight" style="color: var(--td-text-muted);">This changes scene lighting only. The skybox itself stays the same brightness.</p>
+
                         <div class="mt-3">
                             <label data-i18n="weatherLabel" class="td-label block mb-1">Weather</label>
                             <div class="relative" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
@@ -2881,6 +2888,7 @@ window.i18n = {
             skyboxLabel: "Skybox (Time of Day)",
             sunAngleLabel: "Sun Angle (Rotation)",
             weatherLabel: "Weather (Audio & Particles)",
+            sceneBrightnessLabel: "Scene Brightness",
             interfaceLabel: "Interface",
             uiScaleLabel: "UI Scale",
             graphicsLabel: "Graphics (Optimization)",
@@ -6578,6 +6586,7 @@ void main(){
         this.renderer.domElement.addEventListener("pointerup", this.onPointerUp.bind(this));
         window.addEventListener("keydown", this.onKeyDown.bind(this));
         window.addEventListener("keyup", this.onKeyUp.bind(this));
+        this.applySceneBrightness(parseFloat(localStorage.getItem("mmcg_scene_brightness_55") || "1"), false);
         this.updateEnvironment();
         this.applyCameraSensitivity(parseFloat(localStorage.getItem("mmcg_camera_sens_55") || "1"));
         this.applyCameraFov(parseFloat(localStorage.getItem("mmcg_camera_fov_55") || "60"));
@@ -6946,6 +6955,28 @@ void main(){
         const el = document.getElementById("setting-pixel-smoothing");
         if (el) el.checked = enabled;
         return enabled;
+    },
+    getSceneBrightness: function() {
+        const raw = this.sceneBrightness ?? parseFloat(localStorage.getItem("mmcg_scene_brightness_55") || "1");
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : 1;
+    },
+    applySceneBrightness: function(value = null, reapply = true) {
+        const raw = value !== null && value !== undefined ? value : (document.getElementById("setting-scene-brightness")?.value ?? localStorage.getItem("mmcg_scene_brightness_55") ?? "1");
+        const brightness = Math.min(2.5, Math.max(0.2, Number(raw) || 1));
+        this.sceneBrightness = brightness;
+        localStorage.setItem("mmcg_scene_brightness_55", String(brightness));
+        const slider = document.getElementById("setting-scene-brightness");
+        if (slider && String(slider.value) !== String(brightness)) slider.value = String(brightness);
+        const label = document.getElementById("scene-brightness-val");
+        if (label) label.innerText = brightness.toFixed(2) + "x";
+        if (reapply) {
+            this.updateEnvironment();
+            for (const light of this.manualLights || []) {
+                this.applyManualLightSettings?.(light);
+            }
+        }
+        return brightness;
     },
     getActiveEnvironmentMap: function() {
         if (this.customSkyboxEnvMap && !this.customSkyboxLoading) return this.customSkyboxEnvMap;
@@ -8606,8 +8637,11 @@ void main(){
         }
         if (mesh.material) mesh.material.visible = this.lightContourVisible;
         if (light) {
+            const brightness = this.getSceneBrightness?.() ?? 1;
+            const baseIntensity = ud._sceneBrightnessBase != null ? parseFloat(ud._sceneBrightnessBase) : parseFloat(ud.intensity ?? 4);
+            ud._sceneBrightnessBase = Number.isFinite(baseIntensity) ? baseIntensity : 4;
             light.color.copy(color);
-            light.intensity = Math.max(0, parseFloat(ud.intensity ?? 4));
+            light.intensity = Math.max(0, ud._sceneBrightnessBase) * brightness;
             light.distance = Math.max(.1, parseFloat(ud.distance ?? 18));
             light.castShadow = ud.castShadow !== false && (document.getElementById("setting-shadows")?.checked ?? true);
             if (light.isSpotLight) {
@@ -9552,6 +9586,7 @@ void main(){
             fogEnd: parseFloat(document.getElementById("setting-fog-end").value) || 250,
             sunAngle: parseFloat(document.getElementById("setting-sun-angle").value) || 180,
             sunVertical: parseFloat(document.getElementById("setting-sun-vertical")?.value) || 60,
+            sceneBrightness: parseFloat(document.getElementById("setting-scene-brightness")?.value || localStorage.getItem("mmcg_scene_brightness_55") || "1"),
             shadows: document.getElementById("setting-shadows").checked,
             shadowQuality: parseInt(document.getElementById("setting-shadow-quality")?.value ?? "2", 10),
             bloom: document.getElementById("setting-bloom").checked,
@@ -9657,13 +9692,14 @@ void main(){
         let phi = THREE.MathUtils.degToRad(sunVertical);
         let theta = THREE.MathUtils.degToRad(sunAngle);
         let bgColor = fColor;
+        const sceneBrightness = this.getSceneBrightness?.() ?? 1;
         this.setNightSky(false);
         if (skybox === "day") {
-            this.dirLight.intensity = .86;
+            this.dirLight.intensity = .86 * sceneBrightness;
             this.dirLight.color.setHex(16773852);
-            this.ambientLight.intensity = .22;
+            this.ambientLight.intensity = .22 * sceneBrightness;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .12;
+                this.hemiLight.intensity = .12 * sceneBrightness;
                 this.hemiLight.color.setHex(15267071);
                 this.hemiLight.groundColor.setHex(13088412);
             }
@@ -9671,11 +9707,11 @@ void main(){
             this.sky.visible = true;
             if (this.cloudsObj) this.cloudsObj.visible = true;
         } else if (skybox === "sunrise") {
-            this.dirLight.intensity = .72;
+            this.dirLight.intensity = .72 * sceneBrightness;
             this.dirLight.color.setHex(16761482);
-            this.ambientLight.intensity = .16;
+            this.ambientLight.intensity = .16 * sceneBrightness;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .10;
+                this.hemiLight.intensity = .10 * sceneBrightness;
                 this.hemiLight.color.setHex(16770240);
                 this.hemiLight.groundColor.setHex(12098176);
             }
@@ -9683,11 +9719,11 @@ void main(){
             this.sky.visible = true;
             if (this.cloudsObj) this.cloudsObj.visible = true;
         } else if (skybox === "dusk") {
-            this.dirLight.intensity = .62;
+            this.dirLight.intensity = .62 * sceneBrightness;
             this.dirLight.color.setHex(16742212);
-            this.ambientLight.intensity = .12;
+            this.ambientLight.intensity = .12 * sceneBrightness;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .08;
+                this.hemiLight.intensity = .08 * sceneBrightness;
                 this.hemiLight.color.setHex(16756864);
                 this.hemiLight.groundColor.setHex(9401445);
             }
@@ -9696,11 +9732,11 @@ void main(){
             this.sky.visible = true;
             if (this.cloudsObj) this.cloudsObj.visible = true;
         } else if (skybox === "night") {
-            this.dirLight.intensity = .08;
+            this.dirLight.intensity = .08 * sceneBrightness;
             this.dirLight.color.setHex(8956671);
-            this.ambientLight.intensity = .04;
+            this.ambientLight.intensity = .04 * sceneBrightness;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .02;
+                this.hemiLight.intensity = .02 * sceneBrightness;
                 this.hemiLight.color.setHex(10402047);
                 this.hemiLight.groundColor.setHex(1909296);
             }
@@ -9710,11 +9746,11 @@ void main(){
             if (this.cloudsObj) this.cloudsObj.visible = true;
             this.setNightSky(true, .85);
         } else if (skybox === "midnight") {
-            this.dirLight.intensity = .035;
+            this.dirLight.intensity = .035 * sceneBrightness;
             this.dirLight.color.setHex(6715391);
-            this.ambientLight.intensity = .02;
+            this.ambientLight.intensity = .02 * sceneBrightness;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .01;
+                this.hemiLight.intensity = .01 * sceneBrightness;
                 this.hemiLight.color.setHex(8228095);
                 this.hemiLight.groundColor.setHex(527124);
             }
@@ -9725,11 +9761,11 @@ void main(){
             this.setNightSky(true, 1);
         } else if (skybox === "custom" && this.customSkyboxTexture) {
             bgColor = "#000000";
-            this.dirLight.intensity = .78;
+            this.dirLight.intensity = .78 * sceneBrightness;
             this.dirLight.color.setHex(16777215);
-            this.ambientLight.intensity = .18;
+            this.ambientLight.intensity = .18 * sceneBrightness;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .10;
+                this.hemiLight.intensity = .10 * sceneBrightness;
                 this.hemiLight.color.setHex(16777215);
                 this.hemiLight.groundColor.setHex(11579568);
             }
@@ -10817,6 +10853,11 @@ void main(){
                 }[data.env.skybox] ?? 60;
                 document.getElementById("setting-sun-vertical").value = data.env.sunVertical !== undefined ? data.env.sunVertical : _presetVA;
                 document.getElementById("sun-vertical-val").innerText = document.getElementById("setting-sun-vertical").value + "°";
+            }
+            if (document.getElementById("setting-scene-brightness")) {
+                document.getElementById("setting-scene-brightness").value = String(data.env.sceneBrightness ?? 1);
+                document.getElementById("scene-brightness-val").innerText = Number(document.getElementById("setting-scene-brightness").value).toFixed(2) + "x";
+                engine.applySceneBrightness?.(parseFloat(document.getElementById("setting-scene-brightness").value) || 1, false);
             }
             document.getElementById("setting-shadows").checked = data.env.shadows !== false;
             if (document.getElementById("setting-shadow-quality")) {
@@ -13446,6 +13487,7 @@ window.uiManager = {
         }
         if (val("setting-ao-intensity") !== undefined) txt("ao-intensity-val", Number(val("setting-ao-intensity")).toFixed(2));
         if (val("setting-bloom-strength") !== undefined) txt("bloom-strength-val", Number(val("setting-bloom-strength")).toFixed(2));
+        if (val("setting-scene-brightness") !== undefined) txt("scene-brightness-val", Number(val("setting-scene-brightness")).toFixed(2) + "x");
         if (val("setting-reflection-distance") !== undefined) txt("reflection-distance-val", val("setting-reflection-distance") + "m");
         if (val("setting-reflection-sharpness") !== undefined) txt("reflection-sharpness-val", val("setting-reflection-sharpness"));
         if (val("setting-dof-focus") !== undefined) txt("dof-focus-val", Number(val("setting-dof-focus")).toFixed(1) + "m");
@@ -13475,6 +13517,7 @@ window.uiManager = {
             if (values["setting-camera-sensitivity"] !== undefined) engine.applyCameraSensitivity?.(parseFloat(values["setting-camera-sensitivity"]));
             if (values["setting-camera-fov"] !== undefined) engine.applyCameraFov?.(parseFloat(values["setting-camera-fov"]));
             if (values["setting-camera-move-speed"] !== undefined) engine.applyCameraMoveSpeed?.(parseFloat(values["setting-camera-move-speed"]));
+            if (values["setting-scene-brightness"] !== undefined) engine.applySceneBrightness?.(parseFloat(values["setting-scene-brightness"]), false);
             if (values["setting-hitbox-opacity"] !== undefined) engine.applyHitboxOpacity?.(parseFloat(values["setting-hitbox-opacity"]), persistLegacy);
             if (values["setting-joystick-enabled"] !== undefined) engine.applyJoystickEnabled?.(!!values["setting-joystick-enabled"], persistLegacy);
             if (values["setting-joystick-floating"] !== undefined) engine.applyJoystickFloating?.(!!values["setting-joystick-floating"], persistLegacy);
@@ -13487,6 +13530,7 @@ window.uiManager = {
             if (values["setting-pixel-ratio"] !== undefined) engine.applyPixelRatio?.(parseFloat(values["setting-pixel-ratio"]));
             if (values["setting-show-fps"] !== undefined) engine.applyFpsCounterVisibility?.(!!values["setting-show-fps"]);
             if (values["setting-pixel-smoothing"] !== undefined) engine.applyPixelSmoothing?.(!!values["setting-pixel-smoothing"]);
+            engine.applySceneBrightness?.(shared.sceneBrightness ?? 1, false);
             engine.updateEnvironment?.();
             engine.updateGraphics?.();
             if (engine.worldPaused) engine._pauseNeedsCapture = true;
@@ -13588,6 +13632,12 @@ window.uiManager = {
         if (bloom) {
             const lbl = document.getElementById("bloom-strength-val");
             if (lbl) lbl.innerText = Number(bloom.value).toFixed(2);
+        }
+        const sceneBrightness = document.getElementById("setting-scene-brightness");
+        if (sceneBrightness) {
+            sceneBrightness.value = localStorage.getItem("mmcg_scene_brightness_55") || "1";
+            const lbl = document.getElementById("scene-brightness-val");
+            if (lbl) lbl.innerText = Number(sceneBrightness.value).toFixed(2) + "x";
         }
         const refl = document.getElementById("setting-reflection-distance");
         if (refl) {
@@ -15298,7 +15348,7 @@ window.multiplayerClient = {
     pickSharedEnv: function(env = {}) {
         if (!env || typeof env !== "object") return {};
         const out = {};
-        ["skybox", "weather", "fogColor", "fogStart", "fogEnd", "sunAngle", "sunVertical", "customSkyboxDataUrl", "customSkyboxName"].forEach(k => {
+        ["skybox", "weather", "fogColor", "fogStart", "fogEnd", "sunAngle", "sunVertical", "sceneBrightness", "customSkyboxDataUrl", "customSkyboxName"].forEach(k => {
             if (env[k] !== undefined) out[k] = env[k];
         });
         return out;
@@ -15327,9 +15377,11 @@ window.multiplayerClient = {
             setVal("setting-fog-end", shared.fogEnd ?? 250);
             setVal("setting-sun-angle", shared.sunAngle ?? 180);
             setVal("setting-sun-vertical", shared.sunVertical ?? 60);
+            setVal("setting-scene-brightness", shared.sceneBrightness ?? 1);
             const txt = (id, value) => { const el = document.getElementById(id); if (el) el.innerText = value; };
             txt("sun-angle-val", (shared.sunAngle ?? 180) + "°");
             txt("sun-vertical-val", (shared.sunVertical ?? 60) + "°");
+            txt("scene-brightness-val", Number(shared.sceneBrightness ?? 1).toFixed(2) + "x");
             const skyLabel = document.getElementById("skybox-file-name");
             if ((shared.skybox || "day") === "custom" && shared.customSkyboxDataUrl) {
                 if (skyLabel) skyLabel.innerText = shared.customSkyboxName || "Custom Skybox";
