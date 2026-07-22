@@ -435,6 +435,13 @@
             overflow: hidden;
         }
 
+        .merge-mode-btn,
+        .export-type-btn {
+            background: var(--td-bg-2);
+            color: var(--td-text-dim);
+            border: 1px solid var(--td-border);
+        }
+
         .state-toggle::after,
         .merge-mode-btn::after {
             content: attr(data-state-badge);
@@ -2099,62 +2106,71 @@
                         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18" style="color: var(--td-accent);"><path d="M4 4h12v12H4zM4 8h12M8 4v12"/></svg>
                     </div>
                     <h3 data-i18n="exportTitle" class="text-sm font-semibold tracking-[0.14em] uppercase mb-1">Export to GoreBox</h3>
-                    <p data-i18n="exportDesc" class="text-xs" style="color: var(--td-text-dim); max-width: 380px; line-height: 1.4;">A ZIP archive with MapData.json (v4) and CustomTextures folder will be generated.</p>
+                    <p id="export-type-desc" data-i18n="exportDesc" class="text-xs" style="color: var(--td-text-dim); max-width: 380px; line-height: 1.4;">A ZIP archive with MapData.json (v4) and CustomTextures folder will be generated.</p>
                 </div>
 
-                <div class="flex flex-col md:flex-row" style="background: var(--td-bg-0);">
-                    <div class="flex-1 p-5" style="border-right: 1px solid var(--td-border);">
+                <div class="px-5 pt-4" style="background: var(--td-bg-0);">
+                    <div class="flex gap-1 text-[11px]">
+                        <button data-export-type="zip" onclick="uiManager.setExportType('zip')"
+                                class="export-type-btn flex-1 py-2.5 px-2 uppercase tracking-[0.1em] transition flex flex-col items-center gap-0.5" style="font-weight: 600;">
+                            <span>Save ZIP</span>
+                        </button>
+                        <button data-export-type="lit" onclick="uiManager.setExportType('lit')"
+                                class="export-type-btn flex-1 py-2.5 px-2 uppercase tracking-[0.1em] transition flex flex-col items-center gap-0.5" style="font-weight: 600;">
+                            <span>With Lighting</span>
+                        </button>
+                        <button data-export-type="glb" onclick="uiManager.setExportType('glb')"
+                                class="export-type-btn flex-1 py-2.5 px-2 uppercase tracking-[0.1em] transition flex flex-col items-center gap-0.5" style="font-weight: 600;">
+                            <span>Export GLB</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div style="background: var(--td-bg-0);">
+                    <!-- ZIP settings panel (empty) -->
+                    <div id="export-panel-zip" class="export-settings-panel px-5 pt-6 pb-7 hidden flex items-center justify-center text-center">
+                        <p class="text-[11px]" style="color: var(--td-text-muted);">This export type has no additional settings.</p>
+                    </div>
+
+                    <!-- Lighting settings panel (empty) -->
+                    <div id="export-panel-lit" class="export-settings-panel px-5 pt-6 pb-7 hidden flex items-center justify-center text-center">
+                        <p class="text-[11px]" style="color: var(--td-text-muted);">This export type has no additional settings.</p>
+                    </div>
+
+                    <!-- GLB settings panel -->
+                    <div id="export-panel-glb" class="export-settings-panel px-5 pt-4 pb-5 hidden">
                         <div class="flex items-center gap-2 mb-3">
-                            <div class="w-1.5 h-1.5" style="background: var(--td-accent);"></div>
-                            <p class="td-label td-accent">Merge Objects (GLB)</p>
+                            <div class="w-1.5 h-1.5" style="background: #b9a0ff;"></div>
+                            <p class="td-label" style="color: #b9a0ff;">Merge Objects (GLB)</p>
                         </div>
 
                         <div class="flex gap-1 text-[11px] mb-3">
                             <button data-mode="none" onclick="uiManager.setMergeMode('none')"
-                                    class="merge-mode-btn flex-1 py-2 px-2 uppercase tracking-[0.1em] transition" style="background: var(--td-accent); color: #000; border: 1px solid var(--td-accent); font-weight: 600;">
+                                    class="merge-mode-btn flex-1 py-2 px-2 uppercase tracking-[0.1em] transition" style="font-weight: 600;">
                                 Keep Separate
                             </button>
                             <button data-mode="texture" onclick="uiManager.setMergeMode('texture')"
-                                    class="merge-mode-btn flex-1 py-2 px-2 uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border); font-weight: 600;" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">
+                                    class="merge-mode-btn flex-1 py-2 px-2 uppercase tracking-[0.1em] transition" style="font-weight: 600;">
                                 By Texture
                             </button>
                             <button data-mode="all" onclick="uiManager.setMergeMode('all')"
-                                    class="merge-mode-btn flex-1 py-2 px-2 uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border); font-weight: 600;" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">
+                                    class="merge-mode-btn flex-1 py-2 px-2 uppercase tracking-[0.1em] transition" style="font-weight: 600;">
                                 All Into One
                             </button>
                         </div>
 
-                        <div class="text-[10.5px] leading-[1.4] mb-3" style="color: var(--td-text-muted);">
+                        <div class="text-[10.5px] leading-[1.4] mb-4" style="color: var(--td-text-muted);">
                             • <span style="color: var(--td-text-dim); font-weight: 600;">Keep Separate</span> — each cube is its own object<br>
                             • <span style="color: var(--td-text-dim); font-weight: 600;">By Texture</span> — merge by shared texture<br>
                             • <span style="color: var(--td-text-dim); font-weight: 600;">All Into One</span> — single object (easiest for Blender)
                         </div>
                         <label class="flex items-start gap-2 cursor-pointer">
-                            <input type="checkbox" id="toggle-glb-include-textures" checked class="mt-0.5">
+                            <input type="checkbox" id="toggle-glb-include-textures" class="mt-0.5">
                             <span class="text-[10px] leading-snug" style="color: var(--td-text-dim);">
                                 Include CustomTextures folder
                                 <span class="block" style="color: var(--td-text-muted);">(textures are also embedded in .glb)</span>
                             </span>
                         </label>
-                    </div>
-
-                    <div class="flex-1 p-5 flex flex-col gap-2">
-                        <div class="td-label mb-1" style="color: var(--td-warn);">Export Options</div>
-
-                        <button onclick="uiManager.exportToGoreBoxZIP()"
-                                class="flex items-center justify-center gap-2 w-full py-3 text-xs uppercase tracking-[0.12em] transition" style="background: var(--td-accent); color: #000; border: none; font-weight: 600;" onmouseover="this.style.background='var(--td-accent-bright)'" onmouseout="this.style.background='var(--td-accent)'">
-                            <span>Save ZIP</span>
-                        </button>
-
-                        <button onclick="uiManager.exportToGoreBoxZIPWithLighting()"
-                                class="flex items-center justify-center gap-2 w-full py-3 text-xs uppercase tracking-[0.12em] transition" style="background: rgba(255,184,74,0.1); color: var(--td-warn); border: 1px solid rgba(255,184,74,0.4); font-weight: 600;" onmouseover="this.style.background='rgba(255,184,74,0.2)'" onmouseout="this.style.background='rgba(255,184,74,0.1)'">
-                            <span>Export with Lighting</span>
-                        </button>
-
-                        <button onclick="uiManager.exportToGLBZIP()"
-                                class="flex items-center justify-center gap-2 w-full py-3 text-xs uppercase tracking-[0.12em] transition" style="background: rgba(185,160,255,0.1); color: #b9a0ff; border: 1px solid rgba(185,160,255,0.4); font-weight: 600;" onmouseover="this.style.background='rgba(185,160,255,0.2)'" onmouseout="this.style.background='rgba(185,160,255,0.1)'">
-                            <span>Export to GLB</span>
-                        </button>
                     </div>
                 </div>
 
@@ -2164,9 +2180,9 @@
                         Cancel
                     </button>
                     <div style="width: 1px; background: var(--td-border);"></div>
-                    <button onclick="uiManager.exportToGoreBoxZIP()"
+                    <button id="export-run-btn" onclick="uiManager.runSelectedExport()"
                             class="flex-1 py-3 text-center transition" style="color: var(--td-accent);" onmouseover="this.style.background='rgba(255,138,61,0.1)'" onmouseout="this.style.background='transparent'">
-                        Save ZIP
+                        <span id="export-run-btn-label">Save ZIP</span>
                     </button>
                 </div>
             </div>
@@ -12317,7 +12333,8 @@ const gameplay = {
 };
 
 window.uiManager = {
-    mergeMode: "none",
+    mergeMode: "texture",
+    exportType: "zip",
     isImageFile: function(file) {
         if (!file) return false;
         if (file.type && file.type.startsWith("image/")) return true;
@@ -12329,16 +12346,57 @@ window.uiManager = {
             const isActive = b.dataset.mode === mode;
             b.classList.toggle("is-active", isActive);
             b.classList.toggle("is-inactive", !isActive);
-            b.style.background = isActive ? "rgba(255,138,61,0.22)" : "var(--td-bg-2)";
-            b.style.color = isActive ? "#ffd7b6" : "var(--td-text-dim)";
-            b.style.borderColor = isActive ? "rgba(255,138,61,0.95)" : "var(--td-border)";
-            b.style.boxShadow = isActive ? "inset 0 0 0 1px rgba(255,255,255,0.04), 0 0 12px rgba(255,138,61,0.16)" : "none";
+            b.style.background = isActive ? "rgba(185,160,255,0.22)" : "var(--td-bg-2)";
+            b.style.color = isActive ? "#e4d9ff" : "var(--td-text-dim)";
+            b.style.border = isActive ? "1px solid rgba(185,160,255,0.95)" : "1px solid var(--td-border)";
+            b.style.boxShadow = isActive ? "inset 0 0 0 1px rgba(255,255,255,0.04), 0 0 12px rgba(185,160,255,0.16)" : "none";
+            b.onmouseover = () => { if (!b.classList.contains("is-active")) { b.style.color = "white"; b.style.borderColor = "var(--td-border-strong)"; } };
+            b.onmouseout = () => { if (!b.classList.contains("is-active")) { b.style.color = "var(--td-text-dim)"; b.style.borderColor = "var(--td-border)"; } };
         });
+    },
+    setExportType: function(type) {
+        this.exportType = type;
+        document.querySelectorAll(".export-type-btn").forEach(b => {
+            const isActive = b.dataset.exportType === type;
+            b.classList.toggle("is-active", isActive);
+            const colors = {
+                zip:  { bg: "rgba(255,138,61,0.22)",  fg: "#ffd7b6", border: "rgba(255,138,61,0.95)",  glow: "rgba(255,138,61,0.16)" },
+                lit:  { bg: "rgba(255,184,74,0.22)",   fg: "#ffe4ae", border: "rgba(255,184,74,0.95)",  glow: "rgba(255,184,74,0.16)" },
+                glb:  { bg: "rgba(185,160,255,0.22)",  fg: "#e4d9ff", border: "rgba(185,160,255,0.95)", glow: "rgba(185,160,255,0.16)" }
+            };
+            const c = colors[b.dataset.exportType];
+            b.style.background = isActive ? c.bg : "var(--td-bg-2)";
+            b.style.color = isActive ? c.fg : "var(--td-text-dim)";
+            b.style.border = isActive ? `1px solid ${c.border}` : "1px solid var(--td-border)";
+            b.style.boxShadow = isActive ? `inset 0 0 0 1px rgba(255,255,255,0.04), 0 0 12px ${c.glow}` : "none";
+            b.onmouseover = () => { if (!b.classList.contains("is-active")) { b.style.color = "white"; b.style.borderColor = "var(--td-border-strong)"; } };
+            b.onmouseout = () => { if (!b.classList.contains("is-active")) { b.style.color = "var(--td-text-dim)"; b.style.borderColor = "var(--td-border)"; } };
+        });
+
+        document.querySelectorAll(".export-settings-panel").forEach(p => p.classList.add("hidden"));
+        const panel = document.getElementById(`export-panel-${type}`);
+        if (panel) panel.classList.remove("hidden");
+
+        const desc = document.getElementById("export-type-desc");
+        const runLabel = document.getElementById("export-run-btn-label");
+        const descriptions = {
+            zip: "A ZIP archive with MapData.json (v4) and CustomTextures folder will be generated.",
+            lit: "Same as ZIP, but lighting is baked per cube face before export.",
+            glb: "Exports the map as a .glb 3D model for use in Blender and other 3D tools."
+        };
+        const runLabels = { zip: "Save ZIP", lit: "Export with Lighting", glb: "Export to GLB" };
+        if (desc) desc.textContent = descriptions[type] || descriptions.zip;
+        if (runLabel) runLabel.textContent = runLabels[type] || runLabels.zip;
+    },
+    runSelectedExport: function() {
+        if (this.exportType === "lit") return this.exportToGoreBoxZIPWithLighting();
+        if (this.exportType === "glb") return this.exportToGLBZIP();
+        return this.exportToGoreBoxZIP();
     },
     init: async function() {
         await this.renderProjectList();
         this.loadInterfaceScale();
-        this.setMergeMode(this.mergeMode || "none");
+        this.setMergeMode(this.mergeMode || "texture");
         [ "pos", "rot", "sca" ].forEach(type => {
             [ "x", "y", "z" ].forEach(axis => {
                 document.getElementById(`inp-${type}-${axis}`).addEventListener("input", () => engine.updateObjectFromUI());
@@ -13267,7 +13325,8 @@ window.uiManager = {
     },
     showExportModal: () => {
         document.getElementById("export-modal").classList.remove("hidden");
-        uiManager.setMergeMode(uiManager.mergeMode || "none");
+        uiManager.setExportType(uiManager.exportType || "zip");
+        uiManager.setMergeMode(uiManager.mergeMode || "texture");
     },
     hideExportModal: () => document.getElementById("export-modal").classList.add("hidden"),
     settingsStorageKey: "mmcg_saved_settings_snapshot_55",
@@ -13789,7 +13848,7 @@ window.uiManager = {
             await new Promise(r => setTimeout(r, 10));
             const zip = new JSZip;
             zip.file(`${projectFileName}.glb`, glbArrayBuffer);
-            const includeTexturesInZip = document.getElementById("toggle-glb-include-textures")?.checked ?? true;
+            const includeTexturesInZip = document.getElementById("toggle-glb-include-textures")?.checked ?? false;
             if (includeTexturesInZip) {
                 const customTexFolder = zip.folder("CustomTextures");
                 usedTextureKeys.forEach(key => {
