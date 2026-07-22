@@ -2132,9 +2132,33 @@
                         <p class="text-[11px]" style="color: var(--td-text-muted);">This export type has no additional settings.</p>
                     </div>
 
-                    <!-- Lighting settings panel (empty) -->
-                    <div id="export-panel-lit" class="export-settings-panel px-5 pt-6 pb-7 hidden flex items-center justify-center text-center">
-                        <p class="text-[11px]" style="color: var(--td-text-muted);">This export type has no additional settings.</p>
+                    <!-- Lighting settings panel -->
+                    <div id="export-panel-lit" class="export-settings-panel px-5 pt-4 pb-5 hidden">
+                        <div class="flex items-center gap-2 mb-3">
+                            <div class="w-1.5 h-1.5" style="background: var(--td-accent);"></div>
+                            <p class="td-label" style="color: var(--td-accent);">Baked Texture Quality</p>
+                        </div>
+                        <div class="flex gap-1 text-[11px] mb-3">
+                            <button data-bake-quality="high" onclick="uiManager.setBakeTextureQuality('high')"
+                                    class="bake-quality-btn merge-mode-btn flex-1 py-2 px-2 uppercase tracking-[0.1em] transition" style="font-weight: 600;">
+                                High
+                            </button>
+                            <button data-bake-quality="medium" onclick="uiManager.setBakeTextureQuality('medium')"
+                                    class="bake-quality-btn merge-mode-btn flex-1 py-2 px-2 uppercase tracking-[0.1em] transition" style="font-weight: 600;">
+                                Medium
+                            </button>
+                            <button data-bake-quality="low" onclick="uiManager.setBakeTextureQuality('low')"
+                                    class="bake-quality-btn merge-mode-btn flex-1 py-2 px-2 uppercase tracking-[0.1em] transition" style="font-weight: 600;">
+                                Low
+                            </button>
+                            <button data-bake-quality="png" onclick="uiManager.setBakeTextureQuality('png')"
+                                    class="bake-quality-btn merge-mode-btn flex-1 py-2 px-2 uppercase tracking-[0.1em] transition" style="font-weight: 600;">
+                                PNG (Max)
+                            </button>
+                        </div>
+                        <div id="bake-quality-desc" class="text-[10.5px] leading-[1.4]" style="color: var(--td-text-muted);">
+                            JPEG ~82% quality — good balance of size and visual quality, roughly 2-3x smaller than PNG.
+                        </div>
                     </div>
 
                     <!-- GLB settings panel -->
@@ -10006,8 +10030,12 @@ void main(){
             }
         };
     },
-    bakeBlockFaceTextures: async function(progressCb) {
+    bakeBlockFaceTextures: async function(progressCb, options) {
         const BAKE_SIZE = 512;
+        const bakeFormat = (options && options.format) || "jpeg";
+        const bakeQuality = (options && typeof options.quality === "number") ? options.quality : .82;
+        const bakeMime = bakeFormat === "png" ? "image/png" : "image/jpeg";
+        const bakeExt = bakeFormat === "png" ? "png" : "jpg";
         const FACES = [ {
             id: "px",
             normal: new THREE.Vector3(1, 0, 0),
@@ -10158,6 +10186,7 @@ void main(){
         renderer.setRenderTarget(null);
         renderer.render(this.scene, this.camera);
         const bakedTextures = {};
+        const bakedTextureExt = {};
         const tmpPos = new THREE.Vector3, tmpQuat = new THREE.Quaternion, tmpScale = new THREE.Vector3;
         const worldNormal = new THREE.Vector3, worldTangent = new THREE.Vector3, worldBitangent = new THREE.Vector3, faceCenter = new THREE.Vector3;
         const camPos = new THREE.Vector3, camTarget = new THREE.Vector3, camUp = new THREE.Vector3;
@@ -10372,9 +10401,20 @@ void main(){
                         imageData.data.set(pixelBuffer.subarray(srcStart, srcStart + rowBytes), dstStart);
                     }
                     pngCtx.putImageData(imageData, 0, 0);
-                    const dataUrl = pngCanvas.toDataURL("image/png");
+                    let bakeCanvasForExport = pngCanvas;
+                    if (bakeMime === "image/jpeg") {
+                        bakeCanvasForExport = document.createElement("canvas");
+                        bakeCanvasForExport.width = BAKE_SIZE;
+                        bakeCanvasForExport.height = BAKE_SIZE;
+                        const jpgCtx = bakeCanvasForExport.getContext("2d");
+                        jpgCtx.fillStyle = "#000000";
+                        jpgCtx.fillRect(0, 0, BAKE_SIZE, BAKE_SIZE);
+                        jpgCtx.drawImage(pngCanvas, 0, 0);
+                    }
+                    const dataUrl = bakeCanvasForExport.toDataURL(bakeMime, bakeQuality);
                     const matName = `Lit_${cube.uuid.slice(0, 8)}_${face.id}`;
                     bakedTextures[matName] = dataUrl;
+                    bakedTextureExt[matName] = bakeExt;
                     newDecalDefs.push({
                         cubeRef: cube,
                         faceId: face.id,
@@ -10413,6 +10453,7 @@ void main(){
         }
         return {
             bakedTextures: bakedTextures,
+            bakedTextureExt: bakedTextureExt,
             newDecalDefs: newDecalDefs,
             litCubes: litCubes
         };
@@ -12342,7 +12383,7 @@ window.uiManager = {
     },
     setMergeMode: function(mode) {
         this.mergeMode = mode;
-        document.querySelectorAll(".merge-mode-btn").forEach(b => {
+        document.querySelectorAll(".merge-mode-btn[data-mode]").forEach(b => {
             const isActive = b.dataset.mode === mode;
             b.classList.toggle("is-active", isActive);
             b.classList.toggle("is-inactive", !isActive);
@@ -12353,6 +12394,36 @@ window.uiManager = {
             b.onmouseover = () => { if (!b.classList.contains("is-active")) { b.style.color = "white"; b.style.borderColor = "var(--td-border-strong)"; } };
             b.onmouseout = () => { if (!b.classList.contains("is-active")) { b.style.color = "var(--td-text-dim)"; b.style.borderColor = "var(--td-border)"; } };
         });
+    },
+    bakeQualityPresets: {
+        high: { format: "jpeg", quality: .92, label: "High" },
+        medium: { format: "jpeg", quality: .82, label: "Medium" },
+        low: { format: "jpeg", quality: .65, label: "Low" },
+        png: { format: "png", quality: 1, label: "PNG (Max)" }
+    },
+    bakeQualityDescriptions: {
+        high: "JPEG ~92% quality — visually near-identical to PNG, roughly 1.5-2x smaller.",
+        medium: "JPEG ~82% quality — good balance of size and visual quality, roughly 2-3x smaller than PNG.",
+        low: "JPEG ~65% quality — smallest files, minor visible softening on fine detail, roughly 4-6x smaller than PNG.",
+        png: "Lossless PNG — largest files, maximum quality (previous default behavior)."
+    },
+    setBakeTextureQuality: function(preset) {
+        const presetData = this.bakeQualityPresets[preset] || this.bakeQualityPresets.medium;
+        this.bakeTextureQuality = { format: presetData.format, quality: presetData.quality };
+        this.bakeTextureQualityPreset = preset;
+        document.querySelectorAll(".bake-quality-btn").forEach(b => {
+            const isActive = b.dataset.bakeQuality === preset;
+            b.classList.toggle("is-active", isActive);
+            b.classList.toggle("is-inactive", !isActive);
+            b.style.background = isActive ? "rgba(255,138,61,0.22)" : "var(--td-bg-2)";
+            b.style.color = isActive ? "#ffd7b6" : "var(--td-text-dim)";
+            b.style.border = isActive ? "1px solid rgba(255,138,61,0.95)" : "1px solid var(--td-border)";
+            b.style.boxShadow = isActive ? "inset 0 0 0 1px rgba(255,255,255,0.04), 0 0 12px rgba(255,138,61,0.16)" : "none";
+            b.onmouseover = () => { if (!b.classList.contains("is-active")) { b.style.color = "white"; b.style.borderColor = "var(--td-border-strong)"; } };
+            b.onmouseout = () => { if (!b.classList.contains("is-active")) { b.style.color = "var(--td-text-dim)"; b.style.borderColor = "var(--td-border)"; } };
+        });
+        const descEl = document.getElementById("bake-quality-desc");
+        if (descEl) descEl.textContent = this.bakeQualityDescriptions[preset] || this.bakeQualityDescriptions.medium;
     },
     setExportType: function(type) {
         this.exportType = type;
@@ -12397,6 +12468,7 @@ window.uiManager = {
         await this.renderProjectList();
         this.loadInterfaceScale();
         this.setMergeMode(this.mergeMode || "texture");
+        this.setBakeTextureQuality(this.bakeTextureQualityPreset || "medium");
         [ "pos", "rot", "sca" ].forEach(type => {
             [ "x", "y", "z" ].forEach(axis => {
                 document.getElementById(`inp-${type}-${axis}`).addEventListener("input", () => engine.updateObjectFromUI());
@@ -13616,11 +13688,12 @@ window.uiManager = {
             if (progBar) progBar.style.width = "0%";
             if (progText) progText.innerText = i18n.t("bakePreparing") || "Preparing…";
             await new Promise(r => setTimeout(r, 30));
+            const bakeQualitySetting = this.bakeTextureQuality || { format: "jpeg", quality: .82 };
             const bakeResult = await engine.bakeBlockFaceTextures((done, total) => {
                 const pct = total > 0 ? Math.round(done / total * 100) : 0;
                 if (progBar) progBar.style.width = pct + "%";
                 if (progText) progText.innerText = `${i18n.t("bakingFace") || "Baking face"} ${done} / ${total}`;
-            });
+            }, bakeQualitySetting);
             if (progText) progText.innerText = i18n.t("bakeAssemblingZip") || "Assembling ZIP…";
             await new Promise(r => setTimeout(r, 10));
             const zip = new JSZip;
@@ -13629,8 +13702,9 @@ window.uiManager = {
             const customTexFolder = zip.folder("CustomTextures");
             for (const matName in bakeResult.bakedTextures) {
                 const dataUrl = bakeResult.bakedTextures[matName];
+                const ext = (bakeResult.bakedTextureExt && bakeResult.bakedTextureExt[matName]) || "png";
                 const base64Data = dataUrl.split(",")[1];
-                if (base64Data) customTexFolder.file(`${matName}.png`, base64Data, {
+                if (base64Data) customTexFolder.file(`${matName}.${ext}`, base64Data, {
                     base64: true
                 });
             }
