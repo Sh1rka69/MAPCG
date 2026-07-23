@@ -7161,22 +7161,69 @@ void main(){
 
     _initEnvReflectionCamera: function() {
         const size = this._envReflectionQuality;
-        // In Three.js r160, CubeCamera takes (near, far, WebGLCubeRenderTarget)
-        const cubeRT = new THREE.WebGLCubeRenderTarget(size, {
-            format: THREE.RGBAFormat,
+        
+        const rtOptions = {
             generateMipmaps: true,
             minFilter: THREE.LinearMipmapLinearFilter,
-            magFilter: THREE.LinearFilter
-        });
-        this._envReflectionCubeCamera = new THREE.CubeCamera(0.1, 2000, cubeRT);
-        // CRITICAL: the CubeCamera's 6 internal PerspectiveCameras only get a
-        // correct world matrix during render if the CubeCamera itself is part
-        // of the scene graph. Without this, matrix updates can desync between
-        // faces, causing some faces to render stale/blank (black) or from a
-        // wrong orientation (crooked reflections).
+            magFilter: THREE.LinearFilter,
+            format: THREE.RGBAFormat,
+            colorSpace: THREE.SRGBColorSpace,
+        };
+        
+        this._envCaptureRT1 = new THREE.WebGLCubeRenderTarget(size, rtOptions);
+        this._envCaptureRT2 = new THREE.WebGLCubeRenderTarget(size, rtOptions);
+        this._envBlendedRT = new THREE.WebGLCubeRenderTarget(size, rtOptions);
+
+        this._envReflectionCubeCamera = new THREE.CubeCamera(0.1, 2000, this._envCaptureRT1);
         this.scene.add(this._envReflectionCubeCamera);
-        this._envReflectionRenderTarget = cubeRT;
-        this._envReflectionTexture = cubeRT.texture;
+
+        this._envBlendCubeCamera = new THREE.CubeCamera(0.1, 10, this._envBlendedRT);
+        this._envBlendScene = new THREE.Scene();
+        
+        this._envBlendMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                envMap1: { value: this._envCaptureRT1.texture },
+                envMap2: { value: this._envCaptureRT2.texture },
+                blend: { value: 0.0 }
+            },
+            vertexShader: `
+                varying vec3 vWorldDirection;
+                void main() {
+                    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                    vWorldDirection = normalize(worldPosition.xyz);
+                    gl_Position = projectionMatrix * viewMatrix * worldPosition;
+                }
+            `,
+            fragmentShader: `
+                uniform samplerCube envMap1;
+                uniform samplerCube envMap2;
+                uniform float blend;
+                varying vec3 vWorldDirection;
+                void main() {
+                    // Just pass the direction as-is to copy the cubemap exactly
+                    vec3 dir = vWorldDirection;
+                    vec4 color1 = textureCube(envMap1, dir);
+                    vec4 color2 = textureCube(envMap2, dir);
+                    gl_FragColor = mix(color1, color2, blend);
+                }
+            `,
+            side: THREE.BackSide,
+            depthWrite: false,
+            depthTest: false
+        });
+        
+        const boxGeom = new THREE.BoxGeometry(2, 2, 2);
+        this._envBlendMesh = new THREE.Mesh(boxGeom, this._envBlendMaterial);
+        this._envBlendScene.add(this._envBlendMesh);
+        this._envBlendScene.add(this._envBlendCubeCamera);
+
+        this._activeCaptureRT = 1;
+        this._envReflectionTexture = this._envBlendedRT.texture;
+        
+        this._envTransitionStartTime = 0;
+        this._envTransitionDuration = 0;
+        this._envIsTransitioning = false;
+        this._envFirstCapture = true;
     },
 
     _disposeEnvReflectionCamera: function() {
@@ -7184,43 +7231,43 @@ void main(){
             this.scene.remove(this._envReflectionCubeCamera);
             this._envReflectionCubeCamera = null;
         }
-        if (this._envReflectionRenderTarget) {
-            try { this._envReflectionRenderTarget.dispose(); } catch (e) {}
-            this._envReflectionRenderTarget = null;
-        }
+        [this._envCaptureRT1, this._envCaptureRT2, this._envBlendedRT].forEach(rt => {
+            if (rt) { try { rt.dispose(); } catch(e) {} }
+        });
+        this._envCaptureRT1 = null;
+        this._envCaptureRT2 = null;
+        this._envBlendedRT = null;
         this._envReflectionTexture = null;
+        
+        if (this._envBlendMaterial) {
+            this._envBlendMaterial.dispose();
+            this._envBlendMaterial = null;
+        }
+        if (this._envBlendMesh) {
+            this._envBlendMesh.geometry.dispose();
+            this._envBlendMesh = null;
+        }
+        this._envBlendScene = null;
+        this._envBlendCubeCamera = null;
+        this._envIsTransitioning = false;
     },
 
     _captureEnvReflection: function() {
-        if (!this._envReflectionEnabled || !this._envReflectionCubeCamera || !this._envReflectionRenderTarget || this._envReflectionCapturing) return;
+        if (!this._envReflectionEnabled || !this._envReflectionCubeCamera || this._envReflectionCapturing) return;
         this._envReflectionCapturing = true;
         const status = document.getElementById("env-reflection-status");
         if (status) status.innerText = "Capturing...";
 
-        // Position the cube camera at the main camera's position
         const camPos = this.camera.position;
         this._envReflectionCubeCamera.position.copy(camPos);
-        // Force an immediate, synchronous matrix update. Relying on the next
-        // render-loop auto-update is what caused some faces to be captured
-        // one frame "late" (stale position) while others weren't, producing
-        // the mismatched/crooked look between faces.
         this._envReflectionCubeCamera.updateMatrixWorld(true);
 
-        // Temporarily hide objects that shouldn't be in the reflection
-        // (the cube camera itself, gizmos, water, etc.)
         const prevVisible = [];
-        const hide = (obj) => {
-            if (obj && obj.visible) { prevVisible.push(obj); obj.visible = false; }
-        };
+        const hide = (obj) => { if (obj && obj.visible) { prevVisible.push(obj); obj.visible = false; } };
         hide(this.transformControl);
         hide(this.transformGroup);
-        // Hide spawn point indicator
         hide(this.spawnPointObj);
-        // Hide light contours
         this.manualLights?.forEach(hide);
-        // Hide water surfaces themselves: capturing water while it already
-        // has an envMap applied makes it reflect itself, which produces
-        // black/garbled faces on the cube pointing toward the water plane.
         this.blocks?.forEach(obj => {
             if (!obj?.userData || !obj.material) return;
             const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
@@ -7228,18 +7275,54 @@ void main(){
             if (isWater) hide(obj);
         });
 
-        // Render the cubemap - update() internally renders all 6 faces
+        // Determine which RT to capture into
+        const targetRT = this._activeCaptureRT === 1 ? this._envCaptureRT2 : this._envCaptureRT1;
+        this._envReflectionCubeCamera.renderTarget = targetRT;
+
         try {
             this._envReflectionCubeCamera.update(this.renderer, this.scene);
         } catch (e) {
             console.warn("[EnvReflection] Capture failed:", e);
         }
 
-        // Restore hidden objects
         prevVisible.forEach(obj => { obj.visible = true; });
 
-        // Apply the captured cubemap to all cubes
-        this._applyEnvMapToCubes(this._envReflectionTexture);
+        // Setup transition
+        if (this._envFirstCapture) {
+            // First time: copy to both or just use same for both
+            const otherRT = this._activeCaptureRT === 1 ? this._envCaptureRT1 : this._envCaptureRT2;
+            this._envReflectionCubeCamera.renderTarget = otherRT;
+            this._envReflectionCubeCamera.update(this.renderer, this.scene);
+            
+            this._envBlendMaterial.uniforms.envMap1.value = this._envCaptureRT1.texture;
+            this._envBlendMaterial.uniforms.envMap2.value = this._envCaptureRT2.texture;
+            this._envBlendMaterial.uniforms.blend.value = 0.0;
+            
+            // Render to blended RT once
+            this._envBlendCubeCamera.update(this.renderer, this._envBlendScene);
+            this._applyEnvMapToCubes(this._envReflectionTexture);
+            
+            this._envFirstCapture = false;
+        } else {
+            // Start transition
+            this._activeCaptureRT = this._activeCaptureRT === 1 ? 2 : 1;
+            this._envTransitionStartTime = performance.now();
+            
+            // The higher the interval (seconds), the smoother (longer) the transition.
+            // Using 80% of the interval so it definitely finishes before the next capture.
+            const intervalMs = this._envReflectionInterval * 1000;
+            this._envTransitionDuration = intervalMs * 0.8;
+            
+            if (this._activeCaptureRT === 1) {
+                this._envBlendMaterial.uniforms.envMap1.value = this._envCaptureRT1.texture;
+                this._envBlendMaterial.uniforms.envMap2.value = this._envCaptureRT2.texture;
+            } else {
+                this._envBlendMaterial.uniforms.envMap1.value = this._envCaptureRT2.texture;
+                this._envBlendMaterial.uniforms.envMap2.value = this._envCaptureRT1.texture;
+            }
+            
+            this._envIsTransitioning = true;
+        }
 
         this._envReflectionLastCapturePos = camPos.clone();
         this._envReflectionCapturing = false;
@@ -11228,8 +11311,33 @@ void main(){
             iPause.style.display = isFrozen ? "none" : "";
         }
     },
+    _updateEnvReflectionBlend: function() {
+        if (!this._envIsTransitioning) return;
+        const now = performance.now();
+        let progress = (now - this._envTransitionStartTime) / this._envTransitionDuration;
+        
+        if (progress >= 1.0) {
+            progress = 1.0;
+            this._envIsTransitioning = false;
+        }
+        
+        // Use smoothstep for better visual transition
+        const smoothProgress = progress * progress * (3.0 - 2.0 * progress);
+        
+        this._envBlendMaterial.uniforms.blend.value = smoothProgress;
+        
+        try {
+            this._envBlendCubeCamera.update(this.renderer, this._envBlendScene);
+        } catch (e) {}
+    },
+
     animate: function() {
         requestAnimationFrame(this.animate.bind(this));
+        
+        if (this._envIsTransitioning) {
+            this._updateEnvReflectionBlend();
+        }
+        
         const _rawDt = this.clock.getDelta();
         const dt = this.worldPaused ? 0 : _rawDt;
         weatherUniforms.uTime.value += dt;
