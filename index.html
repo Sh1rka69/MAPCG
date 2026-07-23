@@ -2712,18 +2712,37 @@
                             </div>
                         </div>
 
-                        <label class="flex items-center gap-2 mb-2 cursor-pointer">
-                            <input type="checkbox" id="setting-reflections" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();">
-                            <span class="text-xs font-semibold" style="color: var(--td-ok);" data-i18n="reflections">Reflections (Heavy)</span>
-                        </label>
-                        <div class="pl-7 mb-2">
-                            <div class="flex items-center gap-2 mb-1">
-                                <label class="td-label" style="font-size: 9px;">Sharpness</label>
-                                <input type="range" id="setting-reflection-sharpness" min="0" max="100" value="80" class="flex-1" oninput="document.getElementById('reflection-sharpness-val').innerText = this.value; engine._reflectionSharpness = parseFloat(this.value)/100;" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();">
-                                <span id="reflection-sharpness-val" class="mono text-xs w-8 text-right" style="color: var(--td-ok);">80</span>
+                        <div class="mb-2 p-2" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
+                            <label class="flex items-center gap-2 mb-2 cursor-pointer">
+                                <input type="checkbox" id="setting-env-reflections" onchange="engine.toggleEnvReflections(this.checked)">
+                                <span class="text-xs font-semibold" style="color: var(--td-info);">Environment Reflections</span>
+                            </label>
+                            <div id="env-reflection-controls" style="display:none;">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <label class="td-label" style="font-size: 9px; width: 62px;">Quality</label>
+                                    <select id="setting-env-reflection-quality" onchange="engine.setEnvReflectionionQuality(parseInt(this.value));" class="flex-1 bg-transparent text-[var(--td-text)] p-1.5 outline-none text-xs" style="background-color: var(--td-bg-1); border: 1px solid var(--td-border);">
+                                        <option value="64">64px (Fastest)</option>
+                                        <option value="128">128px (Very Fast)</option>
+                                        <option value="256">256px (Fast)</option>
+                                        <option value="512" selected>512px (Balanced)</option>
+                                        <option value="1024">1024px (High)</option>
+                                        <option value="2048">2048px (Ultra)</option>
+                                    </select>
+                                </div>
+                                <div class="flex items-center gap-2 mb-2">
+                                    <label class="td-label" style="font-size: 9px; width: 62px;">Interval</label>
+                                    <input type="range" id="setting-env-reflection-interval" min="0.02" max="30" step="0.01" value="30" style="direction: rtl;" class="flex-1" oninput="document.getElementById('env-reflection-interval-val').innerText = (parseFloat(this.value).toFixed(2)) + 's';" onchange="engine.setEnvReflectionInterval(parseFloat(this.value));">
+                                    <span id="env-reflection-interval-val" class="mono text-xs w-10 text-right" style="color: var(--td-ok);">30.0s</span>
+                                </div>
+                                <button onclick="engine.setAllReflectionsBlurZero();" class="w-full mb-2 px-2 py-1.5 text-xs uppercase tracking-[0.1em] transition" style="background: var(--td-bg-1); border: 1px solid var(--td-border); color: var(--td-text);" onmouseover="this.style.borderColor='var(--td-accent)'; this.style.color='var(--td-accent)'" onmouseout="this.style.borderColor='var(--td-border)'; this.style.color='var(--td-text)'">Set All Materials Blur to 10</button>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <label class="td-label" style="font-size: 9px; width: 62px;">Status</label>
+                                    <span id="env-reflection-status" class="text-[10px] mono" style="color: var(--td-text-muted);">Disabled</span>
+                                </div>
+                                <p class="text-[10px] leading-tight mt-1" style="color: var(--td-text-muted);">Captures environment around camera and applies to all cubes. Interval controls how often (1–120s).</p>
                             </div>
-                            <p class="text-[10px] leading-tight" style="color: var(--td-text-muted);">Ray-traced reflections + GI. Heavy on GPU!</p>
                         </div>
+
 
                         <label class="flex items-center gap-2 mb-2 cursor-pointer">
                             <input type="checkbox" id="setting-dof" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();">
@@ -2895,7 +2914,6 @@ window.i18n = {
             dynShadows: "Dynamic Shadows",
             bloom: "Bloom (Object/Lightning Glow)",
             ssao: "Corner Shadows",
-            rayTracing: "Ray Tracing",
             waterWaves: "Water Waves",
             textureSmoothing: "Texture Smoothing",
             pixelSmoothing: "Pixel Smoothing",
@@ -5609,7 +5627,6 @@ const engine = {
     composer: null,
     bloomPass: null,
     ssaoPass: null,
-    rtPass: null,
     dofPass: null,
     _renderSkipFrames: 0,
     orbit: null,
@@ -6193,7 +6210,7 @@ const engine = {
             const tanHalfFovY = 1 / this.camera.projectionMatrix.elements[5];
             const tanHalfFovX = 1 / this.camera.projectionMatrix.elements[0];
             if (this._depthPackMat) this._depthPackMat.uniforms.uFar.value = far;
-            [ this.ssaoPass, this.rtPass ].forEach(pass => {
+            [ this.ssaoPass ].forEach(pass => {
                 if (!pass || !pass.uniforms) return;
                 if (pass.uniforms.uFar) pass.uniforms.uFar.value = far;
                 if (pass.uniforms.uTanHalfFovX) pass.uniforms.uTanHalfFovX.value = tanHalfFovX;
@@ -6244,81 +6261,11 @@ const engine = {
         this.bloomPass = new UnrealBloomPass(new THREE.Vector2(_cw, _ch), .65, .22, .92);
         this.bloomPass.enabled = false;
         this.composer.addPass(this.bloomPass);
-        const _rtShader = {
-            uniforms: {
-                tDiffuse: {
-                    value: null
-                },
-                tDepth: {
-                    value: null
-                },
-                resolution: {
-                    value: new THREE.Vector2(_cw, _ch)
-                },
-                uDepthResolution: {
-                    value: new THREE.Vector2(Math.floor(_cw / 2), Math.floor(_ch / 2))
-                },
-                proj: {
-                    value: new THREE.Matrix4
-                },
-                rtStrength: {
-                    value: .85
-                },
-                uSharpness: {
-                    value: .8
-                },
-                uFar: {
-                    value: this.camera.far
-                },
-                uTanHalfFovX: {
-                    value: 1
-                },
-                uTanHalfFovY: {
-                    value: 1
-                }
-            },
-            vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-            fragmentShader: `\n                        precision highp float;\n                        uniform sampler2D tDiffuse;\n                        uniform sampler2D tDepth;\n                        uniform sampler2D tPrevFrame;\n                        uniform vec2      resolution;       /* full output size — IGN + edge fade */\n                        uniform vec2      uDepthResolution; /* half-res depth texture — texel offsets */\n                        uniform mat4      proj;\n                        uniform mat4      uPrevViewProj;     /* previous frame's world→clip matrix */\n                        uniform mat4      uInvView;          /* this frame's view→world matrix */\n                        uniform vec3      uCamPos;           /* this frame's world-space camera position */\n                        uniform float     uHistoryValid;     /* 0 = first frame / just resized, skip blend */\n                        uniform float     uCameraMoved;      /* 0..1 — larger camera motion → trust history less */\n                        uniform float     rtStrength;\n                        uniform float     uSharpness;\n                        uniform float     uFar;\n                        uniform float     uTanHalfFovX;\n                        uniform float     uTanHalfFovY;\n                        varying vec2 vUv;\n\n                        /* Unpacking лandnotйbutй глубandны andз RGBA8 (кросс-платформенbut, without hardware depth-textures) */\n                        float unpackDepth(vec4 rgba) {\n                            const vec4 bitShifts = vec4(1.0/16777216.0, 1.0/65536.0, 1.0/256.0, 1.0);\n                            return dot(rgba, bitShifts);\n                        }\n                        /* .x = лandnotйonя глубandon (view-space -Z, метры), .y = 1.0 if это «notбо» (notт геометрandand) */\n                        vec2 readDepth(vec2 uv) {\n                            vec4 raw = texture2D(tDepth, uv);\n                            if (raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);\n                            return vec2(unpackDepth(raw) * uFar, 0.0);\n                        }\n\n                        vec3 getViewPos(vec2 uv, float linZ) {\n                            vec2 ndc = uv * 2.0 - 1.0;\n                            return vec3(ndc.x * uTanHalfFovX * linZ, ndc.y * uTanHalfFovY * linZ, -linZ);\n                        }\n\n                        vec2 viewToUv(vec3 p) {\n                            vec4 clip = proj * vec4(p, 1.0);\n                            return (clip.xy / clip.w) * 0.5 + 0.5;\n                        }\n\n                        float IGN(vec2 pix) {\n                            return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));\n                        }\n\n                        /* Reads the reflection colour with a small roughness-weighted multi-tap\n                           blur. A single texel lookup at the hit point is what made reflections\n                           look blocky/pixelated at a distance (each screen pixel maps to a large\n                           world area). Averaging a few neighbouring taps softens that without\n                           costing extra rays. */\n                        vec3 resolveReflectionColor(vec2 hitUV, float roughness) {\n                            vec2 px = 1.0 / resolution;\n                            float r = 1.0 + roughness * 2.5;\n                            vec3 sum = texture2D(tDiffuse, hitUV).rgb * 4.0;\n                            sum += texture2D(tDiffuse, hitUV + vec2( px.x,  0.0) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2(-px.x,  0.0) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2( 0.0,  px.y) * r).rgb;\n                            sum += texture2D(tDiffuse, hitUV + vec2( 0.0, -px.y) * r).rgb;\n                            return sum / 8.0;\n                        }\n\n                        void main() {\n                            vec4  col  = texture2D(tDiffuse, vUv);\n                            vec2  centerD = readDepth(vUv);\n                            /* Notбо — reflect notчit */\n                            if (centerD.y > 0.5) { gl_FragColor = col; return; }\n\n                            vec2  texel = 1.0 / uDepthResolution; /* depth-tex res for correct neighbor taps */\n                            vec3  pos   = getViewPos(vUv, centerD.x);\n\n                            /* ── Стабandльonя реконструкцandя butрмалand (см. AO-шейдер intoыше — тот same fix:\n                               центральonя разbutсть on плоскandх участках, so шintoы кубоinto not даintoалand\n                               скачущую butрмаль and, как следстintoandе, дрожащandе отраsameнandя). ── */\n                            vec2 dR  = readDepth(vUv + vec2( texel.x, 0.0));\n                            vec2 dL  = readDepth(vUv - vec2( texel.x, 0.0));\n                            vec2 dU  = readDepth(vUv + vec2(0.0,  texel.y));\n                            vec2 dDn = readDepth(vUv - vec2(0.0,  texel.y));\n                            vec3 pR = getViewPos(vUv + vec2( texel.x, 0.0), dR.x);\n                            vec3 pL = getViewPos(vUv - vec2( texel.x, 0.0), dL.x);\n                            vec3 pU = getViewPos(vUv + vec2(0.0,  texel.y), dU.x);\n                            vec3 pD = getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);\n                            float edgeScale = max(0.001, centerD.x) * 0.06;\n                            float wx = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dR.x - dL.x));\n                            float wy = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dU.x - dDn.x));\n                            vec3 dXEdge = (abs(dR.x - centerD.x) < abs(centerD.x - dL.x)) ? (pR - pos) : (pos - pL);\n                            vec3 dYEdge = (abs(dU.x - centerD.x) < abs(centerD.x - dDn.x)) ? (pU - pos) : (pos - pD);\n                            vec3 dX = mix(dXEdge, (pR - pL) * 0.5, wx);\n                            vec3 dY = mix(dYEdge, (pU - pD) * 0.5, wy);\n                            vec3 N = normalize(cross(dX, dY));\n                            if (N.z < 0.0) N = -N;\n\n                            /* ── Трассandроintoка отражёнbutго луча into view-space ── */\n                            vec3  V = normalize(pos);           /* камера into (0,0,0) */\n                            float roughness = clamp(1.0 - uSharpness, 0.0, 1.0);\n                            vec3 randDir = vec3(IGN(vUv * resolution + 0.1) - 0.5, IGN(vUv * resolution + 0.2) - 0.5, IGN(vUv * resolution + 0.3) - 0.5);\n                            vec3  R = normalize(reflect(V, N) + randDir * roughness * 0.06);\n                            float jitter    = IGN(floor(vUv * resolution));\n                            /* Perf: dropped 22→14 steps. Temporal reprojection (below) accumulates\n                               samples across frames, so a single frame's ray no longer needs to be\n                               this precise — the history blend hides the coarser marching, but the\n                               GPU cost of the most expensive pass in the whole pipeline drops by\n                               ~35%. This was the single biggest FPS cost in the renderer. */\n                            const int   STEPS   = 14;\n                            const float MAXDIST = 34.0;\n                            float stepLen   = MAXDIST / float(STEPS);\n                            float thickness = 0.9;\n\n                            float hit = 0.0;\n                            vec2  hitUV = vUv;\n                            float t = stepLen * (0.35 + 0.65 * jitter);\n                            float prevT = 0.0;\n                            for (int i = 0; i < STEPS; i++) {\n                                vec3 p  = pos + R * t;\n                                if (p.z > -0.05) break;                 /* луч ушёл за камеру */\n                                vec2 uv2 = viewToUv(p);\n                                if (uv2.x < 0.0 || uv2.x > 1.0 || uv2.y < 0.0 || uv2.y > 1.0) break;\n                                vec2 sD = readDepth(uv2);\n                                if (sD.y < 0.5) {\n                                    float sceneZ = -sD.x;\n                                    float diff   = sceneZ - p.z;        /* >0 когда луч зашёл за byintoерхbutсть */\n                                    if (diff > 0.0 && diff < thickness + t * 0.06) {\n                                        /* Binary refinement: 3 iterations is enough precision once\n                                           temporal accumulation smooths the result over several frames —\n                                           trimmed from 4 for perf, edge crispness loss is not visible\n                                           after the history blend. */\n                                        float lo = prevT, hi = t;\n                                        for (int j = 0; j < 3; j++) {\n                                            float mid = (lo + hi) * 0.5;\n                                            vec3  pm  = pos + R * mid;\n                                            vec2  uvm = viewToUv(pm);\n                                            vec2  sDm = readDepth(uvm);\n                                            if (sDm.y < 0.5 && (-sDm.x - pm.z) > 0.0) { hi = mid; hitUV = uvm; }\n                                            else lo = mid;\n                                        }\n                                        hit = 1.0;\n                                        break;\n                                    }\n                                }\n                                prevT = t;\n                                t += stepLen * (1.0 + float(i) * 0.07);  /* ускоряющandйся шаг */\n                            }\n\n                            vec3 outCol = col.rgb;\n\n                            if (hit > 0.5) {\n                                vec3 refCol = resolveReflectionColor(hitUV, roughness);\n                                /* Фреnotль: byд скользящandм углом отраsameнandя сandльnotе — фandзandческand корректbut.\n                                   Slightly softer power (3→2.4) reads closer to a real dielectric\n                                   Fresnel curve instead of an overly narrow rim highlight. */\n                                float fres = pow(1.0 - max(0.0, dot(-V, N)), 2.4);\n                                float refAmt = clamp(rtStrength * (0.08 + 0.88 * fres), 0.0, 0.82);\n                                /* Затуханandе у краёinto экраon — убandрает резкandе обрыintoы отраsameнandй */\n                                vec2  edge = min(hitUV, 1.0 - hitUV);\n                                refAmt *= smoothstep(0.0, 0.10, min(edge.x, edge.y));\n\n                                /* ── Temporal reprojection: blend with last frame's reflection at the\n                                   same WORLD point to average out per-frame ray noise. This is what\n                                   turns a single noisy screen-space sample into a smooth, denoised\n                                   result — the main reason real-time reflections look "cheap" without\n                                   it. ── */\n                                vec3 worldPos = (uInvView * vec4(pos, 1.0)).xyz;\n                                vec4 prevClip = uPrevViewProj * vec4(worldPos, 1.0);\n                                vec3 blended = mix(col.rgb, refCol, refAmt);\n                                if (uHistoryValid > 0.5 && prevClip.w > 0.0) {\n                                    vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;\n                                    if (prevUV.x > 0.0 && prevUV.x < 1.0 && prevUV.y > 0.0 && prevUV.y < 1.0) {\n                                        vec3 histCol = texture2D(tPrevFrame, prevUV).rgb;\n                                        float histWeight = mix(0.6, 0.05, uCameraMoved);\n                                        blended = mix(blended, histCol, histWeight);\n                                    }\n                                }\n                                outCol = blended;\n\n                                /* GI: одbutотскокоintoый переbutс цintoета (colour bleeding) от точкand byпаданandя */\n                                float lum = dot(refCol, vec3(0.299, 0.587, 0.114));\n                                outCol += refCol * lum * 0.06 * rtStrength;\n                            } else if (uHistoryValid > 0.5) {\n                                /* No ray hit this frame (e.g. a single dropped sample near a grazing\n                                   angle) — reproject history instead of snapping straight back to the\n                                   unreflected colour, which would otherwise flicker every time a ray\n                                   happens to miss. Weighted lightly so real, persistent misses (e.g.\n                                   camera turned away) still fade out instead of ghosting forever. */\n                                vec3 worldPos = (uInvView * vec4(pos, 1.0)).xyz;\n                                vec4 prevClip = uPrevViewProj * vec4(worldPos, 1.0);\n                                if (prevClip.w > 0.0) {\n                                    vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;\n                                    if (prevUV.x > 0.0 && prevUV.x < 1.0 && prevUV.y > 0.0 && prevUV.y < 1.0) {\n                                        vec3 histCol = texture2D(tPrevFrame, prevUV).rgb;\n                                        outCol = mix(col.rgb, histCol, mix(0.35, 0.02, uCameraMoved));\n                                    }\n                                }\n                            }\n\n                            /* Мягкandй кandnotматографandчный контраст — тольклo on отраsameнandых пandкселях, not on всю сцену */\n                            if (hit > 0.5) {\n                                outCol = mix(outCol, outCol * outCol * (3.0 - 2.0 * outCol), 0.18);\n                            }\n                            gl_FragColor = vec4(outCol, col.a);\n                        }\n                    `
-        };
-        this.rtPass = new ShaderPass(_rtShader);
-        this.rtPass.material.depthTest = false;
-        this.rtPass.material.depthWrite = false;
-        this.rtPass.uniforms.tDepth.value = this._depthTarget.texture;
-        this.rtPass.uniforms.resolution.value.set(_cw, _ch);
-        this.rtPass.uniforms.uDepthResolution.value.set(Math.floor(_cw / 2), Math.floor(_ch / 2));
-        this.rtPass.enabled = false;
-        this.composer.insertPass(this.rtPass, 1);
+        // Reflections (Heavy) — the old screen-space ray-traced reflection
+        // pass — has been fully removed. It's superseded by the lighter,
+        // cubemap-based Environment Reflections system (see
+        // _envReflectionCubeCamera / _captureEnvReflection).
         this.updateDepthEncodingUniforms();
-        this._rtHistoryTarget = new THREE.WebGLRenderTarget(_cw, _ch, {
-            type: THREE.UnsignedByteType,
-            format: THREE.RGBAFormat,
-            depthBuffer: false,
-            stencilBuffer: false
-        });
-        this._rtHistoryTarget.texture.name = "RTHistory";
-        this._rtHistoryTarget.texture.magFilter = THREE.LinearFilter;
-        this._rtHistoryTarget.texture.minFilter = THREE.LinearFilter;
-        this._rtPrevViewProj = new THREE.Matrix4;
-        this._rtPrevCamPos = new THREE.Vector3(999999, 999999, 999999);
-        this._rtHistoryReady = false;
-        this.rtPass.uniforms.tPrevFrame = {
-            value: this._rtHistoryTarget.texture
-        };
-        this.rtPass.uniforms.uPrevViewProj = {
-            value: new THREE.Matrix4
-        };
-        this.rtPass.uniforms.uCamPos = {
-            value: new THREE.Vector3
-        };
-        this.rtPass.uniforms.uInvView = {
-            value: new THREE.Matrix4
-        };
-        this.rtPass.uniforms.uHistoryValid = {
-            value: 0
-        };
-        this.rtPass.uniforms.uCameraMoved = {
-            value: 0
-        };
 
         /* ── Depth of Field (Tilt-Shift / Cinematic) ───────────────────────────
            Screen-space DOF using the packed depth target already rendered for
@@ -6712,23 +6659,11 @@ void main(){
             this.ssaoPass.uniforms.uDepthResolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
             this.ssaoPass.uniforms.tDepth.value = this._depthTarget.texture;
         }
-        if (this.rtPass && this.rtPass.uniforms) {
-            this.rtPass.uniforms.resolution.value.set(w, h);
-            this.rtPass.uniforms.uDepthResolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
-            this.rtPass.uniforms.tDepth.value = this._depthTarget.texture;
-            this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
-            const sharpVal = parseFloat(document.getElementById("setting-reflection-sharpness")?.value || "80") / 100;
-            this.rtPass.uniforms.uSharpness.value = sharpVal;
-        }
         if (this.dofPass && this.dofPass.uniforms) {
             this.dofPass.uniforms.resolution.value.set(w, h);
             this.dofPass.uniforms.tDepth.value = this._depthTarget.texture;
         }
         if (this._depthTarget) this._depthTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
-        if (this._rtHistoryTarget) {
-            this._rtHistoryTarget.setSize(w, h);
-            this._rtHistoryReady = false;
-        }
         if (this._frozenTarget) {
             this._frozenTarget.setSize(w, h);
             if (this.worldPaused) this._pauseNeedsCapture = true;
@@ -6759,7 +6694,6 @@ void main(){
         if (this.camera && !(window.gameplay && gameplay.isPlaytest)) {
             this.camera.fov = safe;
             this.camera.updateProjectionMatrix();
-            if (this.rtPass?.uniforms?.proj) this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
             if (this.worldPaused) this._pauseNeedsCapture = true;
         }
         return safe;
@@ -6786,20 +6720,10 @@ void main(){
             this.renderer.setSize(w, h, false);
             if (this.composer) this.composer.setSize(w, h);
             if (this._depthTarget) this._depthTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
-            if (this._rtHistoryTarget) {
-                this._rtHistoryTarget.setSize(w, h);
-                this._rtHistoryReady = false;
-            }
             if (this.ssaoPass?.uniforms) {
                 this.ssaoPass.uniforms.resolution.value.set(w, h);
                 this.ssaoPass.uniforms.uDepthResolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
                 this.ssaoPass.uniforms.tDepth.value = this._depthTarget.texture;
-            }
-            if (this.rtPass?.uniforms) {
-                this.rtPass.uniforms.resolution.value.set(w, h);
-                this.rtPass.uniforms.uDepthResolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
-                this.rtPass.uniforms.tDepth.value = this._depthTarget.texture;
-                this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
             }
             if (this.dofPass?.uniforms) {
                 this.dofPass.uniforms.resolution.value.set(w, h);
@@ -6860,20 +6784,10 @@ void main(){
         this.renderer.setSize(w, h, false);
         if (this.composer) this.composer.setSize(w, h);
         if (this._depthTarget) this._depthTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
-        if (this._rtHistoryTarget) {
-            this._rtHistoryTarget.setSize(w, h);
-            this._rtHistoryReady = false;
-        }
         if (this.ssaoPass?.uniforms) {
             this.ssaoPass.uniforms.resolution.value.set(w, h);
             this.ssaoPass.uniforms.uDepthResolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
             this.ssaoPass.uniforms.tDepth.value = this._depthTarget.texture;
-        }
-        if (this.rtPass?.uniforms) {
-            this.rtPass.uniforms.resolution.value.set(w, h);
-            this.rtPass.uniforms.uDepthResolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
-            this.rtPass.uniforms.tDepth.value = this._depthTarget.texture;
-            this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
         }
         if (this.dofPass?.uniforms) {
             this.dofPass.uniforms.resolution.value.set(w, h);
@@ -6920,14 +6834,9 @@ void main(){
     },
     applyRuntimePostFxQuality: function() {
         const ssaoWanted = document.getElementById("setting-ssao")?.checked ?? false;
-        const rtWanted = document.getElementById("setting-reflections")?.checked ?? false;
         const dofWanted = document.getElementById("setting-dof")?.checked ?? false;
         const bloomWanted = document.getElementById("setting-bloom")?.checked ?? false;
         if (this.ssaoPass && this.ssaoPass.enabled !== ssaoWanted) this.ssaoPass.enabled = ssaoWanted;
-        if (this.rtPass && this.rtPass.enabled !== rtWanted) {
-            this.rtPass.enabled = rtWanted;
-            this._rtHistoryReady = false;
-        }
         if (this.dofPass && this.dofPass.enabled !== dofWanted) this.dofPass.enabled = dofWanted;
         if (this.bloomPass && this.bloomPass.enabled !== bloomWanted) this.bloomPass.enabled = bloomWanted;
         this._runtimePostFxDirty = false;
@@ -6979,6 +6888,9 @@ void main(){
         return brightness;
     },
     getActiveEnvironmentMap: function() {
+        // When environment reflections are enabled and we have a captured cubemap,
+        // return it so all materials get the scene's environment reflected on them
+        if (this._envReflectionEnabled && this._envReflectionTexture) return this._envReflectionTexture;
         if (this.customSkyboxEnvMap && !this.customSkyboxLoading) return this.customSkyboxEnvMap;
         return this.scene ? this.scene.environment : null;
     },
@@ -6987,6 +6899,21 @@ void main(){
         const textureKey = canonicalTextureKey(obj?.userData?.texture);
         const preset = MATERIAL_PRESETS[type] || MATERIAL_PRESETS.Concrete;
         const base = obj?.userData?.skyboxReflectivity ?? preset.envMapIntensity;
+        // When environment reflections (camera capture) are enabled,
+        // boost intensity significantly so reflections are visible on ALL surfaces,
+        // not just water/metal/glass.
+        if (this._envReflectionEnabled && this._envReflectionTexture) {
+            if (isWaterLike(textureKey, type)) return 3.0;
+            if (textureKey === "Glass") return 3.2;
+            if (type === "Metal") return 3.5;
+            if (type === "Wood") return 1.2;
+            if (type === "Concrete") return 1.0;
+            if (type === "Carpet") return 0.4;
+            if (type === "Sand") return 0.5;
+            if (type === "Dirt") return 0.5;
+            if (type === "Snow") return 0.8;
+            return 0.8; // fallback for other materials
+        }
         if (isWaterLike(textureKey, type)) return Math.min(3.4, Math.max(2.15, base));
         if (textureKey === "metal" || textureKey === "Glass") return Math.min(2.8, Math.max(1.25, base));
         return Math.min(.14, Math.max(.02, base));
@@ -7138,6 +7065,21 @@ void main(){
             this.spawnPointObj.material.needsUpdate = true;
         }
     },
+    setAllReflectionsBlurZero: function() {
+        // Sets reflection blur (roughness) to 0.10 (slider value 10) on every
+        // block in the scene so env-map reflections read as near-sharp
+        // instead of fully blurred, while retaining a slight softness.
+        // Water keeps its own fixed near-zero roughness elsewhere and isn't
+        // affected here beyond having its userData field reset too.
+        this.blocks?.forEach(obj => {
+            if (!obj?.userData || obj.userData.type === "spawn") return;
+            obj.userData.skyboxBlur = .1;
+        });
+        this.syncAllObjectMaterials(true);
+        // Keep the per-object inspector panel in sync if a block is selected.
+        if (this.selectedBlocks?.length) this.updateSelectionPanels();
+        if (window.historyManager && !window.historyManager.isRestoring) window.historyManager.takeSnapshot();
+    },
     getWaterReflectionTarget: function() {
         return null;
     },
@@ -7160,6 +7102,200 @@ void main(){
     captureLocalReflection: function() {
         this.updateLocalReflections(false);
     },
+
+    // ─── Environment Reflection Capture System ───
+    // Captures a cubemap around the camera position and applies it to all cubes
+    // as a realistic environment reflection. Updates every 60 seconds while enabled.
+    _envReflectionEnabled: false,
+    _envReflectionQuality: 512,
+    _envReflectionInterval: 30,
+    _envReflectionCubeCamera: null,
+    _envReflectionRenderTarget: null,
+    _envReflectionTimer: null,
+    _envReflectionTexture: null,
+    _envReflectionLastCapturePos: null,
+    _envReflectionCapturing: false,
+
+    toggleEnvReflections: function(enabled) {
+        this._envReflectionEnabled = !!enabled;
+        const controls = document.getElementById("env-reflection-controls");
+        const status = document.getElementById("env-reflection-status");
+        if (controls) controls.style.display = enabled ? "block" : "none";
+        if (enabled) {
+            this._initEnvReflectionCamera();
+            this._captureEnvReflection();
+            this._startEnvReflectionTimer();
+            if (status) status.innerText = "Capturing...";
+        } else {
+            this._stopEnvReflectionTimer();
+            this._disposeEnvReflectionCamera();
+            this._removeEnvMapFromCubes();
+            if (status) status.innerText = "Disabled";
+        }
+    },
+
+    setEnvReflectionionQuality: function(size) {
+        if (![64, 128, 256, 512, 1024, 2048].includes(size)) return;
+        this._envReflectionQuality = size;
+        // Rebuild the camera with new resolution
+        if (this._envReflectionEnabled) {
+            this._disposeEnvReflectionCamera();
+            this._initEnvReflectionCamera();
+            this._captureEnvReflection();
+        }
+    },
+
+    setEnvReflectionInterval: function(seconds) {
+        const clamped = Math.min(30, Math.max(0.02, parseFloat(seconds) || 30));
+        this._envReflectionInterval = clamped;
+        const slider = document.getElementById("setting-env-reflection-interval");
+        const label = document.getElementById("env-reflection-interval-val");
+        if (slider) slider.value = String(clamped);
+        if (label) label.innerText = clamped.toFixed(2) + "s";
+        // Restart the timer with the new interval so the change takes effect
+        // immediately instead of waiting for the current cycle to finish.
+        if (this._envReflectionEnabled && this._envReflectionTimer) {
+            this._startEnvReflectionTimer();
+        }
+    },
+
+    _initEnvReflectionCamera: function() {
+        const size = this._envReflectionQuality;
+        // In Three.js r160, CubeCamera takes (near, far, WebGLCubeRenderTarget)
+        const cubeRT = new THREE.WebGLCubeRenderTarget(size, {
+            format: THREE.RGBAFormat,
+            generateMipmaps: true,
+            minFilter: THREE.LinearMipmapLinearFilter,
+            magFilter: THREE.LinearFilter
+        });
+        this._envReflectionCubeCamera = new THREE.CubeCamera(0.1, 2000, cubeRT);
+        // CRITICAL: the CubeCamera's 6 internal PerspectiveCameras only get a
+        // correct world matrix during render if the CubeCamera itself is part
+        // of the scene graph. Without this, matrix updates can desync between
+        // faces, causing some faces to render stale/blank (black) or from a
+        // wrong orientation (crooked reflections).
+        this.scene.add(this._envReflectionCubeCamera);
+        this._envReflectionRenderTarget = cubeRT;
+        this._envReflectionTexture = cubeRT.texture;
+    },
+
+    _disposeEnvReflectionCamera: function() {
+        if (this._envReflectionCubeCamera) {
+            this.scene.remove(this._envReflectionCubeCamera);
+            this._envReflectionCubeCamera = null;
+        }
+        if (this._envReflectionRenderTarget) {
+            try { this._envReflectionRenderTarget.dispose(); } catch (e) {}
+            this._envReflectionRenderTarget = null;
+        }
+        this._envReflectionTexture = null;
+    },
+
+    _captureEnvReflection: function() {
+        if (!this._envReflectionEnabled || !this._envReflectionCubeCamera || !this._envReflectionRenderTarget || this._envReflectionCapturing) return;
+        this._envReflectionCapturing = true;
+        const status = document.getElementById("env-reflection-status");
+        if (status) status.innerText = "Capturing...";
+
+        // Position the cube camera at the main camera's position
+        const camPos = this.camera.position;
+        this._envReflectionCubeCamera.position.copy(camPos);
+        // Force an immediate, synchronous matrix update. Relying on the next
+        // render-loop auto-update is what caused some faces to be captured
+        // one frame "late" (stale position) while others weren't, producing
+        // the mismatched/crooked look between faces.
+        this._envReflectionCubeCamera.updateMatrixWorld(true);
+
+        // Temporarily hide objects that shouldn't be in the reflection
+        // (the cube camera itself, gizmos, water, etc.)
+        const prevVisible = [];
+        const hide = (obj) => {
+            if (obj && obj.visible) { prevVisible.push(obj); obj.visible = false; }
+        };
+        hide(this.transformControl);
+        hide(this.transformGroup);
+        // Hide spawn point indicator
+        hide(this.spawnPointObj);
+        // Hide light contours
+        this.manualLights?.forEach(hide);
+        // Hide water surfaces themselves: capturing water while it already
+        // has an envMap applied makes it reflect itself, which produces
+        // black/garbled faces on the cube pointing toward the water plane.
+        this.blocks?.forEach(obj => {
+            if (!obj?.userData || !obj.material) return;
+            const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+            const isWater = mats.some(m => m?.userData?.isWater);
+            if (isWater) hide(obj);
+        });
+
+        // Render the cubemap - update() internally renders all 6 faces
+        try {
+            this._envReflectionCubeCamera.update(this.renderer, this.scene);
+        } catch (e) {
+            console.warn("[EnvReflection] Capture failed:", e);
+        }
+
+        // Restore hidden objects
+        prevVisible.forEach(obj => { obj.visible = true; });
+
+        // Apply the captured cubemap to all cubes
+        this._applyEnvMapToCubes(this._envReflectionTexture);
+
+        this._envReflectionLastCapturePos = camPos.clone();
+        this._envReflectionCapturing = false;
+
+        if (status) {
+            const now = new Date();
+            status.innerText = "Last: " + now.toLocaleTimeString() + " (" + this._envReflectionQuality + "px)";
+        }
+    },
+
+    _applyEnvMapToCubes: function(envTexture) {
+        if (!envTexture) return;
+        this.blocks?.forEach(obj => {
+            if (!obj?.material || obj.userData?.type === "spawn") return;
+            const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+            mats.forEach(m => {
+                if (!m) return;
+                // Use the same intensity logic as the material pool for consistency
+                const intensity = this.getMaterialEnvIntensity(obj);
+                m.envMap = envTexture;
+                m.envMapIntensity = intensity;
+                m.needsUpdate = true;
+            });
+        });
+    },
+
+    _removeEnvMapFromCubes: function() {
+        this.blocks?.forEach(obj => {
+            if (!obj?.material || obj.userData?.type === "spawn") return;
+            const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+            mats.forEach(m => {
+                if (!m) return;
+                m.envMap = null;
+                m.envMapIntensity = 0;
+                m.needsUpdate = true;
+            });
+        });
+    },
+
+    _startEnvReflectionTimer: function() {
+        this._stopEnvReflectionTimer();
+        const seconds = Math.min(30, Math.max(0.02, this._envReflectionInterval || 30));
+        this._envReflectionTimer = setInterval(() => {
+            if (this._envReflectionEnabled) {
+                this._captureEnvReflection();
+            }
+        }, seconds * 1000);
+    },
+
+    _stopEnvReflectionTimer: function() {
+        if (this._envReflectionTimer) {
+            clearInterval(this._envReflectionTimer);
+            this._envReflectionTimer = null;
+        }
+    },
+
     setupMobileJoystick: function() {
         this.mobileJoystickEl = document.getElementById("mobile-joystick");
         this.mobileJoystickKnob = document.getElementById("mobile-joystick-knob");
@@ -9524,19 +9660,6 @@ void main(){
             this.ssaoPass.uniforms.uDepthResolution.value.set(Math.floor(this.renderer.domElement.width / 2), Math.floor(this.renderer.domElement.height / 2));
             this.ssaoPass.uniforms.tDepth.value = this._depthTarget.texture;
         }
-        const rtEnabled = document.getElementById("setting-reflections")?.checked ?? false;
-        if (this.rtPass) {
-            if (this.rtPass.enabled !== rtEnabled) this._rtHistoryReady = false;
-            this.rtPass.enabled = rtEnabled;
-            this.rtPass.uniforms.tDepth.value = this._depthTarget.texture;
-            this.rtPass.uniforms.resolution.value.set(this.renderer.domElement.width, this.renderer.domElement.height);
-            this.rtPass.uniforms.uDepthResolution.value.set(Math.floor(this.renderer.domElement.width / 2), Math.floor(this.renderer.domElement.height / 2));
-            this.camera.updateProjectionMatrix();
-            this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
-            const sharpVal = parseFloat(document.getElementById("setting-reflection-sharpness")?.value || "80") / 100;
-            this._reflectionSharpness = sharpVal;
-            this.rtPass.uniforms.uSharpness.value = sharpVal;
-        }
         const dofEnabled = document.getElementById("setting-dof")?.checked ?? false;
         const dofControls = document.getElementById("dof-controls");
         if (dofControls) dofControls.style.display = dofEnabled ? "" : "none";
@@ -9553,8 +9676,8 @@ void main(){
             }
         }
         if (this.updateDepthEncodingUniforms) this.updateDepthEncodingUniforms();
-        this.renderer.toneMapping = rtEnabled ? THREE.ACESFilmicToneMapping : THREE.LinearToneMapping;
-        this.renderer.toneMappingExposure = rtEnabled ? 1.12 : 1;
+        this.renderer.toneMapping = THREE.LinearToneMapping;
+        this.renderer.toneMappingExposure = 1;
         waterUniforms.uWavesEnabled.value = document.getElementById("setting-water-waves")?.checked ?? false ? 1 : 0;
         const allKnownTextures = new Set([ ...Object.values(baseTextures || {}), ...Object.values(activeProjectCustomTextures || {}), ...Object.values(activeProjectNormalMaps || {}).map(n => n?.texture).filter(Boolean) ]);
         this.scene.traverse(child => {
@@ -9595,8 +9718,6 @@ void main(){
             cameraFov: parseFloat(document.getElementById("setting-camera-fov")?.value || localStorage.getItem("mmcg_camera_fov_55") || String(this.cameraFov || 60)),
             aoIntensity: parseFloat(document.getElementById("setting-ao-intensity")?.value || "0.55"),
             ssao: document.getElementById("setting-ssao").checked,
-            rayTracing: document.getElementById("setting-reflections") ? document.getElementById("setting-reflections").checked : false,
-            reflectionSharpness: parseFloat(document.getElementById("setting-reflection-sharpness")?.value || "80") / 100,
             waterWaves: document.getElementById("setting-water-waves") ? document.getElementById("setting-water-waves").checked : false,
             particlesEnabled: document.getElementById("setting-particles-enabled") ? document.getElementById("setting-particles-enabled").checked : true,
             textureSmoothing: document.getElementById("setting-texture-smoothing") ? document.getElementById("setting-texture-smoothing").checked : false,
@@ -9605,7 +9726,10 @@ void main(){
             customSkyboxDataUrl: this.customSkyboxDataUrl || null,
             customSkyboxName: this.customSkyboxName || null,
             gridVisible: document.getElementById("setting-grid") ? document.getElementById("setting-grid").checked : true,
-            lightContour: document.getElementById("setting-light-contour") ? document.getElementById("setting-light-contour").checked : true
+            lightContour: document.getElementById("setting-light-contour") ? document.getElementById("setting-light-contour").checked : true,
+            envReflections: document.getElementById("setting-env-reflections") ? document.getElementById("setting-env-reflections").checked : false,
+            envReflectionQuality: this._envReflectionQuality || 512,
+            envReflectionInterval: this._envReflectionInterval || 30
         };
     },
     setCustomSkybox: function(dataUrl, fileName = "Custom Skybox") {
@@ -10869,7 +10993,6 @@ void main(){
             document.getElementById("setting-bloom").checked = data.env.bloom === true;
             document.getElementById("setting-bloom-strength").value = String(data.env.bloomStrength ?? 1);
             document.getElementById("bloom-strength-val").innerText = Number(document.getElementById("setting-bloom-strength").value).toFixed(2);
-            if (document.getElementById("setting-reflections")) document.getElementById("setting-reflections").checked = !!data.env.reflections;
             if (document.getElementById("setting-reflection-distance")) {
                 document.getElementById("setting-reflection-distance").value = String(data.env.reflectionDistance ?? 10);
                 if (document.getElementById("reflection-distance-val")) document.getElementById("reflection-distance-val").innerText = document.getElementById("setting-reflection-distance").value + "m";
@@ -10884,12 +11007,6 @@ void main(){
                 this.applyCameraFov(fovVal);
             }
             document.getElementById("setting-ssao").checked = data.env.ssao === true;
-            if (document.getElementById("setting-reflections")) document.getElementById("setting-reflections").checked = data.env.rayTracing === true;
-            if (document.getElementById("setting-reflection-sharpness")) {
-                const val = Math.round((data.env.reflectionSharpness ?? .8) * 100);
-                document.getElementById("setting-reflection-sharpness").value = String(val);
-                document.getElementById("reflection-sharpness-val").innerText = String(val);
-            }
             if (document.getElementById("setting-ao-intensity")) {
                 document.getElementById("setting-ao-intensity").value = String(data.env.aoIntensity ?? .55);
                 if (document.getElementById("ao-intensity-val")) document.getElementById("ao-intensity-val").innerText = Number(document.getElementById("setting-ao-intensity").value).toFixed(2);
@@ -10913,6 +11030,25 @@ void main(){
             if (document.getElementById("setting-light-contour")) {
                 document.getElementById("setting-light-contour").checked = data.env.lightContour !== false;
                 this.toggleLightContour(data.env.lightContour !== false);
+            }
+            // Restore environment reflections
+            if (document.getElementById("setting-env-reflections")) {
+                const envRefEnabled = data.env.envReflections === true;
+                document.getElementById("setting-env-reflections").checked = envRefEnabled;
+                const envRefQuality = data.env.envReflectionQuality || 512;
+                this._envReflectionQuality = envRefQuality;
+                if (document.getElementById("setting-env-reflection-quality")) {
+                    document.getElementById("setting-env-reflection-quality").value = String(envRefQuality);
+                }
+                const envRefInterval = Math.min(30, Math.max(0.02, data.env.envReflectionInterval || 30));
+                this._envReflectionInterval = envRefInterval;
+                if (document.getElementById("setting-env-reflection-interval")) {
+                    document.getElementById("setting-env-reflection-interval").value = String(envRefInterval);
+                }
+                if (document.getElementById("env-reflection-interval-val")) {
+                    document.getElementById("env-reflection-interval-val").innerText = envRefInterval.toFixed(2) + "s";
+                }
+                this.toggleEnvReflections(envRefEnabled);
             }
             this.customSkyboxDataUrl = data.env.customSkyboxDataUrl || null;
             this.customSkyboxName = data.env.customSkyboxName || null;
@@ -10951,7 +11087,6 @@ void main(){
             }
             if (document.getElementById("setting-draw-distance")) this.applyDrawDistance(350);
             if (document.getElementById("setting-texture-quality")) await this.applyTextureQualitySetting(2);
-            if (document.getElementById("setting-reflections")) document.getElementById("setting-reflections").checked = false;
         }
         this.applyCameraSensitivity(parseFloat(document.getElementById("setting-camera-sensitivity")?.value || localStorage.getItem("mmcg_camera_sens_55") || "1"));
         this.applyCameraFov(parseFloat(document.getElementById("setting-camera-fov")?.value || localStorage.getItem("mmcg_camera_fov_55") || "60"));
@@ -11201,9 +11336,9 @@ void main(){
                     };
                 }
                 if (this._pauseNeedsCapture && target) {
-                    const _useComposer = this.bloomPass?.enabled || this.ssaoPass?.enabled || this.rtPass?.enabled || this.dofPass?.enabled;
+                    const _useComposer = this.bloomPass?.enabled || this.ssaoPass?.enabled || this.dofPass?.enabled;
                     if (_useComposer && this.composer) {
-                        if ((this.ssaoPass.enabled || this.rtPass?.enabled || this.dofPass?.enabled) && this._depthTarget) {
+                        if ((this.ssaoPass.enabled || this.dofPass?.enabled) && this._depthTarget) {
                             const _prevOverride = this.scene.overrideMaterial;
                             this.scene.overrideMaterial = this._depthPackMat;
                             const _savedSkyVis = this._hideSkyForDepthPass();
@@ -11219,14 +11354,6 @@ void main(){
                             this.renderer.setRenderTarget(null);
                             this.renderer.setClearColor(this._tmpClearColor, _prevClearAlpha);
                         }
-                        if (this.rtPass?.enabled && this.rtPass.uniforms.uPrevViewProj) {
-                            this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
-                            this.rtPass.uniforms.uSharpness.value = this._reflectionSharpness ?? .8;
-                            this.rtPass.uniforms.uInvView.value.copy(this.camera.matrixWorld);
-                            this.rtPass.uniforms.uCamPos.value.copy(this.camera.position);
-                            this.rtPass.uniforms.uCameraMoved.value = 1;
-                            this.rtPass.uniforms.uHistoryValid.value = 0;
-                        }
                         this.composer.render();
                         this._frozenBlit.mat.map = this.composer.readBuffer.texture;
                         this.renderer.setRenderTarget(target);
@@ -11239,7 +11366,6 @@ void main(){
                     }
                     this._frozenBlit.mat.map = target.texture;
                     this._pauseNeedsCapture = false;
-                    this._rtHistoryReady = false;
                 }
                 if (this._frozenBlit && this._frozenBlit.mat.map) {
                     this.renderer.setRenderTarget(null);
@@ -11280,7 +11406,7 @@ void main(){
             }
         });
         try {
-            if ((this.ssaoPass.enabled || this.rtPass?.enabled || this.dofPass?.enabled) && this._depthTarget) {
+            if ((this.ssaoPass.enabled || this.dofPass?.enabled) && this._depthTarget) {
                 const _prevOverride = this.scene.overrideMaterial;
                 this.scene.overrideMaterial = this._depthPackMat;
                 const _savedSkyVis = this._hideSkyForDepthPass();
@@ -11296,23 +11422,7 @@ void main(){
                 this.renderer.setRenderTarget(null);
                 this.renderer.setClearColor(this._tmpClearColor, _prevClearAlpha);
             }
-            if (this.rtPass?.enabled) {
-                this.rtPass.uniforms.proj.value.copy(this.camera.projectionMatrix);
-                this.rtPass.uniforms.uSharpness.value = this._reflectionSharpness ?? .8;
-                if (this.rtPass.uniforms.uPrevViewProj) {
-                    this.rtPass.uniforms.uPrevViewProj.value.copy(this._rtPrevViewProj);
-                    this.rtPass.uniforms.uInvView.value.copy(this.camera.matrixWorld);
-                    this.rtPass.uniforms.uCamPos.value.copy(this.camera.position);
-                    const moved = this.camera.position.distanceTo(this._rtPrevCamPos);
-                    if (!this._rtPrevCamQuat) this._rtPrevCamQuat = this.camera.quaternion.clone();
-                    const angleMoved = this._rtPrevCamQuat.angleTo(this.camera.quaternion);
-                    const moveFactor = moved / .12;
-                    const rotFactor = angleMoved / .02;
-                    this.rtPass.uniforms.uCameraMoved.value = THREE.MathUtils.clamp(Math.max(moveFactor, rotFactor), 0, 1);
-                    this.rtPass.uniforms.uHistoryValid.value = this._rtHistoryReady ? 1 : 0;
-                }
-            }
-            const _useComposer = this.bloomPass.enabled || this.ssaoPass.enabled || this.rtPass?.enabled || this.dofPass?.enabled;
+            const _useComposer = this.bloomPass.enabled || this.ssaoPass.enabled || this.dofPass?.enabled;
             this._lastFrameUsedComposer = _useComposer;
             if (_useComposer) {
                 this.composer.render();
@@ -11337,20 +11447,8 @@ void main(){
                 this._blitQuad.mat.map = this.composer.readBuffer.texture;
                 this.renderer.setRenderTarget(null);
                 this.renderer.render(this._blitQuad.scene, this._blitQuad.cam);
-                if (this.rtPass?.enabled && this._rtHistoryTarget) {
-                    this.renderer.setRenderTarget(this._rtHistoryTarget);
-                    this.renderer.render(this._blitQuad.scene, this._blitQuad.cam);
-                    this.renderer.setRenderTarget(null);
-                    this._rtPrevViewProj.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
-                    this._rtPrevCamPos.copy(this.camera.position);
-                    if (!this._rtPrevCamQuat) this._rtPrevCamQuat = this.camera.quaternion.clone(); else this._rtPrevCamQuat.copy(this.camera.quaternion);
-                    this._rtHistoryReady = true;
-                } else if (this._rtHistoryReady) {
-                    this._rtHistoryReady = false;
-                }
             } else {
                 this.renderer.render(this.scene, this.camera);
-                if (this._rtHistoryReady) this._rtHistoryReady = false;
             }
             this._renderSkipFrames = 0;
         } catch (err) {
@@ -13425,6 +13523,8 @@ window.uiManager = {
         engine.deselect();
         if (window.aiGenToast) aiGenToast.dismiss();
         if (engine.transformControl) engine.transformControl.enabled = true;
+        // Stop env reflection timer when leaving the editor
+        if (engine._stopEnvReflectionTimer) engine._stopEnvReflectionTimer();
         document.getElementById("editor-ui").style.display = "none";
         document.getElementById("main-menu").style.display = "flex";
         this.renderProjectList();
@@ -13489,7 +13589,6 @@ window.uiManager = {
         if (val("setting-bloom-strength") !== undefined) txt("bloom-strength-val", Number(val("setting-bloom-strength")).toFixed(2));
         if (val("setting-scene-brightness") !== undefined) txt("scene-brightness-val", Number(val("setting-scene-brightness")).toFixed(2) + "x");
         if (val("setting-reflection-distance") !== undefined) txt("reflection-distance-val", val("setting-reflection-distance") + "m");
-        if (val("setting-reflection-sharpness") !== undefined) txt("reflection-sharpness-val", val("setting-reflection-sharpness"));
         if (val("setting-dof-focus") !== undefined) txt("dof-focus-val", Number(val("setting-dof-focus")).toFixed(1) + "m");
         if (val("setting-dof-range") !== undefined) txt("dof-range-val", Number(val("setting-dof-range")).toFixed(1) + "m");
         if (val("setting-dof-blur") !== undefined) txt("dof-blur-val", Number(val("setting-dof-blur")).toFixed(1) + "px");
@@ -13685,7 +13784,6 @@ window.uiManager = {
             engine.previewTextureQualityLabel(currentTextureQualityIndex);
         }
         if (document.getElementById("setting-bloom") && engine.bloomPass) document.getElementById("setting-bloom").checked = engine.bloomPass.enabled;
-        if (document.getElementById("setting-reflections") && engine.rtPass) document.getElementById("setting-reflections").checked = engine.rtPass.enabled;
         if (document.getElementById("setting-bloom-strength") && engine.bloomPass) document.getElementById("setting-bloom-strength").value = String(engine.bloomPass.strength ?? 1);
         modal.classList.remove("hidden");
     },
@@ -16158,5 +16256,6 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
 
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1c97df0cce6dbdb',t:'MTc4NDI5Mzg4MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1da1f66af61e436',t:'MTc4NDQ2ODI2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1db77f3b9dbe3f8',t:'MTc4NDQ4MjM3OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1eaf0a80fefc9d4',t:'MTc4NDY0NDYwOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1da1f66af61e436',t:'MTc4NDQ2ODI2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1db77f3b9dbe3f8',t:'MTc4NDQ4MjM3OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1eaf0a80fefc9d4',t:'MTc4NDY0NDYwOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f"}' crossorigin="anonymous"></script>
+</body>
 </html>
