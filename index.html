@@ -1506,17 +1506,13 @@
                 </button>
 
                 <button onclick="uiManager.triggerMapImport()" class="gbox-sidebar-btn">
-                    <span class="ui-icon ui-icon-anim" aria-hidden="true">
-                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M3 7v9a1 1 0 001 1h12a1 1 0 001-1V7M3 7l2-3h10l2 3M3 7h14M10 11v4M7 13l3-3 3 3"/></svg>
-                    </span>
+                    <img class="ui-icon ui-icon-anim" data-icon="FileFolder" alt="" aria-hidden="true">
                     <span data-i18n="importMap">Import ZIP Map</span>
                 </button>
                 <input type="file" id="import-map-zip" accept=".zip" class="hidden" onchange="uiManager.importMapFromZip(event)">
 
                 <button onclick="uiManager.triggerGbmapImport()" class="gbox-sidebar-btn">
-                    <span class="ui-icon ui-icon-anim" aria-hidden="true">
-                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><rect x="3" y="3" width="14" height="14"/><path d="M7 7h6M7 10h6M7 13h4"/></svg>
-                    </span>
+                    <img class="ui-icon ui-icon-anim" data-icon="FileDocument" alt="" aria-hidden="true">
                     <span data-i18n="importGbmap">Import .gbmap</span>
                 </button>
                 <input type="file" id="import-map-gbmap" accept=".gbmap" class="hidden" onchange="uiManager.importMapFromGbmap(event)">
@@ -1530,9 +1526,7 @@
                     <span>Telegram</span>
                 </button>
                 <button onclick="uiManager.openExternalLink('https://youtube.com/@sh1rka4?si=BzHOUgiVw3H812FT')" class="gbox-social-btn" title="YouTube">
-                    <span class="ui-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M23 12.1s0-3.2-.4-4.7a3 3 0 0 0-2.1-2.1C19 5 12 5 12 5s-7 0-8.5.3A3 3 0 0 0 1.4 7.4C1 8.9 1 12.1 1 12.1s0 3.2.4 4.7a3 3 0 0 0 2.1 2.1C5 19.2 12 19.2 12 19.2s7 0 8.5-.3a3 3 0 0 0 2.1-2.1c.4-1.5.4-4.7.4-4.7zM9.7 15.7V8.5l6.2 3.6-6.2 3.6z"/></svg>
-                    </span>
+                    <img class="ui-icon" data-icon="SocialYoutube" alt="" aria-hidden="true">
                     <span>YouTube</span>
                 </button>
             </div>
@@ -1540,9 +1534,7 @@
 
             <div class="py-2 border-t border-[var(--td-border)] flex flex-col gap-px flex-shrink-0">
                 <button onclick="(window.uiManager ? uiManager.openHelpGuideModal() : document.getElementById('help-guide-modal').classList.remove('hidden'))" class="gbox-sidebar-btn" style="font-size: 14px; padding: 10px 18px;">
-                    <span class="ui-icon ui-icon-anim" aria-hidden="true">
-                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><circle cx="10" cy="10" r="7"/><path d="M10 7v3M10 13h.01"/></svg>
-                    </span>
+                    <img class="ui-icon ui-icon-anim" data-icon="Question" alt="" aria-hidden="true">
                     <span data-i18n="helpBtn">Help / Info</span>
                 </button>
 
@@ -1561,9 +1553,7 @@
                 </button>
 
                 <button onclick="window.close()" class="gbox-sidebar-btn" style="font-size: 14px; padding: 10px 18px;">
-                    <span class="ui-icon ui-icon-anim" aria-hidden="true">
-                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M7 17H4a1 1 0 01-1-1V4a1 1 0 011-1h3M13 7l4-4M13 13l4 4M17 3l-4 4M17 17l-4-4"/></svg>
-                    </span>
+                    <img class="ui-icon ui-icon-anim" data-icon="Exit" alt="" aria-hidden="true">
                     <span data-i18n="exit">Exit</span>
                 </button>
             </div>
@@ -1593,8 +1583,8 @@
                 </div>
             </div>
             <div class="px-6 py-4 border-t border-[var(--td-border)] flex justify-end gap-2">
-                <button onclick="document.getElementById('new-project-modal').classList.add('hidden')" data-i18n="cancel" class="td-btn btn-bottom px-4 py-2 text-xs text-[var(--td-text-dim)] hover:text-white">Cancel</button>
-                <button onclick="uiManager.createNewProject()" data-i18n="create" class="td-btn btn-bottom px-5 py-2 text-xs" style="background: var(--td-accent); color: #000;">Create</button>
+                <button onclick="document.getElementById('new-project-modal').classList.add('hidden')" class="td-btn btn-bottom px-4 py-2 text-xs text-[var(--td-text-dim)] hover:text-white"><img data-icon="Close" alt="" style="width:12px;height:12px;object-fit:contain;vertical-align:-2px;margin-right:5px;"><span data-i18n="cancel">Cancel</span></button>
+                <button onclick="uiManager.createNewProject()" class="td-btn btn-bottom px-5 py-2 text-xs" style="background: var(--td-accent); color: #000;"><img data-icon="Confirm" alt="" style="width:12px;height:12px;object-fit:contain;vertical-align:-2px;margin-right:5px;"><span data-i18n="create">Create</span></button>
             </div>
         </div>
     </div>
@@ -1623,7 +1613,7 @@
             <button onclick="gameplay.exitPlaytest()" title="Exit Playtest (Esc)" class="gb-exit-btn">ESC</button>
 <div class="gb-topbar">
 <button class="gb-topbar-btn" id="gb-btn-inventory" title="Inventory (Tab)" onpointerdown="gameplay.toggleInventory()">
-                    <svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9 4v16M15 4v16M5 12h14"/><rect x="9" y="10" width="6" height="5" rx="1"/></svg>
+                    <img data-icon="Suitcase2" alt="" style="width:22px;height:22px;object-fit:contain;">
                 </button>
                 <button class="gb-topbar-btn weapon selected" data-weapon="fists" title="Hands (1)" onpointerdown="gameplay.selectWeapon('fists')">
 
@@ -1716,10 +1706,10 @@
                 </span>
                 <span class="aigt-msg" id="ai-gen-toast-msg">Generation in progress…</span>
                 <button class="aigt-btn" title="Open AI Builder" aria-label="Open AI Builder" onclick="uiManager.openAIBuilderModal()">
-                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14L14 6M7.5 6H14v6.5"/></svg>
+                    <img data-icon="Hammer" alt="" style="width:15px;height:15px;object-fit:contain;">
                 </button>
                 <button class="aigt-btn" title="Hide" aria-label="Hide" onclick="aiGenToast.dismiss()">
-                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l10 10M15 5L5 15"/></svg>
+                    <img data-icon="Close" alt="" style="width:15px;height:15px;object-fit:contain;">
                 </button>
                 <span class="aigt-bar"><span class="aigt-bar-fill" id="ai-gen-toast-progress"></span></span>
             </div>
@@ -1743,17 +1733,17 @@
                     </button>
 
                     <button onclick="engine.saveCurrentMap()" class="flex items-center gap-2 px-3 py-1.5 text-xs uppercase tracking-[0.1em] transition" style="color: var(--td-ok); border: 1px solid transparent;" onmouseover="this.style.background='rgba(94,196,110,0.1)'; this.style.borderColor='rgba(94,196,110,0.3)'" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent'">
-                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M4 4h10l2 2v10H4zM6 4v5h7V4M7 16v-5h6v5"/></svg>
+                        <img data-icon="Save1" alt="" style="width:14px;height:14px;object-fit:contain;">
                         <span data-i18n="saveProjectBtn">Save</span>
                     </button>
 
                     <button onclick="uiManager.askToExit()" class="flex items-center gap-2 px-3 py-1.5 text-xs uppercase tracking-[0.1em] transition" style="color: var(--td-warn);" onmouseover="this.style.background='rgba(255,184,74,0.1)'" onmouseout="this.style.background='transparent'">
-                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M3 10l7-7 7 7M5 9v8h10V9"/></svg>
+                        <img data-icon="Home" alt="" style="width:14px;height:14px;object-fit:contain;">
                         <span data-i18n="onTheMenuBtn">Menu</span>
                     </button>
 
                     <button onclick="uiManager.showSettingsModal()" class="flex items-center gap-2 px-3 py-1.5 text-xs uppercase tracking-[0.1em] transition" style="color: var(--td-text-dim);" onmouseover="this.style.color='white'; this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.background='transparent'">
-                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="10" cy="10" r="3"/><path d="M10 2v2M10 16v2M18 10h-2M4 10H2M15.5 4.5l-1.4 1.4M5.9 14.1l-1.4 1.4M15.5 15.5l-1.4-1.4M5.9 5.9L4.5 4.5"/></svg>
+                        <img data-icon="Settings" alt="" style="width:14px;height:14px;object-fit:contain;">
                         <span data-i18n="settingsBtn">Settings</span>
                     </button>
 
@@ -1839,12 +1829,12 @@
                                 <div class="grid grid-cols-2 gap-1">
                                     <button onclick="engine.addCylinder()" data-i18n="shapeCylinder" class="shape-btn px-2 py-2 text-xs transition uppercase tracking-[0.08em]" style="background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text);" onmouseover="this.style.borderColor='var(--td-accent)'; this.style.color='var(--td-accent)'" onmouseout="this.style.borderColor='var(--td-border)'; this.style.color='var(--td-text)'">Cylinder</button>
                                     <button onclick="engine.addTriangle()" data-i18n="shapeTriangle" class="shape-btn px-2 py-2 text-xs transition uppercase tracking-[0.08em]" style="background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text);" onmouseover="this.style.borderColor='var(--td-accent)'; this.style.color='var(--td-accent)'" onmouseout="this.style.borderColor='var(--td-border)'; this.style.color='var(--td-text)'">Triangle</button>
-                                    <button onclick="uiManager.triggerGLBImport()" data-i18n="shapeImportGLB" class="shape-btn col-span-2 px-2 py-2 text-xs transition uppercase tracking-[0.08em]" style="background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text);" onmouseover="this.style.borderColor='var(--td-accent)'; this.style.color='var(--td-accent)'" onmouseout="this.style.borderColor='var(--td-border)'; this.style.color='var(--td-text)'">Import 3D (OBJ/GLB)</button>
+                                    <button onclick="uiManager.triggerGLBImport()" class="shape-btn col-span-2 px-2 py-2 text-xs transition uppercase tracking-[0.08em] flex items-center justify-center gap-1.5" style="background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text);" onmouseover="this.style.borderColor='var(--td-accent)'; this.style.color='var(--td-accent)'" onmouseout="this.style.borderColor='var(--td-border)'; this.style.color='var(--td-text)'"><img data-icon="FileDocument" alt="" style="width:13px;height:13px;object-fit:contain;"><span data-i18n="shapeImportGLB">Import 3D (OBJ/GLB)</span></button>
                                     <input type="file" id="import-glb-model" accept=".glb,.gltf,.obj" class="hidden" onchange="uiManager.importGLBModel(event)">
-                                    <button onclick="uiManager.openCollectionModal()" data-i18n="collectionBtn" class="shape-btn col-span-2 px-2 py-2 text-xs transition uppercase tracking-[0.08em]" style="background: rgba(255,138,61,0.08); border: 1px solid rgba(255,138,61,0.3); color: var(--td-accent);" onmouseover="this.style.background='rgba(255,138,61,0.16)'" onmouseout="this.style.background='rgba(255,138,61,0.08)'">✦ Collection</button>
-                                    <button onclick="uiManager.openAIBuilderModal()" data-i18n="aiBuilderBtn" class="shape-btn col-span-2 px-2 py-2 text-xs transition uppercase tracking-[0.08em] flex items-center justify-center gap-1.5" style="background: rgba(160,120,255,0.10); border: 1px solid rgba(160,120,255,0.35); color: #b79dff;" onmouseover="this.style.background='rgba(160,120,255,0.2)'" onmouseout="this.style.background='rgba(160,120,255,0.10)'">
-                                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><path d="M10 2l1.8 4.7L16.5 8.5 11.8 10.3 10 15l-1.8-4.7L3.5 8.5l4.7-1.8L10 2z"/></svg>
-                                        AI Builder
+                                    <button onclick="uiManager.openCollectionModal()" class="shape-btn col-span-2 px-2 py-2 text-xs transition uppercase tracking-[0.08em] flex items-center justify-center gap-1.5" style="background: rgba(255,138,61,0.08); border: 1px solid rgba(255,138,61,0.3); color: var(--td-accent);" onmouseover="this.style.background='rgba(255,138,61,0.16)'" onmouseout="this.style.background='rgba(255,138,61,0.08)'"><img data-icon="Suitcase2" alt="" style="width:13px;height:13px;object-fit:contain;"><span data-i18n="collectionBtn">Collection</span></button>
+                                    <button onclick="uiManager.openAIBuilderModal()" class="shape-btn col-span-2 px-2 py-2 text-xs transition uppercase tracking-[0.08em] flex items-center justify-center gap-1.5" style="background: rgba(160,120,255,0.10); border: 1px solid rgba(160,120,255,0.35); color: #b79dff;" onmouseover="this.style.background='rgba(160,120,255,0.2)'" onmouseout="this.style.background='rgba(160,120,255,0.10)'">
+                                        <img data-icon="Hammer" alt="" style="width:13px;height:13px;object-fit:contain;">
+                                        <span data-i18n="aiBuilderBtn">AI Builder</span>
                                     </button>
                                 </div>
                             </div>
@@ -1872,7 +1862,7 @@
                             Shift
                         </button>
                         <button onclick="engine.deleteObject()" id="btn-delete-float" class="hidden px-3 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition uppercase tracking-[0.1em] w-32" style="background: rgba(217,69,69,0.12); border: 1px solid rgba(217,69,69,0.4); color: var(--td-danger);" onmouseover="this.style.background='rgba(217,69,69,0.2)'" onmouseout="this.style.background='rgba(217,69,69,0.12)'">
-                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M4 6h12M8 6V4h4v2M6 6l1 11a1 1 0 001 1h4a1 1 0 001-1l1-11"/></svg>
+                            <img data-icon="Delete" alt="" style="width:14px;height:14px;object-fit:contain;">
                             Delete
                         </button>
                     </div>
@@ -1933,7 +1923,7 @@
                                     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="10" height="10" style="color: var(--td-text-dim); flex-shrink: 0;"><path d="M5 8l5 5 5-5"/></svg>
                                 </button>
                                 <button onclick="document.getElementById('file-texture').click()" data-i18n-title="titleImport" class="px-2 py-2 transition" style="background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text-dim);" onmouseover="this.style.color='var(--td-accent)'; this.style.borderColor='var(--td-accent)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'" title="Import image">
-                                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M3 17V5a2 2 0 012-2h7l3 3v11a1 1 0 01-1 1H5a2 2 0 01-2-1zM13 3v4h4M7 13l2-3 2 3 2-2 2 2"/></svg>
+                                    <img data-icon="FileFolder" alt="" style="width:14px;height:14px;object-fit:contain;">
                                 </button>
                                 <input type="file" id="file-texture" accept="image/*,application/octet-stream" class="hidden" onchange="uiManager.importTexture(event)">
                             </div>
@@ -1944,7 +1934,7 @@
                                     <button onclick="uiManager.selectNormalMap()" class="flex-1 px-2 py-1.5 text-[11px] font-semibold transition uppercase tracking-[0.08em] flex items-center justify-center gap-1" style="background: rgba(185,160,255,0.1); border: 1px solid rgba(185,160,255,0.3); color: #b9a0ff;" onmouseover="this.style.background='rgba(185,160,255,0.2)'" onmouseout="this.style.background='rgba(185,160,255,0.1)'">
                                         <span>Choose</span>
                                     </button>
-                                    <button onclick="uiManager.clearNormalMap()" class="px-2 py-1.5 text-xs transition" style="background: rgba(217,69,69,0.1); border: 1px solid rgba(217,69,69,0.3); color: var(--td-danger);" onmouseover="this.style.background='rgba(217,69,69,0.2)'" onmouseout="this.style.background='rgba(217,69,69,0.1)'" title="Remove normal map">✕</button>
+                                    <button onclick="uiManager.clearNormalMap()" class="px-2 py-1.5 text-xs transition" style="background: rgba(217,69,69,0.1); border: 1px solid rgba(217,69,69,0.3); color: var(--td-danger);" onmouseover="this.style.background='rgba(217,69,69,0.2)'" onmouseout="this.style.background='rgba(217,69,69,0.1)'" title="Remove normal map"><img data-icon="Close" alt="" style="width:12px;height:12px;object-fit:contain;vertical-align:-2px;"></button>
                                 </div>
                                 <div id="normal-map-label" class="text-[10px] mt-1 truncate mono" style="color: var(--td-text-muted);">No normal map</div>
                             </div>
@@ -2200,12 +2190,14 @@
 
                 <div class="flex text-xs font-semibold uppercase tracking-[0.12em]" style="border-top: 1px solid var(--td-border);">
                     <button onclick="uiManager.hideExportModal()"
-                            class="flex-1 py-3 text-center transition" style="color: var(--td-text-dim);" onmouseover="this.style.background='rgba(255,255,255,0.04)'; this.style.color='white'" onmouseout="this.style.background='transparent'; this.style.color='var(--td-text-dim)'">
+                            class="flex-1 py-3 text-center transition flex items-center justify-center gap-1.5" style="color: var(--td-text-dim);" onmouseover="this.style.background='rgba(255,255,255,0.04)'; this.style.color='white'" onmouseout="this.style.background='transparent'; this.style.color='var(--td-text-dim)'">
+                        <img data-icon="Close" alt="" style="width:12px;height:12px;object-fit:contain;">
                         Cancel
                     </button>
                     <div style="width: 1px; background: var(--td-border);"></div>
                     <button id="export-run-btn" onclick="uiManager.runSelectedExport()"
-                            class="flex-1 py-3 text-center transition" style="color: var(--td-accent);" onmouseover="this.style.background='rgba(255,138,61,0.1)'" onmouseout="this.style.background='transparent'">
+                            class="flex-1 py-3 text-center transition flex items-center justify-center gap-1.5" style="color: var(--td-accent);" onmouseover="this.style.background='rgba(255,138,61,0.1)'" onmouseout="this.style.background='transparent'">
+                        <img data-icon="Confirm" alt="" style="width:12px;height:12px;object-fit:contain;">
                         <span id="export-run-btn-label">Save ZIP</span>
                     </button>
                 </div>
@@ -2234,9 +2226,9 @@
                 </div>
                 <h3 class="text-sm font-semibold mb-5 tracking-[0.14em] uppercase" data-i18n="exitHeading">Need to save a project?</h3>
                 <div class="flex flex-col gap-1">
-                    <button onclick="uiManager.exitSaveProject()" class="w-full py-3 text-xs uppercase tracking-[0.14em] font-semibold transition" style="background: rgba(94,196,110,0.12); color: var(--td-ok); border: 1px solid rgba(94,196,110,0.4);" onmouseover="this.style.background='rgba(94,196,110,0.2)'" onmouseout="this.style.background='rgba(94,196,110,0.12)'" data-i18n="saveProjectBtn">Save Project</button>
-                    <button onclick="uiManager.exitDiscardProject()" class="w-full py-3 text-xs uppercase tracking-[0.14em] font-semibold transition" style="background: rgba(217,69,69,0.1); color: var(--td-danger); border: 1px solid rgba(217,69,69,0.4);" onmouseover="this.style.background='rgba(217,69,69,0.2)'" onmouseout="this.style.background='rgba(217,69,69,0.1)'" data-i18n="signOut">Sign Out</button>
-                    <button onclick="document.getElementById('exit-dialog-modal').classList.add('hidden')" class="w-full py-2 text-xs uppercase tracking-[0.14em] transition mt-1" style="color: var(--td-text-dim);" onmouseover="this.style.color='white'" onmouseout="this.style.color='var(--td-text-dim)'" data-i18n="cancel">Cancel</button>
+                    <button onclick="uiManager.exitSaveProject()" class="w-full py-3 text-xs uppercase tracking-[0.14em] font-semibold transition flex items-center justify-center gap-2" style="background: rgba(94,196,110,0.12); color: var(--td-ok); border: 1px solid rgba(94,196,110,0.4);" onmouseover="this.style.background='rgba(94,196,110,0.2)'" onmouseout="this.style.background='rgba(94,196,110,0.12)'"><img data-icon="Save1" alt="" style="width:13px;height:13px;object-fit:contain;"><span data-i18n="saveProjectBtn">Save Project</span></button>
+                    <button onclick="uiManager.exitDiscardProject()" class="w-full py-3 text-xs uppercase tracking-[0.14em] font-semibold transition flex items-center justify-center gap-2" style="background: rgba(217,69,69,0.1); color: var(--td-danger); border: 1px solid rgba(217,69,69,0.4);" onmouseover="this.style.background='rgba(217,69,69,0.2)'" onmouseout="this.style.background='rgba(217,69,69,0.1)'"><img data-icon="Delete" alt="" style="width:13px;height:13px;object-fit:contain;"><span data-i18n="signOut">Sign Out</span></button>
+                    <button onclick="document.getElementById('exit-dialog-modal').classList.add('hidden')" class="w-full py-2 text-xs uppercase tracking-[0.14em] transition mt-1 flex items-center justify-center gap-2" style="color: var(--td-text-dim);" onmouseover="this.style.color='white'" onmouseout="this.style.color='var(--td-text-dim)'"><img data-icon="Close" alt="" style="width:11px;height:11px;object-fit:contain;"><span data-i18n="cancel">Cancel</span></button>
                 </div>
             </div>
         </div>
@@ -2251,7 +2243,7 @@
                         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14" style="color: var(--td-accent);"><path d="M4 3.5A1.5 1.5 0 015.5 2H14l4 4v11.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 014 17.5v-14z"/><path d="M14 2v4h4"/><path d="M7 11h6M7 14h6M7 8h2"/></svg>
                         <span>MAPCG Editor Guide</span>
                     </h2>
-                    <button onclick="(window.uiManager ? uiManager.closeHelpGuideModal() : document.getElementById('help-guide-modal').classList.add('hidden'))" class="w-7 h-7 flex items-center justify-center text-lg transition" style="color: var(--td-text-dim);" onmouseover="this.style.color='var(--td-danger)'" onmouseout="this.style.color='var(--td-text-dim)'">&times;</button>
+                    <button onclick="(window.uiManager ? uiManager.closeHelpGuideModal() : document.getElementById('help-guide-modal').classList.add('hidden'))" class="w-7 h-7 flex items-center justify-center text-lg transition" style="color: var(--td-text-dim);" onmouseover="this.style.color='var(--td-danger)'" onmouseout="this.style.color='var(--td-text-dim)'"><img data-icon="Close" alt="" style="width:13px;height:13px;object-fit:contain;"></button>
                 </div>
 
 
@@ -2511,7 +2503,7 @@
                         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="10" cy="10" r="3"/><path d="M10 2v2M10 16v2M18 10h-2M4 10H2M15.5 4.5l-1.4 1.4M5.9 14.1l-1.4 1.4M15.5 15.5l-1.4-1.4M5.9 5.9L4.5 4.5"/></svg>
                         <span data-i18n="mapSettings">Map Settings</span>
                     </h2>
-                    <button onclick="document.getElementById('settings-modal').classList.add('hidden')" class="w-7 h-7 flex items-center justify-center text-lg transition" style="color: var(--td-text-dim);" onmouseover="this.style.color='var(--td-danger)'" onmouseout="this.style.color='var(--td-text-dim)'">&times;</button>
+                    <button onclick="document.getElementById('settings-modal').classList.add('hidden')" class="w-7 h-7 flex items-center justify-center text-lg transition" style="color: var(--td-text-dim);" onmouseover="this.style.color='var(--td-danger)'" onmouseout="this.style.color='var(--td-text-dim)'"><img data-icon="Close" alt="" style="width:13px;height:13px;object-fit:contain;"></button>
                 </div>
 
 
@@ -2521,7 +2513,7 @@
                     <button onclick="document.getElementById('settings-section-interface').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Interface</button>
                     <button onclick="document.getElementById('settings-section-graphics').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Graphics</button>
                     <button onclick="document.getElementById('settings-section-fog').scrollIntoView({behavior:'smooth',block:'start'})" class="px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition" style="background: var(--td-bg-2); color: var(--td-text-dim); border: 1px solid var(--td-border);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">Fog</button>
-                    <button id="btn-save-settings" onclick="uiManager.saveSettings()" class="ml-auto px-3 py-1 text-[10px] uppercase tracking-[0.12em] font-semibold transition" style="background: rgba(94,196,110,0.18); color: var(--td-ok); border: 1px solid rgba(94,196,110,0.55);" onmouseover="this.style.background='rgba(94,196,110,0.32)'; this.style.color='white'; this.style.borderColor='var(--td-ok)'" onmouseout="this.style.background='rgba(94,196,110,0.18)'; this.style.color='var(--td-ok)'; this.style.borderColor='rgba(94,196,110,0.55)'">Save Settings</button>
+                    <button id="btn-save-settings" onclick="uiManager.saveSettings()" class="ml-auto px-3 py-1 text-[10px] uppercase tracking-[0.12em] font-semibold transition flex items-center gap-1.5" style="background: rgba(94,196,110,0.18); color: var(--td-ok); border: 1px solid rgba(94,196,110,0.55);" onmouseover="this.style.background='rgba(94,196,110,0.32)'; this.style.color='white'; this.style.borderColor='var(--td-ok)'" onmouseout="this.style.background='rgba(94,196,110,0.18)'; this.style.color='var(--td-ok)'; this.style.borderColor='rgba(94,196,110,0.55)'"><img data-icon="Save1" alt="" style="width:11px;height:11px;object-fit:contain;">Save Settings</button>
                 </div>
 
                 <div class="flex flex-col gap-3 p-5 text-sm">
@@ -2544,7 +2536,7 @@
                         </div>
                         <label class="td-label block mb-1">Custom skybox (jpg / png)</label>
                         <div class="flex items-center gap-2 mb-3">
-                            <button onclick="document.getElementById('file-skybox').click()" class="px-3 py-1.5 text-xs uppercase tracking-[0.1em] transition" style="background: var(--td-bg-1); border: 1px solid var(--td-border); color: var(--td-text);" onmouseover="this.style.borderColor='var(--td-accent)'; this.style.color='var(--td-accent)'" onmouseout="this.style.borderColor='var(--td-border)'; this.style.color='var(--td-text)'">Choose</button>
+                            <button onclick="document.getElementById('file-skybox').click()" class="px-3 py-1.5 text-xs uppercase tracking-[0.1em] transition flex items-center gap-1.5" style="background: var(--td-bg-1); border: 1px solid var(--td-border); color: var(--td-text);" onmouseover="this.style.borderColor='var(--td-accent)'; this.style.color='var(--td-accent)'" onmouseout="this.style.borderColor='var(--td-border)'; this.style.color='var(--td-text)'"><img data-icon="FileFolder" alt="" style="width:12px;height:12px;object-fit:contain;">Choose</button>
                             <span id="skybox-file-name" class="text-xs truncate flex-1" style="color: var(--td-text-dim);">No file</span>
                         </div>
                         <input type="file" id="file-skybox" accept="image/*,application/octet-stream" class="hidden" onchange="uiManager.importSkybox(event)">
@@ -3848,6 +3840,98 @@ async function clearTextureCache() {
 }
 
 initBaseTextures();
+
+const UI_ICON_CACHE_KEY = "mapcg_ui_icons_v1";
+
+const UI_ICON_MANIFEST_CACHE_KEY = "mapcg_ui_icons_manifest_v1";
+
+const uiIcons = {};
+
+function canonicalIconKey(name) {
+    return name.replace(/^UI_Icon_/i, "").replace(/\.(png|jpg|jpeg|webp)$/i, "");
+}
+
+function applyUIIconNode(el) {
+    const key = el.getAttribute && el.getAttribute("data-icon");
+    if (!key) return;
+    const url = uiIcons[key];
+    if (url && el.src !== url) el.src = url;
+}
+
+function applyUIIcons(root) {
+    (root || document).querySelectorAll("img[data-icon]").forEach(applyUIIconNode);
+}
+
+function applyUIIconData(data) {
+    for (const [rawName, dataUrl] of Object.entries(data)) {
+        uiIcons[canonicalIconKey(rawName)] = dataUrl;
+    }
+    applyUIIcons();
+    console.log("[MapCG] " + Object.keys(data).length + " UI icons ready.");
+}
+
+async function initUIIcons() {
+    let cachedData = null;
+    let cachedManifestHash = null;
+    try {
+        cachedData = await localforage.getItem(UI_ICON_CACHE_KEY);
+        cachedManifestHash = await localforage.getItem(UI_ICON_MANIFEST_CACHE_KEY);
+        if (cachedData && Object.keys(cachedData).length > 0) {
+            applyUIIconData(cachedData);
+        }
+    } catch (e) {}
+    try {
+        const entries = await fetchGitHubFolderManifest("ButtonsIconsRegular");
+        const freshHash = manifestVersionHash(entries);
+        if (freshHash === cachedManifestHash && cachedData && Object.keys(cachedData).length > 0) {
+            return;
+        }
+        const data = await loadTexturesFromFolderEntries(entries);
+        if (Object.keys(data).length > 0) {
+            applyUIIconData(data);
+            try {
+                await localforage.setItem(UI_ICON_CACHE_KEY, data);
+                await localforage.setItem(UI_ICON_MANIFEST_CACHE_KEY, freshHash);
+            } catch (e) {}
+        }
+    } catch (e) {
+        console.warn("[MapCG] ButtonsIconsRegular folder fetch failed — using cache if available.", e && e.message || e);
+    }
+}
+
+async function handleManualIconsZip(event) {
+    const input = event.target;
+    const file = input.files[0];
+    if (!file) return;
+    input.value = "";
+    try {
+        const data = await loadTexturesFromZipBuffer(await file.arrayBuffer());
+        if (Object.keys(data).length === 0) throw new Error("No images in archive");
+        applyUIIconData(data);
+        try {
+            await localforage.setItem(UI_ICON_CACHE_KEY, data);
+        } catch (e) {}
+    } catch (e) {
+        console.error("[MapCG] UI icons zip load failed:", e);
+    }
+}
+
+const uiIconObserver = new MutationObserver(mutations => {
+    for (const m of mutations) {
+        if (!m.addedNodes) continue;
+        m.addedNodes.forEach(node => {
+            if (!node || node.nodeType !== 1) return;
+            if (node.matches && node.matches("img[data-icon]")) applyUIIconNode(node);
+            if (node.querySelectorAll) node.querySelectorAll("img[data-icon]").forEach(applyUIIconNode);
+        });
+    }
+});
+uiIconObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+});
+
+initUIIcons();
 
 const MUSIC_CACHE_KEY = "mapcg_music_v3_blobs";
 
@@ -13090,7 +13174,7 @@ window.uiManager = {
                         <div class="collection-item-info">
                             <div class="collection-item-name">${opt.textContent}</div>
                         </div>
-                        ${isCustom ? '<button class="texture-picker-delete-btn" title="Delete custom texture">🗑</button>' : ""}
+                        ${isCustom ? '<button class="texture-picker-delete-btn" title="Delete custom texture"><img data-icon="Delete" alt="" style="width:13px;height:13px;object-fit:contain;"></button>' : ""}
                     `;
             el.addEventListener("click", () => {
                 sel.value = opt.value;
@@ -13474,7 +13558,7 @@ window.uiManager = {
         const cards = await Promise.all(projects.map(async proj => {
             const sizeKB = await storageManager.getProjectSizeKB(proj.id);
             const fileDate = formatFileDate(getProjectTimestamp(proj));
-            return `\n                        <div class="gbox-project-card">\n                            <div class="project-card-panel">\n                                <div class="project-edit-fields">\n                                    <input type="text" value="${escapeHtml(proj.name || "")}" placeholder="${escapeHtml(namePlaceholder)}"\n                                        onchange="uiManager.renameProject('${proj.id}', this.value)"\n                                        class="td-input project-name-input">\n                                    <input type="text" value="${escapeHtml(proj.description || "")}" placeholder="${escapeHtml(descPlaceholder)}"\n                                        onchange="uiManager.updateProjectDescription('${proj.id}', this.value)"\n                                        class="td-input project-desc-input">\n                                </div>\n                                <div class="project-meta-row">\n                                    <div class="project-stats">\n                                        <span class="project-stat"><span class="project-stat-label">Date</span><span class="mono">${fileDate}</span></span>\n                                        <span class="project-stat"><span class="project-stat-label">Size</span><span class="mono">${sizeKB} KB</span></span>\n                                    </div>\n                                    <button onclick="uiManager.deleteProject('${proj.id}')" title="${escapeHtml(i18n.t("deleteConfirm"))}" class="project-danger-btn" aria-label="Delete project">\n                                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">\n                                            <path d="M4 6h12M8 6V4h4v2M6 6l1 10a1 1 0 001 1h4a1 1 0 001-1l1-10M8.5 9.2v5.6M11.5 9.2v5.6"/>\n                                        </svg>\n                                    </button>\n                                </div>\n                            </div>\n                            <button data-project-id="${proj.id}" data-project-name="${escapeHtml(proj.name || "")}" onclick="uiManager.loadProject(this.dataset.projectId, this.dataset.projectName)" class="project-load-btn">\n                                <span class="ui-icon" aria-hidden="true">\n                                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16"><path d="M3 10h9M9 4l6 6-6 6"/></svg>\n                                </span>\n                                <span>${i18n.t("loadMapText")}</span>\n                            </button>\n                        </div>`;
+            return `\n                        <div class="gbox-project-card">\n                            <div class="project-card-panel">\n                                <div class="project-edit-fields">\n                                    <input type="text" value="${escapeHtml(proj.name || "")}" placeholder="${escapeHtml(namePlaceholder)}"\n                                        onchange="uiManager.renameProject('${proj.id}', this.value)"\n                                        class="td-input project-name-input">\n                                    <input type="text" value="${escapeHtml(proj.description || "")}" placeholder="${escapeHtml(descPlaceholder)}"\n                                        onchange="uiManager.updateProjectDescription('${proj.id}', this.value)"\n                                        class="td-input project-desc-input">\n                                </div>\n                                <div class="project-meta-row">\n                                    <div class="project-stats">\n                                        <span class="project-stat"><span class="project-stat-label">Date</span><span class="mono">${fileDate}</span></span>\n                                        <span class="project-stat"><span class="project-stat-label">Size</span><span class="mono">${sizeKB} KB</span></span>\n                                    </div>\n                                    <button onclick="uiManager.deleteProject('${proj.id}')" title="${escapeHtml(i18n.t("deleteConfirm"))}" class="project-danger-btn" aria-label="Delete project">\n                                        <img data-icon="Delete" alt="" style="width:16px;height:16px;object-fit:contain;">\n                                    </button>\n                                </div>\n                            </div>\n                            <button data-project-id="${proj.id}" data-project-name="${escapeHtml(proj.name || "")}" onclick="uiManager.loadProject(this.dataset.projectId, this.dataset.projectName)" class="project-load-btn">\n                                <img class="ui-icon" data-icon="Play" alt="" aria-hidden="true">\n                                <span>${i18n.t("loadMapText")}</span>\n                            </button>\n                        </div>`;
         }));
         container.innerHTML = `\n                    <div class="project-browser-shell">\n                        <div class="project-card-stack">${cards.join("")}</div>\n                    </div>`;
     },
@@ -15270,7 +15354,7 @@ window.multiplayerClient = {
             overlay.onclick = e => { if (e.target === overlay) this.closeModal(); };
             overlay.innerHTML = `
 <div class="mp-modal modal-enter">
-  <div class="mp-head"><div class="mp-title">⚡ MAPCG Multiplayer</div><button class="collection-modal-close" onclick="multiplayerClient.closeModal()">✕</button></div>
+  <div class="mp-head"><div class="mp-title">⚡ MAPCG Multiplayer</div><button class="collection-modal-close" onclick="multiplayerClient.closeModal()"><img data-icon="Close" alt="" style="width:13px;height:13px;object-fit:contain;"></button></div>
   <div class="mp-body">
     <div class="mp-card">
       <h3>Connection</h3>
@@ -15278,7 +15362,7 @@ window.multiplayerClient = {
       <input id="mp-server-url" class="mp-input" placeholder="https://your-mapcg-server.up.railway.app" value="${this.escape(this.serverUrl)}">
       <label class="td-label block mt-2 mb-1">Nickname</label>
       <input id="mp-nickname" class="mp-input" maxlength="32" value="${this.escape(this.nickname)}">
-      <div class="mp-row mt-3"><button class="mp-btn green" onclick="multiplayerClient.connect()">Connect</button><button class="mp-btn red" onclick="multiplayerClient.disconnect()">Disconnect</button><button class="mp-btn" onclick="multiplayerClient.refreshRooms()">Refresh</button></div>
+      <div class="mp-row mt-3"><button class="mp-btn green" onclick="multiplayerClient.connect()"><img data-icon="Confirm" alt="" style="width:12px;height:12px;object-fit:contain;vertical-align:-2px;margin-right:4px;">Connect</button><button class="mp-btn red" onclick="multiplayerClient.disconnect()"><img data-icon="OnOff" alt="" style="width:12px;height:12px;object-fit:contain;vertical-align:-2px;margin-right:4px;">Disconnect</button><button class="mp-btn" onclick="multiplayerClient.refreshRooms()"><img data-icon="Refresh" alt="" style="width:12px;height:12px;object-fit:contain;vertical-align:-2px;margin-right:4px;">Refresh</button></div>
       <div id="mp-status-line" class="mp-muted"></div>
     </div>
     <div class="mp-card">
@@ -15289,7 +15373,7 @@ window.multiplayerClient = {
       <input id="mp-room-desc" class="mp-input" maxlength="220" placeholder="Collaborative map editing">
       <label class="flex items-center gap-2 mt-3 cursor-pointer"><input type="checkbox" id="mp-guests-build" checked><span class="mp-muted">Guests can build/edit</span></label>
       <label class="flex items-center gap-2 mt-1 cursor-pointer"><input type="checkbox" id="mp-guests-chat" checked><span class="mp-muted">Guests can chat</span></label>
-      <button class="mp-btn orange mt-3" onclick="multiplayerClient.createRoom()">Create from current project</button>
+      <button class="mp-btn orange mt-3" onclick="multiplayerClient.createRoom()"><img data-icon="Hammer" alt="" style="width:12px;height:12px;object-fit:contain;vertical-align:-2px;margin-right:4px;">Create from current project</button>
     </div>
     <div class="mp-card">
       <h3>Online Servers</h3>
@@ -15298,7 +15382,7 @@ window.multiplayerClient = {
     <div class="mp-card">
       <h3>Current Server</h3>
       <div id="mp-current-room" class="mp-muted">Not connected to a room.</div>
-      <div class="mp-row mt-2"><button class="mp-btn" onclick="multiplayerClient.toggleChat(true)">Open Chat</button><button class="mp-btn red" onclick="multiplayerClient.leaveRoom()">Leave</button></div>
+      <div class="mp-row mt-2"><button class="mp-btn" onclick="multiplayerClient.toggleChat(true)">Open Chat</button><button class="mp-btn red" onclick="multiplayerClient.leaveRoom()"><img data-icon="Exit" alt="" style="width:12px;height:12px;object-fit:contain;vertical-align:-2px;margin-right:4px;">Leave</button></div>
       <div class="mp-row" id="mp-admin-perms" style="display:none"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="mp-admin-guests-build" onchange="multiplayerClient.updatePermissions()"><span class="mp-muted">Guests build</span></label><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="mp-admin-guests-chat" onchange="multiplayerClient.updatePermissions()"><span class="mp-muted">Guests chat</span></label></div>
       <div class="td-label mt-2 mb-1">Players</div>
       <div id="mp-player-list" class="mp-list"></div>
@@ -15312,7 +15396,7 @@ window.multiplayerClient = {
             const chat = document.createElement("div");
             chat.id = "mp-chat";
             chat.className = "mp-chat hidden";
-            chat.innerHTML = `<div class="mp-chat-head"><span>Server Chat</span><button class="collection-modal-close" onclick="multiplayerClient.toggleChat(false)">✕</button></div><div class="mp-chat-body" id="mp-chat-body"></div><div class="mp-chat-form"><input id="mp-chat-input" class="mp-input" maxlength="350" placeholder="Message..."><button class="mp-btn green" onclick="multiplayerClient.sendChat()">Send</button></div>`;
+            chat.innerHTML = `<div class="mp-chat-head"><span>Server Chat</span><button class="collection-modal-close" onclick="multiplayerClient.toggleChat(false)"><img data-icon="Close" alt="" style="width:13px;height:13px;object-fit:contain;"></button></div><div class="mp-chat-body" id="mp-chat-body"></div><div class="mp-chat-form"><input id="mp-chat-input" class="mp-input" maxlength="350" placeholder="Message..."><button class="mp-btn green" onclick="multiplayerClient.sendChat()"><img data-icon="Reply" alt="" style="width:12px;height:12px;object-fit:contain;vertical-align:-2px;margin-right:4px;">Send</button></div>`;
             document.body.appendChild(chat);
             document.getElementById("mp-chat-input").addEventListener("keydown", e => { if (e.key === "Enter") this.sendChat(); });
         }
@@ -16215,7 +16299,7 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
             <div class="collection-modal ai-modal">
                 <div class="collection-modal-header">
                     <span class="collection-modal-title ai-modal-title">✦ AI Builder</span>
-                    <button class="collection-modal-close" onclick="uiManager.closeAIBuilderModal()">✕</button>
+                    <button class="collection-modal-close" onclick="uiManager.closeAIBuilderModal()"><img data-icon="Close" alt="" style="width:13px;height:13px;object-fit:contain;"></button>
                 </div>
                 <div class="ai-modal-body">
                     <textarea id="ai-builder-prompt" class="ai-prompt-input" placeholder="Describe what to build: e.g. "wooden bridge over river" or "rusty metal barrel"..."></textarea>
@@ -16251,8 +16335,8 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
                     </div>
                 </div>
                 <div class="collection-modal-footer">
-                    <button class="ai-cancel-btn" id="ai-cancel-btn" style="display:none" onclick="aiBuilder.cancel()">Cancel</button>
-                    <button class="ai-build-btn" id="ai-build-btn" style="flex:1" onclick="aiBuilder.run()">✦ Build</button>
+                    <button class="ai-cancel-btn" id="ai-cancel-btn" style="display:none" onclick="aiBuilder.cancel()"><img data-icon="Close" alt="" style="width:12px;height:12px;object-fit:contain;vertical-align:-2px;margin-right:4px;">Cancel</button>
+                    <button class="ai-build-btn" id="ai-build-btn" style="flex:1" onclick="aiBuilder.run()"><img data-icon="Hammer" alt="" style="width:13px;height:13px;object-fit:contain;vertical-align:-2px;margin-right:5px;">Build</button>
                 </div>
             </div>
         </div>
@@ -16261,9 +16345,10 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
             <div class="collection-modal">
                 <div class="collection-modal-header">
                     <span class="collection-modal-title">Choose Texture</span>
-                    <button class="collection-modal-close" onclick="uiManager.closeTexturePickerModal()">✕</button>
+                    <button class="collection-modal-close" onclick="uiManager.closeTexturePickerModal()"><img data-icon="Close" alt="" style="width:13px;height:13px;object-fit:contain;"></button>
                 </div>
-                <div class="collection-modal-toolbar" style="padding-bottom: 10px;">
+                <div class="collection-modal-toolbar" style="padding-bottom: 10px; align-items: center; gap: 8px;">
+                    <img data-icon="Search" alt="" style="width:14px;height:14px;object-fit:contain;flex-shrink:0;">
                     <input type="text" id="texture-picker-search" placeholder="Search texture…" class="td-input" style="flex: 1; padding: 8px 10px; font-size: 12px;" oninput="uiManager._refreshTexturePickerBody()">
                 </div>
                 <div class="collection-modal-body" id="texture-picker-modal-body">
@@ -16275,29 +16360,29 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
             <div class="collection-modal collection-modal-fullscreen">
                 <div class="collection-modal-header">
                     <span class="collection-modal-title">Collection of Subjects</span>
-                    <button class="collection-modal-close" onclick="uiManager.closeCollectionModal()">✕</button>
+                    <button class="collection-modal-close" onclick="uiManager.closeCollectionModal()"><img data-icon="Close" alt="" style="width:13px;height:13px;object-fit:contain;"></button>
                 </div>
                 <div class="collection-modal-body" id="collection-modal-body">
                 </div>
                 <div class="collection-modal-footer">
-                    <button class="collection-btn-spawn" onclick="uiManager.collectionSpawnItem()" data-i18n="collectionSpawn">✦ SPAWN OBJECT</button>
+                    <button class="collection-btn-spawn" onclick="uiManager.collectionSpawnItem()"><img data-icon="Confirm" alt="" style="width:13px;height:13px;object-fit:contain;vertical-align:-2px;margin-right:5px;"><span data-i18n="collectionSpawn">SPAWN OBJECT</span></button>
                 </div>
             </div>
         </div>
 
     <div id="tex-load-btn" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9999;background:#18181c;border:1px solid rgba(255,138,61,0.4);padding:12px 20px;gap:10px;align-items:center;white-space:nowrap;pointer-events:auto;">
         <span id="tex-status-text" style="color:#e8e8e8;font-weight:600;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;">&#128230; Select BaseTextures.zip</span>
-        <button onclick="document.getElementById('tex-zip-input').click()" style="background:#ff8a3d;color:#000;border:none;padding:6px 14px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;margin-left:6px;">&#128194; Load</button>
+        <button onclick="document.getElementById('tex-zip-input').click()" style="background:#ff8a3d;color:#000;border:none;padding:6px 14px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;margin-left:6px;display:flex;align-items:center;gap:6px;"><img data-icon="FileFolder" alt="" style="width:12px;height:12px;object-fit:contain;">Load</button>
         <input type="file" id="tex-zip-input" accept=".zip" style="display:none" onchange="handleManualTexZip(event)">
-        <button onclick="document.getElementById('tex-load-btn').style.display='none'" title="Close" style="background:transparent;color:#8a8a90;border:none;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;margin-left:4px;padding:0;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#94a3b8'">&#10005;</button>
+        <button onclick="document.getElementById('tex-load-btn').style.display='none'" title="Close" style="background:transparent;color:#8a8a90;border:none;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;margin-left:4px;padding:0;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#94a3b8'"><img data-icon="Close" alt="" style="width:13px;height:13px;object-fit:contain;"></button>
     </div>
 
 
     <div id="music-load-btn" style="display:none;position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;background:#18181c;border:1px solid rgba(96,165,250,0.4);padding:12px 20px;gap:10px;align-items:center;white-space:nowrap;pointer-events:auto;">
         <span id="music-status-text" style="color:#e8e8e8;font-weight:600;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;">&#127925; Select Music.zip</span>
-        <button onclick="document.getElementById('music-zip-input').click()" style="background:#60a5fa;color:#000;border:none;padding:6px 14px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;margin-left:6px;">&#128194; Load</button>
+        <button onclick="document.getElementById('music-zip-input').click()" style="background:#60a5fa;color:#000;border:none;padding:6px 14px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;margin-left:6px;display:flex;align-items:center;gap:6px;"><img data-icon="FileFolder" alt="" style="width:12px;height:12px;object-fit:contain;">Load</button>
         <input type="file" id="music-zip-input" accept=".zip" style="display:none" onchange="handleManualMusicZip(event)">
-        <button onclick="document.getElementById('music-load-btn').style.display='none'" title="Close" style="background:transparent;color:#8a8a90;border:none;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;margin-left:4px;padding:0;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#94a3b8'">&#10005;</button>
+        <button onclick="document.getElementById('music-load-btn').style.display='none'" title="Close" style="background:transparent;color:#8a8a90;border:none;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;margin-left:4px;padding:0;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#94a3b8'"><img data-icon="Close" alt="" style="width:13px;height:13px;object-fit:contain;"></button>
     </div>
 
 
