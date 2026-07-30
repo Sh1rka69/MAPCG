@@ -6328,6 +6328,7 @@ const engine = {
         this.renderer.shadowMap.type = this.isMobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
         this.renderer.shadowMap.autoUpdate = false;
         this.renderer.shadowMap.needsUpdate = true;
+        this._initContextLossRecovery(canvas);
         this._initOcclusionCulling();
         this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
         this.pmremGenerator.compileEquirectangularShader();
@@ -9860,6 +9861,137 @@ void main(){
         const sizeFactor = THREE.MathUtils.clamp(Math.sqrt(maxDim), .25, 5);
         return Math.max(12, this.drawDistance * sizeFactor);
     },
+    // ─── WebGL context-loss recovery ───────────────────────────────────
+    // Under heavy lag (huge draw calls, an oversized render-target from
+    // the Render Studio, the tab going to background on mobile, GPU
+    // driver resets, low memory) the browser/driver can yank the WebGL
+    // context out from under us entirely. Three.js keeps calling
+    // renderer.render() every frame regardless — draws into a context
+    // that no longer has any attachments — which on most drivers reads
+    // back as solid white (sometimes solid black). The render loop
+    // itself never throws, so nothing here ever told the user what
+    // happened; the tab just sat there frozen and white forever, and if
+    // a Render Studio capture was in flight at that exact moment, its
+    // canvas.toBlob() faithfully encoded that same blank/transparent
+    // buffer to a "finished" image with no error at all.
+    //
+    // Fix: listen for the real browser signal (webglcontextlost /
+    // webglcontextrestored), which fires reliably. On loss: stop calling
+    // render() immediately (so we freeze on the last GOOD frame instead
+    // of spamming a broken context white every tick) and show a small,
+    // unmissable status banner. Most desktop drivers restore the context
+    // within a second or two on their own — if that happens we resume
+    // cleanly and the banner disappears with no user action needed. If
+    // it does NOT come back quickly (common on mobile GPUs, which often
+    // don't restore at all), we stop guessing and offer a one-tap
+    // "Reload" — Three.js's render targets/composer chain are not safe
+    // to silently patch back together piecemeal, so a clean reload is
+    // the same recovery path professional WebGL tools (Figma, Spline,
+    // etc.) use rather than pretending everything's fine.
+    _initContextLossRecovery: function(canvas) {
+        this._contextLost = false;
+        canvas.addEventListener("webglcontextlost", event => {
+            // MUST preventDefault() — without it the browser treats the
+            // loss as permanent and never fires webglcontextrestored.
+            event.preventDefault();
+            if (this._contextLost) return;
+            this._contextLost = true;
+            console.warn("[engine] WebGL context lost — pausing render loop.");
+            this._showContextLostBanner();
+        }, false);
+        canvas.addEventListener("webglcontextrestored", () => {
+            console.info("[engine] WebGL context restored.");
+            this._contextLost = false;
+            // Textures/materials/geometries re-upload themselves lazily on
+            // next use (three.js tracks GL resources per-renderer and
+            // re-creates them transparently) but WebGLRenderTargets (our
+            // composer chain, depth pre-pass target, PMREM, env-reflection
+            // capture) hold GL framebuffer objects that the lost context
+            // already destroyed — those need a hard dispose + rebuild
+            // before the composer can draw into them again.
+            try {
+                this._rebuildRenderTargetsAfterContextLoss();
+                this._hideContextLostBanner();
+            } catch (err) {
+                // Rebuilding failed (e.g. driver restored the context but
+                // is still in a bad state) — don't leave the user staring
+                // at a silently broken viewport, offer the reload path.
+                console.error("[engine] context-restore rebuild failed:", err);
+                this._showContextLostBanner(true);
+            }
+        }, false);
+    },
+    _rebuildRenderTargetsAfterContextLoss: function() {
+        const w = this.renderer.domElement.width || window.innerWidth;
+        const h = this.renderer.domElement.height || window.innerHeight;
+        // Composer's internal read/write targets + every pass's own
+        // targets (bloom mip chain, etc.) all live on the GPU; disposing
+        // and forcing a resize is the officially-recommended way to get
+        // three.js to reallocate them against the restored context.
+        if (this.composer) {
+            this.composer.renderTarget1?.dispose?.();
+            this.composer.renderTarget2?.dispose?.();
+            this.composer.setSize(w, h);
+        }
+        if (this._depthTarget) {
+            this._depthTarget.dispose();
+            this._depthTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
+        }
+        if (this.bloomPass && this.bloomPass.setSize) this.bloomPass.setSize(w, h);
+        if (this.pmremGenerator) {
+            try { this.pmremGenerator.dispose(); } catch (e) {}
+            this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+            this.pmremGenerator.compileEquirectangularShader();
+        }
+        // Force one shadow-map re-render since shadowMap.autoUpdate is off
+        // and the shadow FBOs were also lost with the context.
+        if (this.renderer.shadowMap) this.renderer.shadowMap.needsUpdate = true;
+        // Re-arm the environment reflection capture so the cubemap isn't
+        // left pointing at a disposed render target.
+        if (this._envReflectionEnabled) this._envReflectionLastCapturePos = null;
+    },
+    _showContextLostBanner: function(rebuildFailed) {
+        let el = document.getElementById("ctx-lost-banner");
+        if (!el) {
+            el = document.createElement("div");
+            el.id = "ctx-lost-banner";
+            el.style.cssText = "position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:99999;" +
+                "background:#1a1310;border:1px solid #e0824a;color:#f2e6dd;padding:10px 16px;border-radius:6px;" +
+                "font:600 12px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.02em;" +
+                "box-shadow:0 8px 28px rgba(0,0,0,.45);display:flex;align-items:center;gap:12px;max-width:min(92vw,460px);";
+            document.body.appendChild(el);
+        }
+        const canAutoRecover = !rebuildFailed;
+        el.innerHTML = canAutoRecover
+            ? `<span style="width:8px;height:8px;border-radius:50%;background:#e0824a;flex:0 0 auto;animation:ctxLostPulse 1s ease-in-out infinite;"></span>` +
+              `<span>Graphics context lost — attempting to recover…</span>`
+            : `<span style="width:8px;height:8px;border-radius:50%;background:#e05a4a;flex:0 0 auto;"></span>` +
+              `<span style="flex:1;">Graphics couldn't recover automatically. Save your project, then reload.</span>` +
+              `<button onclick="location.reload()" style="background:#e0824a;border:none;color:#1a1310;font:700 11px/1 inherit;padding:7px 12px;border-radius:4px;cursor:pointer;white-space:nowrap;">Reload</button>`;
+        if (!document.getElementById("ctx-lost-style")) {
+            const style = document.createElement("style");
+            style.id = "ctx-lost-style";
+            style.textContent = "@keyframes ctxLostPulse{0%,100%{opacity:1}50%{opacity:.35}}";
+            document.head.appendChild(style);
+        }
+        el.style.display = "flex";
+        // If the driver never fires webglcontextrestored within a few
+        // seconds (common on mobile — many mobile GPUs don't restore at
+        // all once lost), stop waiting silently and offer the reload
+        // path instead of leaving the "attempting to recover" banner up
+        // forever.
+        clearTimeout(this._ctxLostTimeout);
+        if (canAutoRecover) {
+            this._ctxLostTimeout = setTimeout(() => {
+                if (this._contextLost) this._showContextLostBanner(true);
+            }, 6000);
+        }
+    },
+    _hideContextLostBanner: function() {
+        clearTimeout(this._ctxLostTimeout);
+        const el = document.getElementById("ctx-lost-banner");
+        if (el) el.style.display = "none";
+    },
     _initOcclusionCulling: function() {
         const gl = this.renderer.getContext();
         this._occlusionSupported = !!(gl && gl instanceof WebGL2RenderingContext);
@@ -11835,6 +11967,17 @@ void main(){
     },
     animate: function() {
         requestAnimationFrame(this.animate.bind(this));
+        // While the WebGL context is lost, skip the frame entirely: don't
+        // advance clocks/physics, don't touch the camera, and above all
+        // don't call renderer.render()/composer.render() — drawing into a
+        // dead context is exactly what produced the solid-white frozen
+        // screen this guards against. We still keep requesting frames so
+        // that the moment webglcontextrestored fires (see
+        // _initContextLossRecovery), the very next tick resumes normally.
+        if (this._contextLost) {
+            this.clock.getDelta();
+            return;
+        }
         const _rawDt = this.clock.getDelta();
         const dt = this.worldPaused ? 0 : _rawDt;
         weatherUniforms.uTime.value += dt;
@@ -12054,6 +12197,20 @@ void main(){
             this._renderSkipFrames = 0;
         } catch (err) {
             console.error("Scene render error:", err);
+            this._renderSkipFrames = (this._renderSkipFrames || 0) + 1;
+            // A handful of consecutive render failures that AREN'T
+            // accompanied by a webglcontextlost event (GPU out-of-memory
+            // on a huge render target, a driver hiccup that throws
+            // instead of formally losing the context, etc.) is just as
+            // much of a "stuck white/frozen screen" situation for the
+            // user as an actual context loss — so it gets the same
+            // banner + recovery path rather than silently spamming the
+            // console 60 times a second forever.
+            if (this._renderSkipFrames >= 20 && !this._contextLost) {
+                this._contextLost = true;
+                console.warn("[engine] Repeated render failures — pausing render loop.");
+                this._showContextLostBanner(true);
+            }
         }
         try {
             this.updateOcclusionCulling();
@@ -16901,6 +17058,10 @@ window.renderStudio = {
             setStage("Preparing scene...");
             await this._nextFrame();
 
+            if (engine.renderer.getContext().isContextLost()) {
+                throw new Error("Graphics context is currently lost. Wait for it to recover (see the banner) or reload, then try rendering again.");
+            }
+
             const { w: outW, h: outH } = this._resolveTargetSize();
             const ssaa = this.prefs.ssaa || 1;
             const rw = Math.max(1, Math.round(outW * ssaa));
@@ -16909,24 +17070,8 @@ window.renderStudio = {
             this._applyRenderSettings(snap);
             await this._nextFrame();
 
-            setStage("Sizing buffers...");
             engine.camera.aspect = outW / outH;
             engine.camera.updateProjectionMatrix();
-            engine.renderer.setPixelRatio(1);
-            engine.renderer.setSize(rw, rh, false);
-            if (engine.composer) engine.composer.setSize(rw, rh);
-            if (engine._depthTarget) engine._depthTarget.setSize(Math.floor(rw / 2), Math.floor(rh / 2));
-            if (engine.ssaoPass && engine.ssaoPass.uniforms) {
-                engine.ssaoPass.uniforms.resolution.value.set(rw, rh);
-                engine.ssaoPass.uniforms.uDepthResolution.value.set(Math.floor(rw / 2), Math.floor(rh / 2));
-                engine.ssaoPass.uniforms.tDepth.value = engine._depthTarget.texture;
-            }
-            if (engine.dofPass && engine.dofPass.uniforms) {
-                engine.dofPass.uniforms.resolution.value.set(rw, rh);
-                engine.dofPass.uniforms.tDepth.value = engine._depthTarget.texture;
-            }
-            if (engine.bloomPass && engine.bloomPass.setSize) engine.bloomPass.setSize(rw, rh);
-            if (engine.updateDepthEncodingUniforms) engine.updateDepthEncodingUniforms();
 
             if (this.prefs.envReflEnabled && engine._envReflectionEnabled !== undefined) {
                 setStage("Capturing environment reflections...");
@@ -16938,30 +17083,76 @@ window.renderStudio = {
                 }
             }
 
-            setStage("Rendering frame...");
-            await this._nextFrame();
-            this._renderOneFrame();
-
-            setStage("Reading back pixels...");
-            await this._nextFrame();
-            const fullCanvas = engine.renderer.domElement;
+            // Anything past ~1536px on a side, per tile, keeps peak VRAM
+            // for the composer chain (color + bloom mips + AO/DOF depth)
+            // low enough to survive on integrated/mobile GPUs even with
+            // every quality setting maxed out. Below that, a single
+            // full-size buffer is simpler and slightly faster, so we only
+            // pay the tiling overhead when the requested resolution
+            // actually needs it.
+            const needsTiling = rw > this._TILE_MAX || rh > this._TILE_MAX;
 
             let finalCanvas;
-            if (ssaa > 1) {
-                setStage("Downsampling (" + ssaa + "x SSAA)...");
-                await this._nextFrame();
-                finalCanvas = document.createElement("canvas");
-                finalCanvas.width = outW;
-                finalCanvas.height = outH;
-                const ctx = finalCanvas.getContext("2d");
-                ctx.imageSmoothingEnabled = true;
-                if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
-                ctx.drawImage(fullCanvas, 0, 0, fullCanvas.width, fullCanvas.height, 0, 0, outW, outH);
+            if (needsTiling) {
+                finalCanvas = await this._renderTiled(outW, outH, rw, rh, ssaa, setStage);
             } else {
-                finalCanvas = document.createElement("canvas");
-                finalCanvas.width = outW;
-                finalCanvas.height = outH;
-                finalCanvas.getContext("2d").drawImage(fullCanvas, 0, 0);
+                setStage("Sizing buffers...");
+                engine.renderer.setPixelRatio(1);
+                engine.renderer.setSize(rw, rh, false);
+                if (engine.composer) engine.composer.setSize(rw, rh);
+                if (engine._depthTarget) engine._depthTarget.setSize(Math.floor(rw / 2), Math.floor(rh / 2));
+                if (engine.ssaoPass && engine.ssaoPass.uniforms) {
+                    engine.ssaoPass.uniforms.resolution.value.set(rw, rh);
+                    engine.ssaoPass.uniforms.uDepthResolution.value.set(Math.floor(rw / 2), Math.floor(rh / 2));
+                    engine.ssaoPass.uniforms.tDepth.value = engine._depthTarget.texture;
+                }
+                if (engine.dofPass && engine.dofPass.uniforms) {
+                    engine.dofPass.uniforms.resolution.value.set(rw, rh);
+                    engine.dofPass.uniforms.tDepth.value = engine._depthTarget.texture;
+                }
+                if (engine.bloomPass && engine.bloomPass.setSize) engine.bloomPass.setSize(rw, rh);
+                if (engine.updateDepthEncodingUniforms) engine.updateDepthEncodingUniforms();
+
+                setStage("Rendering frame...");
+                await this._nextFrame();
+                this._renderOneFrame();
+
+                if (engine.renderer.getContext().isContextLost()) {
+                    throw new Error("Graphics context was lost while rendering this frame. Nothing was saved — please try again (a lower resolution or SSAA level is more likely to succeed on this device).");
+                }
+
+                setStage("Reading back pixels...");
+                await this._nextFrame();
+                const fullCanvas = engine.renderer.domElement;
+
+                if (ssaa > 1) {
+                    setStage("Downsampling (" + ssaa + "x SSAA)...");
+                    await this._nextFrame();
+                    finalCanvas = document.createElement("canvas");
+                    finalCanvas.width = outW;
+                    finalCanvas.height = outH;
+                    const ctx = finalCanvas.getContext("2d");
+                    ctx.imageSmoothingEnabled = true;
+                    if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
+                    ctx.drawImage(fullCanvas, 0, 0, fullCanvas.width, fullCanvas.height, 0, 0, outW, outH);
+                } else {
+                    finalCanvas = document.createElement("canvas");
+                    finalCanvas.width = outW;
+                    finalCanvas.height = outH;
+                    finalCanvas.getContext("2d").drawImage(fullCanvas, 0, 0);
+                }
+            }
+
+            // Guard against exactly the bug this fix targets: even if
+            // every render call above "succeeded" without throwing, a
+            // context that died silently mid-frame can still produce a
+            // fully blank (transparent, or solid white/black) canvas.
+            // Sample a handful of pixels across the image — a real render
+            // essentially never has every single sampled pixel be fully
+            // transparent AND identical — and refuse to hand back a
+            // "successful" empty file if that's what we got.
+            if (this._looksBlank(finalCanvas)) {
+                throw new Error("The rendered image came back blank — this usually means the graphics context was lost mid-render. Please try again.");
             }
 
             setStage("Encoding " + this.prefs.format.toUpperCase() + "...");
@@ -17042,6 +17233,154 @@ window.renderStudio = {
 
     _nextFrame: function() {
         return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    },
+
+    // -----------------------------------------------------------------
+    // TILED RENDERING — how we make "maximum settings" actually finish.
+    //
+    // A single render target at, say, 4K output * 4x SSAA is 15360×8640
+    // (~133 megapixels). At HalfFloat precision with a full composer
+    // chain (scene color + bloom mip chain + AO/DOF depth buffers) that
+    // is comfortably enough VRAM to make many GPUs — especially mobile
+    // and integrated ones — throw an allocation failure or drop the
+    // WebGL context outright. That's the exact "everything goes blank/
+    // transparent" failure this whole fix targets, and no amount of
+    // catching the error after the fact fixes it, because the frame was
+    // never successfully rendered in the first place.
+    //
+    // The fix used by real offline renderers (Blender's render border
+    // tiling, Unreal's high-res screenshot tool) is to never allocate
+    // the full-resolution buffer at all: render the same camera's view
+    // in smaller rectangular tiles, one at a time, each into a small,
+    // safe-sized render target, and stitch the results into one big
+    // 2D <canvas> (which is plain CPU-side memory, not GPU VRAM, so it
+    // comfortably holds even 8K images). Three.js ships exactly the
+    // primitive this needs — PerspectiveCamera.setViewOffset() — for
+    // this precise use case (its own doc comment uses a multi-monitor
+    // tiling example).
+    _TILE_MAX: 1536, // safe per-tile render size in device pixels; keeps peak VRAM low on integrated/mobile GPUs even with a full AO+bloom+DOF composer chain
+    _renderTiled: async function(outW, outH, rw, rh, ssaa, setStage) {
+        const e = engine;
+        const cam = e.camera;
+        const tileMax = this._TILE_MAX;
+        const cols = Math.ceil(rw / tileMax);
+        const rows = Math.ceil(rh / tileMax);
+        const totalTiles = cols * rows;
+
+        // Full-resolution result lives on the CPU (2D canvas), never on
+        // the GPU — this is what lets us assemble an image far larger
+        // than any single WebGL render target the GPU could hold.
+        const stitched = document.createElement("canvas");
+        stitched.width = rw;
+        stitched.height = rh;
+        const stitchCtx = stitched.getContext("2d");
+
+        let tileIndex = 0;
+        for (let ty = 0; ty < rows; ty++) {
+            for (let tx = 0; tx < cols; tx++) {
+                tileIndex++;
+                if (engine.renderer.getContext().isContextLost()) {
+                    throw new Error("WebGL context lost during tiled render.");
+                }
+                setStage(`Rendering tile ${tileIndex}/${totalTiles}...`);
+                await this._nextFrame();
+
+                const tileX = tx * tileMax;
+                const tileY = ty * tileMax;
+                const tileW = Math.min(tileMax, rw - tileX);
+                const tileH = Math.min(tileMax, rh - tileY);
+
+                // Point the camera's asymmetric frustum at just this
+                // rectangle of the full frame — the scene renders
+                // exactly as if the full-size image was rendered and
+                // cropped, just without ever allocating the full buffer.
+                cam.setViewOffset(rw, rh, tileX, tileY, tileW, tileH);
+
+                // Every buffer that's sized off the render resolution
+                // needs to shrink to this tile's (small, safe) size.
+                e.renderer.setPixelRatio(1);
+                e.renderer.setSize(tileW, tileH, false);
+                if (e.composer) e.composer.setSize(tileW, tileH);
+                if (e._depthTarget) e._depthTarget.setSize(Math.floor(tileW / 2), Math.floor(tileH / 2));
+                if (e.ssaoPass?.uniforms) {
+                    e.ssaoPass.uniforms.resolution.value.set(tileW, tileH);
+                    e.ssaoPass.uniforms.uDepthResolution.value.set(Math.floor(tileW / 2), Math.floor(tileH / 2));
+                    e.ssaoPass.uniforms.tDepth.value = e._depthTarget.texture;
+                }
+                if (e.dofPass?.uniforms) {
+                    e.dofPass.uniforms.resolution.value.set(tileW, tileH);
+                    e.dofPass.uniforms.tDepth.value = e._depthTarget.texture;
+                }
+                if (e.bloomPass?.setSize) e.bloomPass.setSize(tileW, tileH);
+                if (e.updateDepthEncodingUniforms) e.updateDepthEncodingUniforms();
+
+                try {
+                    this._renderOneFrame();
+                } catch (err) {
+                    // One bad tile shouldn't necessarily be a lost cause —
+                    // but if the context is actually gone, no amount of
+                    // retrying the remaining tiles will succeed, so fail
+                    // the whole render loudly instead of silently
+                    // stitching in blank tiles for the rest of the image.
+                    if (e.renderer.getContext().isContextLost()) {
+                        throw new Error("WebGL context lost during tiled render.");
+                    }
+                    throw err;
+                }
+
+                if (engine.renderer.getContext().isContextLost()) {
+                    throw new Error("WebGL context lost during tiled render.");
+                }
+
+                stitchCtx.drawImage(e.renderer.domElement, 0, 0, tileW, tileH, tileX, tileY, tileW, tileH);
+                await this._nextFrame();
+            }
+        }
+        cam.clearViewOffset();
+
+        // Downsample the full stitched buffer from SSAA resolution to the
+        // requested output resolution in one pass, same as the
+        // non-tiled path.
+        if (ssaa > 1) {
+            setStage(`Downsampling (${ssaa}x SSAA)...`);
+            await this._nextFrame();
+            const finalCanvas = document.createElement("canvas");
+            finalCanvas.width = outW;
+            finalCanvas.height = outH;
+            const ctx = finalCanvas.getContext("2d");
+            ctx.imageSmoothingEnabled = true;
+            if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
+            ctx.drawImage(stitched, 0, 0, rw, rh, 0, 0, outW, outH);
+            return finalCanvas;
+        }
+        return stitched;
+    },
+
+    // Last-resort guard: sample pixels across the canvas and refuse a
+    // render that's uniformly transparent/blank (the exact symptom of a
+    // context lost mid-render silently producing an "empty success").
+    _looksBlank: function(canvas) {
+        try {
+            const ctx = canvas.getContext("2d");
+            const w = canvas.width, h = canvas.height;
+            const cols = 8, rows = 8;
+            let firstR = null, firstG = null, firstB = null, firstA = null;
+            let allSame = true, allTransparent = true;
+            for (let i = 0; i < cols; i++) {
+                for (let j = 0; j < rows; j++) {
+                    const x = Math.min(w - 1, Math.floor((i + 0.5) * w / cols));
+                    const y = Math.min(h - 1, Math.floor((j + 0.5) * h / rows));
+                    const d = ctx.getImageData(x, y, 1, 1).data;
+                    if (d[3] !== 0) allTransparent = false;
+                    if (firstR === null) { firstR = d[0]; firstG = d[1]; firstB = d[2]; firstA = d[3]; }
+                    else if (d[0] !== firstR || d[1] !== firstG || d[2] !== firstB || d[3] !== firstA) allSame = false;
+                }
+            }
+            return allTransparent || allSame;
+        } catch (err) {
+            console.warn("[renderStudio] blank-check failed, skipping guard:", err);
+            return false;
+        }
     },
 
     // -----------------------------------------------------------------
