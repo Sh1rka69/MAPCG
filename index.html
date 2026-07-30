@@ -790,216 +790,6 @@
             border-color: var(--td-border-strong);
         }
 
-        #playtest-overlay {
-            position: absolute; inset: 0; z-index: 20; pointer-events: none;
-            display: none;
-            user-select: none;
-            -webkit-user-select: none;
-            touch-action: none;
-            overflow: hidden;
-        }
-        #playtest-overlay.show { display: block; }
-
-        .gb-crosshair {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-            width: 36px; height: 36px;
-            transition: opacity 0.15s;
-        }
-        .gb-crosshair .ch-dot {
-            position: absolute; top: 50%; left: 50%;
-            width: 2px; height: 2px;
-            background: rgba(255,255,255,0.95);
-            transform: translate(-50%,-50%);
-            box-shadow: 0 0 2px rgba(0,0,0,0.9);
-        }
-        .gb-crosshair .ch-tl, .gb-crosshair .ch-tr, .gb-crosshair .ch-bl, .gb-crosshair .ch-br {
-            position: absolute; width: 8px; height: 1px;
-            background: rgba(255,255,255,0.95);
-            box-shadow: 0 0 2px rgba(0,0,0,0.9);
-        }
-        .gb-crosshair .ch-tl::after, .gb-crosshair .ch-tr::after, .gb-crosshair .ch-bl::after, .gb-crosshair .ch-br::after {
-            content: ''; position: absolute; width: 1px; height: 8px;
-            background: rgba(255,255,255,0.95);
-            box-shadow: 0 0 2px rgba(0,0,0,0.9);
-        }
-        .gb-crosshair .ch-tl { top: 8px; left: 8px; }
-        .gb-crosshair .ch-tl::after { top: 0; left: 0; }
-        .gb-crosshair .ch-tr { top: 8px; right: 8px; }
-        .gb-crosshair .ch-tr::after { top: 0; right: 0; }
-        .gb-crosshair .ch-bl { bottom: 8px; left: 8px; }
-        .gb-crosshair .ch-bl::after { bottom: 0; left: 0; }
-        .gb-crosshair .ch-br { bottom: 8px; right: 8px; }
-        .gb-crosshair .ch-br::after { bottom: 0; right: 0; }
-
-        .gb-topbar {
-            position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
-            display: flex; align-items: center; gap: 14px;
-            pointer-events: auto;
-            z-index: 5;
-        }
-        .gb-topbar-btn {
-            width: 44px; height: 44px;
-            background: rgba(255,255,255,0.08);
-            border: 1.5px solid rgba(255,255,255,0.3);
-            color: #fff;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer;
-            transition: background 0.1s, border-color 0.1s;
-            position: relative;
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
-        }
-        .gb-topbar-btn:active { background: rgba(255,255,255,0.2); }
-        .gb-topbar-btn.active {
-            background: rgba(255,138,61,0.3);
-            border-color: rgba(255,138,61,0.8);
-            box-shadow: 0 0 12px rgba(255,138,61,0.4);
-        }
-        .gb-topbar-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-        .gb-topbar-btn.weapon {
-            width: 48px; height: 48px;
-        }
-        .gb-topbar-btn.weapon.selected {
-            background: rgba(255,255,255,0.2);
-            border-color: #fff;
-            box-shadow: 0 0 14px rgba(255,255,255,0.35);
-        }
-        .gb-topbar-btn.weapon.selected::after {
-            content: ''; position: absolute; bottom: -8px; left: 50%;
-            transform: translateX(-50%);
-            width: 0; height: 0;
-            border-left: 6px solid transparent; border-right: 6px solid transparent;
-            border-top: 6px solid #fff;
-        }
-
-        .gb-right-top {
-            position: absolute; top: 80px; right: 14px;
-            display: flex; flex-direction: column; gap: 10px;
-            pointer-events: auto;
-            z-index: 5;
-        }
-        .gb-circle-btn {
-            width: 56px; height: 56px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.08);
-            border: 1.5px solid rgba(255,255,255,0.35);
-            color: #fff;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer;
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
-            transition: background 0.1s, transform 0.08s;
-        }
-        .gb-circle-btn:active { transform: scale(0.92); background: rgba(255,255,255,0.22); }
-        .gb-circle-btn.small { width: 46px; height: 46px; }
-        .gb-circle-btn.big { width: 72px; height: 72px; }
-        .gb-circle-btn.accent {
-            background: rgba(255,255,255,0.15);
-            border-color: rgba(255,255,255,0.5);
-        }
-        .gb-circle-btn svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-        .gb-circle-btn.small svg { width: 24px; height: 24px; }
-        .gb-circle-btn.active {
-            background: rgba(255,138,61,0.4);
-            border-color: #ffb070;
-            box-shadow: 0 0 16px rgba(255,138,61,0.45);
-        }
-
-        .gb-right-bottom {
-            position: absolute; bottom: 28px; right: 22px;
-            display: grid; grid-template-columns: auto auto; gap: 14px 16px; align-items: end;
-            pointer-events: auto;
-            z-index: 5;
-        }
-        .gb-btn-col { display: flex; flex-direction: column; gap: 16px; align-items: center; }
-        .gb-btn-col.inner { align-items: flex-end; margin-right: 12px; }
-        .gb-btn-col.outer { align-items: flex-end; }
-.gb-weapon-label {
-            position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
-            text-align: center; color: #fff;
-            pointer-events: none;
-            z-index: 5;
-            text-shadow: 0 2px 6px rgba(0,0,0,0.8);
-        }
-        .gb-weapon-label .wname {
-            font-size: 22px; font-weight: 700; letter-spacing: 0.04em;
-            text-transform: uppercase;
-        }
-        .gb-weapon-label .wtype {
-            font-size: 12px; opacity: 0.75; letter-spacing: 0.18em;
-            text-transform: uppercase; margin-top: 2px;
-        }
-
-        .gb-exit-btn {
-            position: absolute; top: 14px; left: 14px;
-            width: 58px; height: 58px;
-            border-radius: 50%;
-            background: rgba(0,0,0,0.5);
-            border: 1.5px solid rgba(255,255,255,0.35);
-            color: #fff;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer;
-            pointer-events: auto;
-            z-index: 5;
-            font-weight: 700;
-            font-size: 12px;
-            letter-spacing: 0.08em;
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
-        }
-        .gb-exit-btn:active { background: rgba(217,69,69,0.4); border-color: #ff6b6b; }
-#playtest-overlay #mobile-joystick {
-            position: absolute;
-            left: 100px; bottom: 40px;
-            display: none;
-            z-index: 6;
-        }
-        #playtest-overlay #mobile-joystick.visible { display: block; }
-
-        #gb-look-zone {
-            position: absolute; top: 0; right: 0;
-            width: 55%; height: 100%;
-            z-index: 3;
-            touch-action: none;
-
-            pointer-events: none;
-        }
-        #gb-look-zone.active { pointer-events: auto; }
-        #gb-look-zone.always { pointer-events: auto; }
-
-        .gb-right-top, .gb-right-bottom, .gb-topbar { z-index: 6; }
-
-        .gb-tap-to-start {
-            position: absolute; inset: 0;
-            display: flex; align-items: center; justify-content: center;
-            pointer-events: auto;
-            background: rgba(0,0,0,0.55);
-            z-index: 25;
-            color: #fff;
-            font-size: 28px; letter-spacing: 0.3em; text-transform: uppercase; font-weight: 700;
-            text-shadow: 0 2px 12px rgba(0,0,0,0.9);
-            cursor: pointer;
-        }
-        .gb-tap-to-start.hidden { display: none; }
-
-        .gb-tap-to-start.hidden { pointer-events: none !important; }
-
-        @keyframes punchShake {
-            0% { transform: translate(0,0); }
-            20% { transform: translate(3px, -2px); }
-            40% { transform: translate(-3px, 1px); }
-            100% { transform: translate(0,0); }
-        }
-        .gb-shake { animation: punchShake 0.22s ease-out; }
-
-        #gb-damage-vignette {
-            position: absolute; inset: 0; pointer-events: none;
-            background: radial-gradient(circle at center, transparent 40%, rgba(217,69,69,0) 70%);
-            opacity: 0; transition: opacity 0.2s; z-index: 4;
-        }
-        #gb-damage-vignette.show { opacity: 1; }
 #mobile-joystick {
             position: absolute;
             left: 24px;
@@ -1316,18 +1106,6 @@
         .td-row { display: flex; align-items: center; gap: 8px; }
         .td-grow { flex: 1; min-width: 0; }
 
-        #playtest-btn {
-            background: var(--td-accent) !important;
-            color: #000 !important;
-            border: none !important;
-            padding: 6px 14px !important;
-            font-weight: 600 !important;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            font-size: 12px;
-            transition: background 0.12s;
-        }
-        #playtest-btn:hover { background: var(--td-accent-bright) !important; }
 
         #btn-world-pause-toggle:hover { filter: brightness(1.35); }
         #btn-world-pause-toggle[aria-pressed="true"] { box-shadow: 0 0 0 1px rgba(255,138,61,0.35) inset; }
@@ -1610,108 +1388,6 @@
     <div id="editor-ui" class="w-full h-full" style="display: none; position: fixed; inset: 0;">
         <canvas id="glcanvas"></canvas>
 
-        <div id="playtest-overlay">
-
-            <div id="gb-look-zone"></div>
-
-
-            <div class="gb-crosshair" id="gb-crosshair">
-                <div class="ch-dot"></div>
-                <div class="ch-tl"></div>
-                <div class="ch-tr"></div>
-                <div class="ch-bl"></div>
-                <div class="ch-br"></div>
-            </div>
-
-
-            <div id="gb-damage-vignette"></div>
-
-
-            <button onclick="gameplay.exitPlaytest()" title="Exit Playtest (Esc)" class="gb-exit-btn">ESC</button>
-<div class="gb-topbar">
-<button class="gb-topbar-btn" id="gb-btn-inventory" title="Inventory (Tab)" onpointerdown="gameplay.toggleInventory()">
-                    <span class="ui-icon ui-icon-mask" data-icon="Suitcase2"  alt="" style="width:22px;height:22px;object-fit:contain;"></span>
-                </button>
-                <button class="gb-topbar-btn weapon selected" data-weapon="fists" title="Hands (1)" onpointerdown="gameplay.selectWeapon('fists')">
-
-                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor">
-                        <path d="M6 10V7a1.5 1.5 0 0 1 3 0v1M9 8V5.5a1.5 1.5 0 0 1 3 0V8M12 8V6a1.5 1.5 0 0 1 3 0v3M15 9V7.5a1.5 1.5 0 0 1 3 0v6c0 4-3 7-7 7s-7-2-7-6v-2a2 2 0 0 1 2-2h0z"/>
-                    </svg>
-                </button>
-                <button class="gb-topbar-btn weapon" data-weapon="pistol" title="Gun (2)" onpointerdown="gameplay.selectWeapon('pistol')">
-
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path d="M4 11h7l4-3h4l1 2-2 4h-3l-1 4H7c-1.5 0-3-1.5-3-3v-4z" fill="currentColor" fill-opacity="0.1"/>
-                        <path d="M4 11h7l4-3h4l1 2-2 4h-3l-1 4H7c-1.5 0-3-1.5-3-3v-4z"/>
-                        <path d="M11 11v3"/>
-                    </svg>
-                </button>
-                <button class="gb-topbar-btn weapon" data-weapon="sword" title="Sword (3)" onpointerdown="gameplay.selectWeapon('sword')">
-
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                        <path d="M6 18 L18 6" stroke-width="2.5"/>
-                        <path d="M14 6 L18 6 L18 10" fill="none"/>
-                        <path d="M5 19 L7.5 16.5" stroke-width="2.5"/>
-                        <path d="M4 20 L6 18" stroke-width="3"/>
-                    </svg>
-                </button>
-                <button class="gb-topbar-btn weapon" data-weapon="knife" title="Kitchen Knife (4)" onpointerdown="gameplay.selectWeapon('knife')">
-
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path d="M4 20 L18 6 L20 4" stroke-width="2.2"/>
-                        <path d="M3 21 L8 16" stroke-width="3" stroke-linecap="round"/>
-                        <path d="M15 9 L19 13 L13 17 L10 14 Z" fill="currentColor" fill-opacity="0.15"/>
-                    </svg>
-                </button>
-            </div>
-
-
-            <div class="gb-right-top">
-                <button class="gb-circle-btn" id="gb-btn-sleep" title="Sleep / Rest (Z)" onpointerdown="gameplay.toggleSleep()">
-                    <span style="font-weight:900; font-size:24px; letter-spacing:-2px;">Z<tspan style="font-size:16px;vertical-align:super;">z</tspan><tspan style="font-size:14px;vertical-align:baseline;opacity:.7;">z</tspan></span>
-                </button>
-                <button class="gb-circle-btn small" id="gb-btn-fly" title="Fly / Wings (X)" onpointerdown="gameplay.toggleFly()">
-                    <svg viewBox="0 0 24 24"><path d="M4 14c3-4 8-8 16-9-2 5-6 10-12 12-2 .7-3 1-4 1 0-1 0-2 0-4z"/><path d="M8 15c2-1 5-2 8-2"/></svg>
-                </button>
-                <button class="gb-circle-btn accent" id="gb-btn-flashlight" title="Flashlight (F)" onpointerdown="gameplay.toggleFlashlight()">
-                    <svg viewBox="0 0 24 24"><path d="M5 5l8 8"/><path d="M14 6l4 4-2 2-4-4z" fill="currentColor" fill-opacity="0.2"/><path d="M14 6l4 4-2 2-4-4z"/><path d="M13 13l2 2-3 3-2-2 2-2z"/><path d="M3 7l2-2 2 2-2 2z"/></svg>
-                </button>
-            </div>
-
-
-            <div class="gb-right-bottom">
-                <div class="gb-btn-col inner">
-                    <button class="gb-circle-btn small" id="gb-btn-kick" title="Kick (Q)" onpointerdown="gameplay.doKick()">
-                        <svg viewBox="0 0 24 24"><path d="M7 3v8l4 4 4-3"/><path d="M15 12l6 6"/><path d="M10 15l-4 6"/></svg>
-                    </button>
-                    <button class="gb-circle-btn accent" id="gb-btn-punch" title="Punch / Fire (LMB)" onpointerdown="gameplay.doAttack()">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 10V7a1.5 1.5 0 0 1 3 0v1M9 8V5.5a1.5 1.5 0 0 1 3 0V8M12 8V6a1.5 1.5 0 0 1 3 0v3M15 9V7.5a1.5 1.5 0 0 1 3 0v6c0 4-3 7-7 7s-7-2-7-6v-2a2 2 0 0 1 2-2z"/></svg>
-                    </button>
-                </div>
-                <div class="gb-btn-col outer">
-                    <button class="gb-circle-btn" id="gb-btn-crouch" title="Crouch (C/Ctrl)" onpointerdown="gameplay.setCrouch(true)" onpointerup="gameplay.setCrouch(false)" onpointerleave="gameplay.setCrouch(false)">
-                        <svg viewBox="0 0 24 24"><path d="M12 3v6"/><path d="M8 15l-2 6h12l-2-6"/><path d="M7 9l5 3 5-3"/></svg>
-                    </button>
-                    <button class="gb-circle-btn accent" id="gb-btn-jump" title="Jump (Space)"
-                        onpointerdown="event.preventDefault(); gameplay.doJump()"
-                        onpointerup="gameplay.doJumpRelease()"
-                        onpointerleave="gameplay.doJumpRelease()"
-                        onpointercancel="gameplay.doJumpRelease()">
-                        <svg viewBox="0 0 24 24"><path d="M12 4v10"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>
-                    </button>
-                </div>
-            </div>
-
-            <div class="gb-weapon-label" id="gb-weapon-label">
-                <div class="wname" id="gb-wname">Hands</div>
-                <div class="wtype" id="gb-wtype">Melee</div>
-            </div>
-
-            <div class="gb-tap-to-start" id="gb-tap-to-start" onclick="gameplay.lockPointer()">
-                TAP TO PLAY
-            </div>
-        </div>
-
         <div id="ui-layer" class="ui-scale-layer">
 
             <div id="ai-gen-toast" class="ai-gen-toast" data-state="running" role="status" aria-live="polite">
@@ -1773,10 +1449,6 @@
                         </button>
                     </div>
 
-                    <button id="playtest-btn" onclick="gameplay.startPlaytest()" class="flex items-center gap-1.5 ml-1">
-                        <svg viewBox="0 0 20 20" fill="currentColor" width="10" height="10"><path d="M5 4l11 6-11 6z"/></svg>
-                        <span>Play</span>
-                    </button>
 
                     <button id="btn-world-pause-toggle" onclick="engine.toggleWorldPause()" title="Pause World (Freeze Time)" aria-label="Pause World" aria-pressed="false" class="w-8 h-8 flex items-center justify-center transition ml-1" style="background: transparent; border: 1px solid var(--td-border); color: var(--td-text-dim);" type="button">
 
@@ -2838,8 +2510,129 @@
 
                     <div id="settings-section-fog" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                         <h3 data-i18n="fogHeader" class="td-label td-accent mb-3" style="font-size: 11px;">Fog</h3>
-                        <label data-i18n="fogColorLabel" class="td-label block mb-1">Fog Color</label>
-                        <input type="color" id="setting-fog-color" value="#8bc5eb" onchange="engine.updateEnvironment(); window.historyManager.takeSnapshot();" class="w-full h-9 cursor-pointer mb-3" style="background: transparent; border: 1px solid var(--td-border); padding: 2px;">
+
+                        <!-- Hidden real color input (value holder, used by engine) -->
+                        <input type="color" id="setting-fog-color" value="#8bc5eb" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;" tabindex="-1">
+
+                        <!-- Fog Color Label + Trigger Row -->
+                        <label data-i18n="fogColorLabel" class="td-label block mb-2">Fog Color</label>
+                        <div id="fog-color-trigger-row" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                            <button id="fog-color-swatch-btn" onclick="fogColorPicker.open()" style="
+                                flex:1; height:32px; border:1px solid var(--td-border); cursor:pointer;
+                                background:#8bc5eb; transition:border-color 0.12s, box-shadow 0.12s;
+                                position:relative; overflow:hidden;
+                            " title="Pick fog color">
+                                <span id="fog-color-swatch-hex" style="
+                                    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+                                    font-family:'JetBrains Mono','SF Mono',monospace;font-size:11px;font-weight:600;
+                                    letter-spacing:0.08em;color:rgba(0,0,0,0.55);text-shadow:0 1px 2px rgba(255,255,255,0.4);
+                                    pointer-events:none;
+                                ">#8bc5eb</span>
+                            </button>
+                            <button id="fog-eyedropper-launch-btn" onclick="fogColorPicker.startEyedropper()" title="Pick color from screen" style="
+                                width:32px;height:32px;flex-shrink:0;
+                                background:var(--td-bg-3);border:1px solid var(--td-border);cursor:pointer;
+                                display:flex;align-items:center;justify-content:center;
+                                transition:border-color 0.12s,background 0.12s,color 0.12s;color:var(--td-text-dim);
+                            ">
+                                <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M13.5 1.5a1.5 1.5 0 00-2.12 0L9.5 3.38l-.88-.88a1 1 0 00-1.41 0L5.79 3.91l-.35-.35a.75.75 0 10-1.06 1.06l.35.35-3.5 3.5A1 1 0 001 9.2v1.3h1.3a1 1 0 00.7-.29l3.5-3.5.35.35a.75.75 0 001.06-1.06l-.35-.35 1.41-1.41.89.88 1.94 1.94-1.5 1.5a.75.75 0 001.06 1.06l1.5-1.5.59.58a.75.75 0 001.06-1.06l-.59-.58 1-1a1.5 1.5 0 000-2.12L13.5 1.5zM2 10.5v.5h.5l3.21-3.21-.5-.5L2 10.5z" fill="currentColor"/>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Fog Color Picker Panel -->
+                        <div id="fog-color-picker-panel" style="display:none;margin-bottom:12px;background:var(--td-bg-1);border:1px solid var(--td-border-strong);overflow:hidden;">
+
+                            <!-- Panel Header -->
+                            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--td-border);background:var(--td-bg-0);">
+                                <span class="td-label" style="font-size:10px;color:var(--td-accent);">FOG COLOR</span>
+                                <div style="display:flex;gap:6px;align-items:center;">
+                                    <button id="fog-cp-eyedropper-btn" onclick="fogColorPicker.startEyedropper()" title="Eyedropper" style="
+                                        width:24px;height:24px;background:var(--td-bg-2);border:1px solid var(--td-border);
+                                        cursor:pointer;display:flex;align-items:center;justify-content:center;
+                                        transition:border-color 0.12s,color 0.12s;color:var(--td-text-dim);
+                                    ">
+                                        <svg width="13" height="13" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M13.5 1.5a1.5 1.5 0 00-2.12 0L9.5 3.38l-.88-.88a1 1 0 00-1.41 0L5.79 3.91l-.35-.35a.75.75 0 10-1.06 1.06l.35.35-3.5 3.5A1 1 0 001 9.2v1.3h1.3a1 1 0 00.7-.29l3.5-3.5.35.35a.75.75 0 001.06-1.06l-.35-.35 1.41-1.41.89.88 1.94 1.94-1.5 1.5a.75.75 0 001.06 1.06l1.5-1.5.59.58a.75.75 0 001.06-1.06l-.59-.58 1-1a1.5 1.5 0 000-2.12L13.5 1.5zM2 10.5v.5h.5l3.21-3.21-.5-.5L2 10.5z" fill="currentColor"/>
+                                        </svg>
+                                    </button>
+                                    <button onclick="fogColorPicker.close()" title="Close" style="
+                                        width:24px;height:24px;background:transparent;border:none;cursor:pointer;
+                                        color:var(--td-text-dim);font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;
+                                    ">×</button>
+                                </div>
+                            </div>
+
+                            <!-- SV Gradient Canvas -->
+                            <div style="padding:10px 10px 0;">
+                                <div style="position:relative;width:100%;padding-bottom:56%;border:1px solid var(--td-border);overflow:hidden;cursor:crosshair;" id="fog-sv-wrap">
+                                    <canvas id="fog-sv-canvas" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>
+                                    <div id="fog-sv-thumb" style="
+                                        position:absolute;width:12px;height:12px;border-radius:50%;
+                                        border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,0.5),0 1px 4px rgba(0,0,0,0.5);
+                                        pointer-events:none;transform:translate(-50%,-50%);
+                                        transition:none;
+                                    "></div>
+                                </div>
+                            </div>
+
+                            <!-- Hue Slider -->
+                            <div style="padding:8px 10px 0;">
+                                <div style="position:relative;height:14px;border:1px solid var(--td-border);overflow:visible;cursor:pointer;" id="fog-hue-wrap">
+                                    <canvas id="fog-hue-canvas" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>
+                                    <div id="fog-hue-thumb" style="
+                                        position:absolute;top:50%;width:8px;height:18px;
+                                        background:#fff;border:1px solid rgba(0,0,0,0.4);box-shadow:0 1px 3px rgba(0,0,0,0.5);
+                                        transform:translate(-50%,-50%);pointer-events:none;cursor:pointer;
+                                    "></div>
+                                </div>
+                            </div>
+
+                            <!-- Alpha Slider -->
+                            <div style="padding:6px 10px 0;">
+                                <div style="position:relative;height:14px;border:1px solid var(--td-border);overflow:visible;cursor:pointer;" id="fog-alpha-wrap">
+                                    <canvas id="fog-alpha-canvas" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>
+                                    <div id="fog-alpha-thumb" style="
+                                        position:absolute;top:50%;width:8px;height:18px;
+                                        background:#fff;border:1px solid rgba(0,0,0,0.4);box-shadow:0 1px 3px rgba(0,0,0,0.5);
+                                        transform:translate(-50%,-50%);pointer-events:none;
+                                    "></div>
+                                </div>
+                            </div>
+
+                            <!-- Hex + RGB inputs -->
+                            <div style="padding:8px 10px;display:flex;gap:6px;align-items:flex-end;">
+                                <div style="flex:1.4;">
+                                    <div class="td-label" style="font-size:9px;margin-bottom:4px;color:var(--td-text-muted);">HEX</div>
+                                    <input id="fog-hex-input" type="text" maxlength="7" value="#8bc5eb" class="td-input" style="
+                                        width:100%;padding:5px 7px;font-size:12px;
+                                        font-family:'JetBrains Mono','SF Mono',monospace;letter-spacing:0.05em;text-transform:uppercase;
+                                    " oninput="fogColorPicker.onHexInput(this.value)">
+                                </div>
+                                <div style="flex:1;">
+                                    <div class="td-label" style="font-size:9px;margin-bottom:4px;color:var(--td-text-muted);">R</div>
+                                    <input id="fog-r-input" type="number" min="0" max="255" value="139" class="td-input" style="width:100%;padding:5px 4px;font-size:12px;text-align:center;" oninput="fogColorPicker.onRGBInput()">
+                                </div>
+                                <div style="flex:1;">
+                                    <div class="td-label" style="font-size:9px;margin-bottom:4px;color:var(--td-text-muted);">G</div>
+                                    <input id="fog-g-input" type="number" min="0" max="255" value="197" class="td-input" style="width:100%;padding:5px 4px;font-size:12px;text-align:center;" oninput="fogColorPicker.onRGBInput()">
+                                </div>
+                                <div style="flex:1;">
+                                    <div class="td-label" style="font-size:9px;margin-bottom:4px;color:var(--td-text-muted);">B</div>
+                                    <input id="fog-b-input" type="number" min="0" max="255" value="235" class="td-input" style="width:100%;padding:5px 4px;font-size:12px;text-align:center;" oninput="fogColorPicker.onRGBInput()">
+                                </div>
+                            </div>
+
+                            <!-- Presets -->
+                            <div style="padding:0 10px 10px;">
+                                <div class="td-label" style="font-size:9px;margin-bottom:5px;color:var(--td-text-muted);">PRESETS</div>
+                                <div id="fog-presets" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Eyedropper Overlay (injected at body level via JS, this placeholder is unused) -->
+
                         <div class="flex gap-2">
                             <div class="w-1/2">
                                 <label data-i18n="fogStart" class="td-label block mb-1">Start</label>
@@ -2965,12 +2758,6 @@ window.i18n = {
             optRain: "Rain (Drops & Noise)",
             optThunder: "Thunderstorm (Rain & Lightning)",
             optSnow: "Snow (Snow on cubes)",
-            playtestControls: "PLAYTEST CONTROLS",
-            ptEsc: "[ESC] - Exit to Editor",
-            ptMove: "[W A S D] - Movement",
-            ptSprint: "[Shift] - Sprint",
-            ptCrouch: "[Ctrl] - Crouch",
-            ptJump: "[Space] - Jump",
             titleTranslate: "Translate",
             titleRotate: "Rotate",
             titleScale: "Scale",
@@ -6284,7 +6071,8 @@ const engine = {
             antialias: false,
             alpha: false,
             powerPreference: "high-performance",
-            precision: "highp"
+            precision: "highp",
+            preserveDrawingBuffer: true
         });
         this.renderer.setSize(window.innerWidth, window.innerHeight, false);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
@@ -6813,7 +6601,7 @@ void main(){
         if (slider && Number(slider.value) !== safe) slider.value = String(safe);
         const lbl = document.getElementById("camera-fov-val");
         if (lbl) lbl.innerText = Math.round(safe) + "°";
-        if (this.camera && !(window.gameplay && gameplay.isPlaytest)) {
+        if (this.camera) {
             this.camera.fov = safe;
             this.camera.updateProjectionMatrix();
             if (this.worldPaused) this._pauseNeedsCapture = true;
@@ -6871,7 +6659,7 @@ void main(){
         return enabled;
     },
     updateAdaptiveResolution: function(rawDt) {
-        if (!this.adaptiveResEnabled || !this.renderer || this.worldPaused || gameplay.isPlaytest === undefined) return;
+        if (!this.adaptiveResEnabled || !this.renderer || this.worldPaused) return;
         if (!rawDt || rawDt <= 0) return;
         this._adaptiveResTimer = (this._adaptiveResTimer || 0) + rawDt;
         this._adaptiveResFpsHistory.push(1 / rawDt);
@@ -7550,7 +7338,7 @@ void main(){
             this.mobileJoystickKnob.style.transform = `translate(calc(-50% + ${px}px), calc(-50% + ${py}px))`;
         };
         this.mobileJoystickEl.addEventListener("pointerdown", e => {
-            if (!this.joystickEnabled && !gameplay.isPlaytest) return;
+            if (!this.joystickEnabled) return;
             e.preventDefault();
             e.stopPropagation();
             this.mobileJoystickEl.setPointerCapture?.(e.pointerId);
@@ -7574,21 +7362,6 @@ void main(){
         const canvas = this.renderer?.domElement;
         if (canvas) {
             canvas.addEventListener("pointerdown", e => {
-                if (gameplay.isPlaytest) {
-                    if (!this.joystickEnabled) return;
-                    if (e.pointerType === "mouse" && e.button !== 0) return;
-                    if (e.clientX > window.innerWidth * .5) return;
-                    if (this.mobileJoystick.pointerId !== null) return;
-                    placeFloatingAt(e.clientX, e.clientY);
-                    this.mobileJoystick.pointerId = e.pointerId;
-                    try {
-                        this.mobileJoystickEl.setPointerCapture?.(e.pointerId);
-                    } catch (_) {}
-                    updateKnob(e.clientX, e.clientY);
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return;
-                }
                 if (!this.joystickEnabled || !this.joystickFloating) return;
                 if (e.pointerType === "mouse" && e.button !== 0) return;
                 if (e.clientX > window.innerWidth * .55) return;
@@ -7603,56 +7376,6 @@ void main(){
                 e.preventDefault();
                 e.stopPropagation();
             }, true);
-            this._touchLook = {
-                pointerId: null,
-                lastX: 0,
-                lastY: 0
-            };
-            const lookZone = document.getElementById("gb-look-zone");
-            const handleLookDown = e => {
-                if (!gameplay.isPlaytest) return;
-                if (e.pointerType === "mouse" && document.pointerLockElement) return;
-                if (this.mobileJoystick.pointerId === e.pointerId) return;
-                if (e.target && e.target.closest && e.target.closest("button")) return;
-                this._touchLook.pointerId = e.pointerId;
-                this._touchLook.lastX = e.clientX;
-                this._touchLook.lastY = e.clientY;
-                try {
-                    lookZone.setPointerCapture?.(e.pointerId);
-                } catch (_) {}
-                e.preventDefault();
-                e.stopPropagation();
-            };
-            const handleLookMove = e => {
-                if (this._touchLook.pointerId !== e.pointerId) return;
-                const dx = e.clientX - this._touchLook.lastX;
-                const dy = e.clientY - this._touchLook.lastY;
-                this._touchLook.lastX = e.clientX;
-                this._touchLook.lastY = e.clientY;
-                const sens = .0055;
-                const euler = new THREE.Euler(0, 0, 0, "YXZ");
-                euler.setFromQuaternion(engine.camera.quaternion);
-                euler.y -= dx * sens;
-                euler.x -= dy * sens;
-                euler.x = Math.max(-Math.PI / 2 + .02, Math.min(Math.PI / 2 - .02, euler.x));
-                engine.camera.quaternion.setFromEuler(euler);
-                e.preventDefault();
-            };
-            const handleLookUp = e => {
-                if (this._touchLook.pointerId !== e.pointerId) return;
-                this._touchLook.pointerId = null;
-                try {
-                    lookZone.releasePointerCapture?.(e.pointerId);
-                } catch (_) {}
-            };
-            if (lookZone) {
-                lookZone.addEventListener("pointerdown", handleLookDown, true);
-                window.addEventListener("pointermove", handleLookMove, {
-                    passive: false
-                });
-                window.addEventListener("pointerup", handleLookUp);
-                window.addEventListener("pointercancel", handleLookUp);
-            }
         }
         reset();
         this.updateJoystickVisibility();
@@ -7700,10 +7423,6 @@ void main(){
     updateJoystickVisibility: function() {
         const el = this.mobileJoystickEl || document.getElementById("mobile-joystick");
         if (!el) return;
-        if (gameplay?.isPlaytest) {
-            if (this.joystickEnabled && !this.joystickFloating) el.classList.add("visible");
-            return;
-        }
         if (this.joystickEnabled && !this.joystickFloating) {
             el.classList.add("visible");
         } else if (!(this.joystickFloating && this.mobileJoystick?.active)) {
@@ -7739,7 +7458,6 @@ void main(){
                 tl.pointerId = null;
                 return;
             }
-            if (gameplay.isPlaytest) return;
             const joystickEl = document.getElementById("mobile-joystick");
             if (joystickEl && joystickEl.contains(e.target)) return;
             if (this.mobileJoystick.pointerId !== null) return;
@@ -7755,7 +7473,6 @@ void main(){
         canvas.addEventListener("pointercancel", removePointer, false);
         window.addEventListener("pointermove", e => {
             if (!tl.active || e.pointerId !== tl.pointerId) return;
-            if (gameplay.isPlaytest) return;
             if (this.transformControl && this.transformControl.dragging) {
                 tl.active = false;
                 tl.pointerId = null;
@@ -7794,18 +7511,15 @@ void main(){
         window.addEventListener("pointercancel", endLook);
     },
     onPointerDown: function(event) {
-        if (gameplay.isPlaytest) return;
         this.mouseDownPos.set(event.clientX, event.clientY);
         this.isClickGesture = true;
     },
     onPointerMove: function(event) {
-        if (gameplay.isPlaytest) return;
         if (this.mouseDownPos.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 4) {
             this.isClickGesture = false;
         }
     },
     onPointerUp: function(event) {
-        if (gameplay.isPlaytest) return;
         if (event.target !== this.renderer.domElement) return;
         if (this.isClickGesture) {
             this.mouse.x = event.clientX / window.innerWidth * 2 - 1;
@@ -7820,7 +7534,6 @@ void main(){
         }
     },
     onKeyDown: function(event) {
-        if (gameplay.isPlaytest) return;
         if (event.target.tagName === "INPUT" || event.target.tagName === "SELECT") return;
         this.keysPressed[event.code] = true;
         if (!event.repeat && (event.code === "ShiftLeft" || event.code === "ShiftRight")) {
@@ -7857,7 +7570,6 @@ void main(){
         }
     },
     onKeyUp: function(event) {
-        if (gameplay.isPlaytest) return;
         this.keysPressed[event.code] = false;
         if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
             if (this.isMultiSelectMode) this.toggleMultiSelect();
@@ -11131,6 +10843,7 @@ void main(){
             document.getElementById("setting-skybox").value = data.env.skybox || "day";
             document.getElementById("setting-weather").value = data.env.weather || "clear";
             document.getElementById("setting-fog-color").value = data.env.fogColor || "#8bc5eb";
+            if(window.fogColorPicker)fogColorPicker.setHex(data.env.fogColor || "#8bc5eb");
             document.getElementById("setting-fog-start").value = data.env.fogStart || 15;
             document.getElementById("setting-fog-end").value = data.env.fogEnd || 250;
             document.getElementById("setting-sun-angle").value = data.env.sunAngle !== undefined ? data.env.sunAngle : 180;
@@ -11418,68 +11131,63 @@ void main(){
         }
         this.updateLocalReflections(false);
         this.updateEnvReflectionFade(dt);
-        if (gameplay.isPlaytest) {
-            if (this.orbit && this.orbit.enabled) this.orbit.enabled = false;
-            gameplay.update(dt);
-        } else {
-            if (this.orbit && !this.orbit.enabled && !this.isTransformDragging && !(this.transformControl && this.transformControl.dragging)) this.orbit.enabled = true;
-            const moveSpeedMult = this.cameraMoveSpeed || 1;
-            const camSpeed = this.keysPressed["ShiftLeft"] ? 45 * moveSpeedMult * dt : 15 * moveSpeedMult * dt;
-            if (!this._tmpCamDir) this._tmpCamDir = new THREE.Vector3;
-            if (!this._tmpCamSide) this._tmpCamSide = new THREE.Vector3;
-            const direction = this._tmpCamDir;
-            this.camera.getWorldDirection(direction);
-            const sideways = this._tmpCamSide;
-            sideways.crossVectors(this.camera.up, direction).normalize();
-            if (!this.isMobile) {
-                if (this.keysPressed["KeyW"]) {
-                    this.camera.position.addScaledVector(direction, camSpeed);
-                    this.orbit.target.addScaledVector(direction, camSpeed);
-                }
-                if (this.keysPressed["KeyS"]) {
-                    this.camera.position.addScaledVector(direction, -camSpeed);
-                    this.orbit.target.addScaledVector(direction, -camSpeed);
-                }
-                if (this.keysPressed["KeyA"]) {
-                    this.camera.position.addScaledVector(sideways, camSpeed);
-                    this.orbit.target.addScaledVector(sideways, camSpeed);
-                }
-                if (this.keysPressed["KeyD"]) {
-                    this.camera.position.addScaledVector(sideways, -camSpeed);
-                    this.orbit.target.addScaledVector(sideways, -camSpeed);
-                }
-                if (this.keysPressed["KeyE"]) {
-                    this.camera.position.y += camSpeed;
-                    this.orbit.target.y += camSpeed;
-                }
-                if (this.keysPressed["KeyQ"]) {
-                    this.camera.position.y -= camSpeed;
-                    this.orbit.target.y -= camSpeed;
-                }
+        if (this.orbit && !this.orbit.enabled && !this.isTransformDragging && !(this.transformControl && this.transformControl.dragging)) this.orbit.enabled = true;
+        const moveSpeedMult = this.cameraMoveSpeed || 1;
+        const camSpeed = this.keysPressed["ShiftLeft"] ? 45 * moveSpeedMult * dt : 15 * moveSpeedMult * dt;
+        if (!this._tmpCamDir) this._tmpCamDir = new THREE.Vector3;
+        if (!this._tmpCamSide) this._tmpCamSide = new THREE.Vector3;
+        const direction = this._tmpCamDir;
+        this.camera.getWorldDirection(direction);
+        const sideways = this._tmpCamSide;
+        sideways.crossVectors(this.camera.up, direction).normalize();
+        if (!this.isMobile) {
+            if (this.keysPressed["KeyW"]) {
+                this.camera.position.addScaledVector(direction, camSpeed);
+                this.orbit.target.addScaledVector(direction, camSpeed);
             }
-            if (!gameplay.isPlaytest && this.joystickEnabled && this.mobileJoystick && this.mobileJoystick.active) {
-                const jx = this.mobileJoystick.x || 0;
-                const jy = this.mobileJoystick.y || 0;
-                if (Math.abs(jx) > .02 || Math.abs(jy) > .02) {
-                    const jSpeed = camSpeed * 1.15;
-                    if (!this._joyRight) this._joyRight = new THREE.Vector3;
-                    if (!this._joyForward) this._joyForward = new THREE.Vector3;
-                    this.camera.updateMatrixWorld();
-                    this._joyRight.setFromMatrixColumn(this.camera.matrixWorld, 0).normalize();
-                    this._joyForward.setFromMatrixColumn(this.camera.matrixWorld, 2).negate().normalize();
-                    if (!this._joyMove) this._joyMove = new THREE.Vector3;
-                    this._joyMove.copy(this._joyForward).multiplyScalar(-jy * jSpeed).addScaledVector(this._joyRight, jx * jSpeed);
-                    this.camera.position.add(this._joyMove);
-                    this.orbit.target.add(this._joyMove);
-                }
+            if (this.keysPressed["KeyS"]) {
+                this.camera.position.addScaledVector(direction, -camSpeed);
+                this.orbit.target.addScaledVector(direction, -camSpeed);
             }
-            this.orbit.update();
-            if (isNaN(this.camera.position.x)) {
-                this.camera.position.set(15, 20, 15);
-                this.orbit.target.set(0, 0, 0);
+            if (this.keysPressed["KeyA"]) {
+                this.camera.position.addScaledVector(sideways, camSpeed);
+                this.orbit.target.addScaledVector(sideways, camSpeed);
             }
-            this.updateCamCoordsUI(dt);
+            if (this.keysPressed["KeyD"]) {
+                this.camera.position.addScaledVector(sideways, -camSpeed);
+                this.orbit.target.addScaledVector(sideways, -camSpeed);
+            }
+            if (this.keysPressed["KeyE"]) {
+                this.camera.position.y += camSpeed;
+                this.orbit.target.y += camSpeed;
+            }
+            if (this.keysPressed["KeyQ"]) {
+                this.camera.position.y -= camSpeed;
+                this.orbit.target.y -= camSpeed;
+            }
         }
+        if (this.joystickEnabled && this.mobileJoystick && this.mobileJoystick.active) {
+            const jx = this.mobileJoystick.x || 0;
+            const jy = this.mobileJoystick.y || 0;
+            if (Math.abs(jx) > .02 || Math.abs(jy) > .02) {
+                const jSpeed = camSpeed * 1.15;
+                if (!this._joyRight) this._joyRight = new THREE.Vector3;
+                if (!this._joyForward) this._joyForward = new THREE.Vector3;
+                this.camera.updateMatrixWorld();
+                this._joyRight.setFromMatrixColumn(this.camera.matrixWorld, 0).normalize();
+                this._joyForward.setFromMatrixColumn(this.camera.matrixWorld, 2).negate().normalize();
+                if (!this._joyMove) this._joyMove = new THREE.Vector3;
+                this._joyMove.copy(this._joyForward).multiplyScalar(-jy * jSpeed).addScaledVector(this._joyRight, jx * jSpeed);
+                this.camera.position.add(this._joyMove);
+                this.orbit.target.add(this._joyMove);
+            }
+        }
+        this.orbit.update();
+        if (isNaN(this.camera.position.x)) {
+            this.camera.position.set(15, 20, 15);
+            this.orbit.target.set(0, 0, 0);
+        }
+        this.updateCamCoordsUI(dt);
         if (this.starsObj && this.starsObj.visible) {
             this.starsObj.material.uniforms.uTime.value += dt;
         }
@@ -11631,1055 +11339,6 @@ void main(){
     }
 };
 
-const gameplay = {
-    isPlaytest: false,
-    controls: null,
-    velocity: new THREE.Vector3,
-    wishDir: new THREE.Vector3,
-    moveState: {
-        forward: false,
-        backward: false,
-        left: false,
-        right: false,
-        jumpHeld: false,
-        sprint: false,
-        crouch: false
-    },
-    canJump: false,
-    onGround: false,
-    baseHeight: 1.8,
-    eyeToFeet: 1.7,
-    crouchEyeHeight: .95,
-    currentHeight: 1.7,
-    targetHeight: 1.7,
-    radius: .35,
-    gravity: 22,
-    jumpPower: 8.2,
-    walkSpeed: 6,
-    sprintSpeed: 10.5,
-    crouchSpeed: 2.6,
-    flySpeed: 11,
-    airAccel: 120,
-    groundAccel: 55,
-    groundFriction: 8,
-    airFriction: .6,
-    lastStepTime: 0,
-    stepPhase: 0,
-    currentMat: "Concrete",
-    bhopTimer: 0,
-    bhopSpeedBonus: 0,
-    isRagdoll: false,
-    ragdollTimer: 0,
-    ragdollFaceDown: true,
-    currentWeapon: "fists",
-    safetyOff: false,
-    flashlightOn: false,
-    flyMode: false,
-    attackCooldown: 0,
-    kickCooldown: 0,
-    attackAnim: 0,
-    recoil: 0,
-    bobPhase: 0,
-    viewBob: new THREE.Vector3,
-    lookSwing: 0,
-    health: 100,
-    bodyParts: {
-        head: 100,
-        neck: 100,
-        chest: 100,
-        abdomen: 100,
-        larm: 100,
-        rarm: 100,
-        lleg: 100,
-        rleg: 100
-    },
-    damageFlashTimer: 0,
-    lastFallSpeed: 0,
-    vmGroup: null,
-    vmHands: null,
-    vmWeapon: null,
-    flashlight: null,
-    flashlightMesh: null,
-    rayDown: new THREE.Raycaster(new THREE.Vector3, new THREE.Vector3(0, -1, 0), 0, 3),
-    rayForward: new THREE.Raycaster(new THREE.Vector3, new THREE.Vector3(0, 0, -1), 0, 4),
-    init: function() {
-        this.controls = new PointerLockControls(engine.camera, document.body);
-        this._hasLocked = false;
-        this.controls.addEventListener("lock", () => {
-            this._hasLocked = true;
-            this._onLock();
-        });
-        this.controls.addEventListener("unlock", () => {
-            if (this._hasLocked && this.isPlaytest && !this.isRagdoll) {
-                this._hasLocked = false;
-                this.exitPlaytest();
-            }
-        });
-        document.addEventListener("keydown", e => this.onKeyDown(e));
-        document.addEventListener("keyup", e => this.onKeyUp(e));
-        document.addEventListener("mousedown", e => {
-            if (!this.isPlaytest) return;
-            if (this.isRagdoll) return;
-            if (document.pointerLockElement || !engine.isMobile) {
-                if (e.button === 0) this.doAttack();
-            }
-        });
-        this._buildViewModel();
-        this._buildFlashlight();
-    },
-    _buildViewModel: function() {
-        this.vmGroup = new THREE.Group;
-        this.vmGroup.renderOrder = 9999;
-        this.vmGroup.frustumCulled = false;
-        engine.camera.add(this.vmGroup);
-        const skinMat = new THREE.MeshStandardMaterial({
-            color: 14267276,
-            roughness: .8,
-            metalness: 0
-        });
-        const sleeveMat = new THREE.MeshStandardMaterial({
-            color: 1710640,
-            roughness: .9,
-            metalness: 0
-        });
-        const armGeo = new THREE.BoxGeometry(.1, .4, .1);
-        const rarm = new THREE.Mesh(armGeo, sleeveMat);
-        rarm.position.set(.22, -.3, -.5);
-        rarm.rotation.z = -.25;
-        rarm.name = "rarm";
-        const handGeo = new THREE.BoxGeometry(.11, .12, .1);
-        const rhand = new THREE.Mesh(handGeo, skinMat);
-        rhand.position.set(.25, -.48, -.52);
-        rhand.name = "rhand";
-        const larm = new THREE.Mesh(armGeo, sleeveMat);
-        larm.position.set(-.22, -.3, -.5);
-        larm.rotation.z = .25;
-        larm.name = "larm";
-        const lhand = new THREE.Mesh(handGeo, skinMat);
-        lhand.position.set(-.25, -.48, -.52);
-        lhand.name = "lhand";
-        this.vmGroup.add(rarm, rhand, larm, lhand);
-        this.vmHands = {
-            rarm: rarm,
-            rhand: rhand,
-            larm: larm,
-            lhand: lhand
-        };
-        this._buildWeaponModel();
-    },
-    _weaponDefs: {
-        fists: {
-            label: "Hands",
-            type: "MELEE",
-            cooldown: .28,
-            range: 2.2,
-            dmg: 12,
-            builder: function() {
-                return new THREE.Group;
-            },
-            onPrimary: function(gp) {
-                gp._meleeAttack(2.2, 12, false);
-            }
-        },
-        knife: {
-            label: "Kitchen Knife",
-            type: "MELEE",
-            cooldown: .32,
-            range: 2.6,
-            dmg: 28,
-            builder: function() {
-                const g = new THREE.Group;
-                const bladeGeo = new THREE.BoxGeometry(.04, .36, .01);
-                const bladeMat = new THREE.MeshStandardMaterial({
-                    color: 12963286,
-                    metalness: .8,
-                    roughness: .25
-                });
-                const handleGeo = new THREE.BoxGeometry(.05, .12, .04);
-                const handleMat = new THREE.MeshStandardMaterial({
-                    color: 2824208,
-                    roughness: .7
-                });
-                const blade = new THREE.Mesh(bladeGeo, bladeMat);
-                blade.position.set(0, .2, 0);
-                const handle = new THREE.Mesh(handleGeo, handleMat);
-                handle.position.set(0, -.02, 0);
-                g.add(blade, handle);
-                g.position.set(.27, -.44, -.58);
-                g.rotation.z = -.1;
-                return g;
-            },
-            onPrimary: function(gp) {
-                gp._meleeAttack(2.6, 28, false);
-            }
-        },
-        sword: {
-            label: "Sword",
-            type: "MELEE",
-            cooldown: .4,
-            range: 3.2,
-            dmg: 38,
-            builder: function() {
-                const g = new THREE.Group;
-                const bladeGeo = new THREE.BoxGeometry(.05, .7, .015);
-                const bladeMat = new THREE.MeshStandardMaterial({
-                    color: 14212580,
-                    metalness: .85,
-                    roughness: .2
-                });
-                const guardGeo = new THREE.BoxGeometry(.2, .03, .04);
-                const hiltGeo = new THREE.BoxGeometry(.05, .16, .04);
-                const hiltMat = new THREE.MeshStandardMaterial({
-                    color: 4861206,
-                    roughness: .7
-                });
-                const blade = new THREE.Mesh(bladeGeo, bladeMat);
-                blade.position.set(0, .4, 0);
-                const guard = new THREE.Mesh(guardGeo, bladeMat);
-                guard.position.set(0, .03, 0);
-                const hilt = new THREE.Mesh(hiltGeo, hiltMat);
-                hilt.position.set(0, -.07, 0);
-                g.add(blade, guard, hilt);
-                g.position.set(.28, -.4, -.62);
-                g.rotation.z = -.2;
-                return g;
-            },
-            onPrimary: function(gp) {
-                gp._meleeAttack(3.2, 38, false);
-            }
-        },
-        pistol: {
-            label: "Pistol",
-            type: "RANGED",
-            cooldown: .22,
-            range: 120,
-            dmg: 30,
-            builder: function() {
-                const g = new THREE.Group;
-                const bodyMat = new THREE.MeshStandardMaterial({
-                    color: 2039844,
-                    metalness: .7,
-                    roughness: .45
-                });
-                const gripMat = new THREE.MeshStandardMaterial({
-                    color: 855568,
-                    roughness: .9
-                });
-                const slideGeo = new THREE.BoxGeometry(.08, .1, .28);
-                const slide = new THREE.Mesh(slideGeo, bodyMat);
-                slide.position.set(0, .02, -.05);
-                const gripGeo = new THREE.BoxGeometry(.07, .18, .09);
-                const grip = new THREE.Mesh(gripGeo, gripMat);
-                grip.position.set(0, -.11, .03);
-                grip.rotation.x = .15;
-                const barrelGeo = new THREE.CylinderGeometry(.015, .015, .08, 8);
-                const barrel = new THREE.Mesh(barrelGeo, bodyMat);
-                barrel.rotation.x = Math.PI / 2;
-                barrel.position.set(0, .02, -.21);
-                g.add(slide, grip, barrel);
-                g.position.set(.26, -.42, -.55);
-                return g;
-            },
-            onPrimary: function(gp) {
-                gp._fireBullet();
-            }
-        }
-    },
-    _buildWeaponModel: function() {
-        if (this.vmWeapon) this.vmGroup.remove(this.vmWeapon);
-        const def = this._weaponDefs[this.currentWeapon];
-        this.vmWeapon = def.builder();
-        this.vmGroup.add(this.vmWeapon);
-        const wn = document.getElementById("gb-wname");
-        const wt = document.getElementById("gb-wtype");
-        if (wn) wn.textContent = def.label;
-        if (wt) wt.textContent = def.type;
-    },
-    selectWeapon: function(key) {
-        if (!this._weaponDefs[key]) return;
-        this.currentWeapon = key;
-        this._buildWeaponModel();
-        document.querySelectorAll(".gb-topbar-btn.weapon").forEach(b => {
-            b.classList.toggle("selected", b.dataset.weapon === key);
-        });
-        try {
-            audioEngine.playUIClick();
-        } catch (e) {}
-    },
-    _buildFlashlight: function() {
-        const spot = new THREE.SpotLight(16774360, 0, 40, Math.PI / 6.5, .4, 1.4);
-        spot.castShadow = false;
-        spot.position.set(.25, -.22, -.3);
-        spot.target.position.set(0, -.1, -10);
-        engine.camera.add(spot);
-        engine.camera.add(spot.target);
-        this.flashlight = spot;
-        const bulbGeo = new THREE.SphereGeometry(.03, 8, 8);
-        const bulbMat = new THREE.MeshBasicMaterial({
-            color: 16774360
-        });
-        const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-        bulb.position.copy(spot.position);
-        this.flashlightMesh = bulb;
-        engine.camera.add(bulb);
-        bulb.visible = false;
-    },
-    toggleFlashlight: function() {
-        if (this.isRagdoll) return;
-        this.flashlightOn = !this.flashlightOn;
-        this.flashlight.intensity = this.flashlightOn ? 7 : 0;
-        this.flashlightMesh.visible = this.flashlightOn;
-        const btn = document.getElementById("gb-btn-flashlight");
-        if (btn) btn.classList.toggle("active", this.flashlightOn);
-        try {
-            audioEngine.playUIClick();
-        } catch (e) {}
-    },
-
-    toggleRagdoll: function() {
-        if (!this.isPlaytest) return;
-        if (this.flyMode) {
-            this.toggleFly();
-        }
-        this.isRagdoll = !this.isRagdoll;
-        const btn = document.getElementById("gb-btn-sleep");
-        if (btn) btn.classList.toggle("active", this.isRagdoll);
-        if (this.isRagdoll) {
-            this.ragdollTimer = 0;
-            this.ragdollFaceDown = Math.random() > .5;
-            this.velocity.x *= .3;
-            this.velocity.z *= .3;
-            this.velocity.y = Math.max(this.velocity.y, 1.5);
-            this.bhopSpeedBonus = 0;
-            try {
-                if (engine.isMobile && document.pointerLockElement) document.exitPointerLock();
-            } catch (e) {}
-        } else {
-            this.ragdollTimer = 0;
-            this.velocity.y = 3.5;
-            this.targetHeight = this.eyeToFeet;
-        }
-    },
-    toggleSleep: function() {
-        this.toggleRagdoll();
-    },
-    toggleFly: function() {
-        if (this.isRagdoll) {
-            this.isRagdoll = false;
-            document.getElementById("gb-btn-sleep")?.classList.remove("active");
-        }
-        this.flyMode = !this.flyMode;
-        const btn = document.getElementById("gb-btn-fly");
-        if (btn) btn.classList.toggle("active", this.flyMode);
-        if (this.flyMode) {
-            this.velocity.y = 0;
-            this.canJump = false;
-            this.bhopSpeedBonus = 0;
-        }
-        try {
-            audioEngine.playUIClick();
-        } catch (e) {}
-    },
-    toggleInventory: function() {
-        try {
-            audioEngine.playUIClick();
-        } catch (e) {}
-    },
-
-    lockPointer: function() {
-        const t = document.getElementById("gb-tap-to-start");
-        if (t) t.classList.add("hidden");
-        try {
-            const prom = this.controls.lock();
-            if (prom && prom.catch) prom.catch(() => {});
-        } catch (e) {}
-        this.isPlaytest = true;
-        this._hasLocked = !!document.pointerLockElement;
-    },
-    _onLock: function() {
-        const t = document.getElementById("gb-tap-to-start");
-        if (t) t.classList.add("hidden");
-    },
-    startPlaytest: function() {
-        engine.deselect();
-        document.getElementById("ui-layer").style.display = "none";
-        const overlay = document.getElementById("playtest-overlay");
-        overlay.style.display = "block";
-        overlay.classList.add("show");
-        overlay.style.zIndex = "";
-        const lz = document.getElementById("gb-look-zone");
-        if (lz) lz.classList.add("active");
-        const joy = document.getElementById("mobile-joystick");
-        const joyKnob = document.getElementById("mobile-joystick-knob");
-        if (joy) {
-            this._joyOriginalParent = joy.parentNode;
-            overlay.appendChild(joy);
-            joy.style.position = "absolute";
-            joy.style.left = "100px";
-            joy.style.bottom = "40px";
-            joy.style.top = "auto";
-            joy.style.right = "auto";
-            joy.style.zIndex = "6";
-            joy.classList.add("visible");
-        }
-        const savedJoy = localStorage.getItem("mmcg_joystick_enabled_55");
-        if (engine.isMobile || savedJoy === "1" || savedJoy === null) {
-            engine.joystickEnabled = true;
-            const joyEl = document.getElementById("mobile-joystick");
-            if (joyEl) joyEl.classList.add("visible");
-        }
-        if (engine.camera) {
-            engine.camera.fov = Math.min(120, Math.max(20, engine.cameraFov || parseFloat(localStorage.getItem("mmcg_camera_fov_55") || "60") || 60));
-            engine.camera.updateProjectionMatrix();
-        }
-        if (engine.spawnPointObj) {
-            engine.camera.position.copy(engine.spawnPointObj.position);
-            engine.camera.position.y = engine.spawnPointObj.position.y - 1 + this.eyeToFeet;
-            engine.spawnPointObj.visible = false;
-        } else {
-            engine.camera.position.set(0, 5 + this.eyeToFeet, 0);
-        }
-        this.velocity.set(0, 0, 0);
-        this.health = 100;
-        for (const k in this.bodyParts) this.bodyParts[k] = 100;
-        this._refreshBodyIndicator();
-        this.isRagdoll = false;
-        this.ragdollTimer = 0;
-        this.flyMode = false;
-        this.flashlightOn = false;
-        this.bhopSpeedBonus = 0;
-        if (this.flashlight) this.flashlight.intensity = 0;
-        if (this.flashlightMesh) this.flashlightMesh.visible = false;
-        this.currentHeight = this.eyeToFeet;
-        this.targetHeight = this.eyeToFeet;
-        this.selectWeapon("fists");
-        document.getElementById("gb-btn-fly")?.classList.remove("active");
-        document.getElementById("gb-btn-sleep")?.classList.remove("active");
-        document.getElementById("gb-btn-flashlight")?.classList.remove("active");
-
-        this.attackCooldown = 0;
-        this.kickCooldown = 0;
-        audioEngine.init();
-        engine.updateJoystickVisibility?.();
-        const t = document.getElementById("gb-tap-to-start");
-        if (t) {
-            if (engine.isMobile) t.classList.remove("hidden"); else t.classList.add("hidden");
-        }
-        if (!engine.isMobile) {
-            try {
-                this.controls.lock();
-            } catch (e) {}
-        }
-    },
-    stopPlaytest: function() {
-        this.isPlaytest = false;
-        this.isRagdoll = false;
-        try {
-            if (document.pointerLockElement) document.exitPointerLock();
-        } catch (e) {}
-        document.getElementById("ui-layer").style.display = "flex";
-        const overlay = document.getElementById("playtest-overlay");
-        overlay.style.display = "none";
-        overlay.classList.remove("show");
-        if (this.flashlight) this.flashlight.intensity = 0;
-        if (this.flashlightMesh) this.flashlightMesh.visible = false;
-        const joy = document.getElementById("mobile-joystick");
-        if (joy && this._joyOriginalParent) {
-            this._joyOriginalParent.appendChild(joy);
-            joy.style.position = "";
-            joy.style.left = "";
-            joy.style.bottom = "";
-            joy.style.top = "";
-            joy.style.right = "";
-        }
-        const lz = document.getElementById("gb-look-zone");
-        if (lz) lz.classList.remove("active");
-        engine.updateJoystickVisibility?.();
-        if (engine.spawnPointObj) engine.spawnPointObj.visible = true;
-        engine.applyCameraFov?.(engine.cameraFov || parseFloat(localStorage.getItem("mmcg_camera_fov_55") || "60"));
-        document.getElementById("gb-btn-sleep")?.classList.remove("active");
-    },
-    exitPlaytest: function() {
-        this.stopPlaytest();
-    },
-    setCrouch: function(v) {
-        this.moveState.crouch = !!v;
-    },
-    doJump: function() {
-        this.moveState.jumpHeld = true;
-        this.moveState._jumpPressed = true;
-    },
-    doJumpRelease: function() {
-        this.moveState.jumpHeld = false;
-    },
-
-    doKick: function() {
-        if (!this.isPlaytest || this.isRagdoll) return;
-        if (this.kickCooldown > 0) return;
-        this.kickCooldown = .55;
-        this._meleeAttack(3, 14, true);
-        this.viewBob.y += .07;
-    },
-    doAttack: function() {
-        if (!this.isPlaytest || this.isRagdoll) return;
-        if (this.attackCooldown > 0) return;
-
-        const def = this._weaponDefs[this.currentWeapon];
-        this.attackCooldown = def.cooldown || .32;
-        this.attackAnim = 1;
-        try {
-            def.onPrimary(this);
-        } catch (e) {
-            console.warn(e);
-        }
-        this.recoil = def.type === "Ranged" ? .6 : .3;
-        const ov = document.getElementById("playtest-overlay");
-        if (ov) {
-            ov.classList.remove("gb-shake");
-            void ov.offsetWidth;
-            ov.classList.add("gb-shake");
-        }
-    },
-
-    _fireBullet: function() {
-        const ray = this.rayForward;
-        const origin = new THREE.Vector3;
-        engine.camera.getWorldPosition(origin);
-        const dir = new THREE.Vector3;
-        engine.camera.getWorldDirection(dir);
-        ray.set(origin, dir);
-        ray.far = 120;
-        const hits = ray.intersectObjects((engine.blocks || []).filter(b => b.userData.collisions !== false));
-        const flash = document.getElementById("flash-overlay");
-        if (flash) {
-            flash.style.background = "#fff";
-            flash.style.opacity = "0.35";
-            setTimeout(() => {
-                flash.style.opacity = "0";
-            }, 50);
-        }
-        try {
-            audioEngine.playFootstep("Metal");
-        } catch (e) {}
-        this.viewBob.z += .05;
-        this.recoil = Math.max(this.recoil, .6);
-    },
-    _meleeAttack: function(range, damage, isKick) {
-        const ray = new THREE.Raycaster;
-        const origin = new THREE.Vector3;
-        engine.camera.getWorldPosition(origin);
-        const dir = new THREE.Vector3;
-        engine.camera.getWorldDirection(dir);
-        ray.set(origin, dir);
-        ray.far = range;
-        const hits = ray.intersectObjects((engine.blocks || []).filter(b => b.userData.collisions !== false));
-        if (hits.length > 0) {
-            try {
-                audioEngine.playFootstep("Metal");
-            } catch (e) {}
-        } else {
-            try {
-                audioEngine.playUIClick();
-            } catch (e) {}
-        }
-    },
-    _takeDamage: function(amount, bodyPart) {
-        this.health = Math.max(0, this.health - amount);
-        if (bodyPart) this.bodyParts[bodyPart] = Math.max(0, this.bodyParts[bodyPart] - amount); else {
-            const parts = [ "chest", "abdomen", "larm", "rarm", "lleg", "rleg", "head" ];
-            const p = parts[Math.floor(Math.random() * parts.length)];
-            this.bodyParts[p] = Math.max(0, this.bodyParts[p] - amount);
-        }
-        this._refreshBodyIndicator();
-        this.damageFlashTimer = .45;
-        const v = document.getElementById("gb-damage-vignette");
-        if (v) {
-            v.classList.add("show");
-            setTimeout(() => v.classList.remove("show"), 400);
-        }
-        if (this.health <= 15 && !this.isRagdoll) {
-            this.toggleRagdoll();
-        }
-    },
-    _refreshBodyIndicator: function() {},
-    onKeyDown: function(e) {
-        if (!this.isPlaytest) return;
-        if (e.code === "Escape") {
-            if (this.isRagdoll) {
-                this.toggleRagdoll();
-                return;
-            }
-            this.exitPlaytest();
-            return;
-        }
-        if ([ "KeyW", "KeyA", "KeyS", "KeyD", "Space", "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight", "KeyC", "KeyF", "KeyQ", "KeyZ", "KeyX", "Digit1", "Digit2", "Digit3", "Digit4" ].includes(e.code)) {
-            e.preventDefault();
-        }
-        if (this.isRagdoll) {
-            if (e.code === "KeyZ" || e.code === "KeyX") {} else {
-                return;
-            }
-        }
-        switch (e.code) {
-          case "KeyW":
-            this.moveState.forward = true;
-            break;
-
-          case "KeyS":
-            this.moveState.backward = true;
-            break;
-
-          case "KeyA":
-            this.moveState.left = true;
-            break;
-
-          case "KeyD":
-            this.moveState.right = true;
-            break;
-
-          case "Space":
-            this.moveState.jumpHeld = true;
-            this.moveState._jumpPressed = true;
-            break;
-
-          case "ShiftLeft":
-          case "ShiftRight":
-            this.moveState.sprint = true;
-            break;
-
-          case "ControlLeft":
-          case "ControlRight":
-          case "KeyC":
-            this.moveState.crouch = true;
-            break;
-
-          case "KeyF":
-            this.toggleFlashlight();
-            break;
-
-          case "KeyQ":
-            this.doKick();
-            break;
-
-          case "KeyZ":
-            this.toggleRagdoll();
-            break;
-
-          case "KeyX":
-            this.toggleFly();
-            break;
-
-          case "Digit1":
-            this.selectWeapon("fists");
-            break;
-
-          case "Digit2":
-            this.selectWeapon("pistol");
-            break;
-
-          case "Digit3":
-            this.selectWeapon("sword");
-            break;
-
-          case "Digit4":
-            this.selectWeapon("knife");
-            break;
-        }
-    },
-    onKeyUp: function(e) {
-        if (!this.isPlaytest) return;
-        switch (e.code) {
-          case "KeyW":
-            this.moveState.forward = false;
-            break;
-
-          case "KeyS":
-            this.moveState.backward = false;
-            break;
-
-          case "KeyA":
-            this.moveState.left = false;
-            break;
-
-          case "KeyD":
-            this.moveState.right = false;
-            break;
-
-          case "ShiftLeft":
-          case "ShiftRight":
-            this.moveState.sprint = false;
-            break;
-
-          case "ControlLeft":
-          case "ControlRight":
-          case "KeyC":
-            this.moveState.crouch = false;
-            break;
-        }
-    },
-    _camForwardY: function() {
-        const d = new THREE.Vector3;
-        engine.camera.getWorldDirection(d);
-        d.y = 0;
-        if (d.lengthSq() < 1e-6) d.set(0, 0, -1);
-        d.normalize();
-        return d;
-    },
-    _camRight: function() {
-        const f = this._camForwardY();
-        return new THREE.Vector3(-f.z, 0, f.x);
-    },
-    _nearbyBlocks: function(radius) {
-        const pos = engine.camera.position;
-        const r = this.radius;
-        const h = this.currentHeight;
-        const pad = radius + r + 2;
-        return (engine.blocks || []).filter(b => {
-            if (b.userData && b.userData.collisions === false) return false;
-            const bp = b.position, bs = b.scale;
-            const dx = pos.x - bp.x, dz = pos.z - bp.z, dy = pos.y - bp.y;
-            const horizR = Math.max(bs.x, bs.z) / 2 + pad;
-            const vertR = Math.max(bs.y, 1) / 2 + Math.max(h, 4);
-            return dx * dx + dz * dz < horizR * horizR && Math.abs(dy) < vertR;
-        });
-    },
-    update: function(dt) {
-        if (!this.isPlaytest) return;
-        dt = Math.min(dt, .05);
-        this.attackCooldown = Math.max(0, this.attackCooldown - dt);
-        this.kickCooldown = Math.max(0, this.kickCooldown - dt);
-        this.damageFlashTimer = Math.max(0, this.damageFlashTimer - dt);
-        if (this.isRagdoll) {
-            this.targetHeight = .35;
-            this.currentHeight += (this.targetHeight - this.currentHeight) * Math.min(1, dt * 6);
-            this.velocity.x *= Math.max(0, 1 - 3 * dt);
-            this.velocity.z *= Math.max(0, 1 - 3 * dt);
-            this.velocity.y -= this.gravity * dt;
-            const delta = this.velocity.clone().multiplyScalar(dt);
-            this._capsuleMove(delta, true);
-            this.ragdollTimer += dt;
-            const roll = (this.ragdollFaceDown ? -.9 : .9) * Math.min(1, this.ragdollTimer * 2);
-            this.viewBob.z = roll * .02;
-            if (this.vmGroup) this.vmGroup.visible = false;
-            this._updateFOV(dt, 0);
-            return;
-        } else {
-            if (this.vmGroup) this.vmGroup.visible = true;
-        }
-        let joyX = 0, joyY = 0;
-        if (engine.mobileJoystick && engine.mobileJoystick.active) {
-            joyX = engine.mobileJoystick.x || 0;
-            joyY = engine.mobileJoystick.y || 0;
-        }
-        let inputForward = (this.moveState.forward ? 1 : 0) - (this.moveState.backward ? 1 : 0) + -joyY;
-        let inputRight = (this.moveState.right ? 1 : 0) - (this.moveState.left ? 1 : 0) + joyX;
-        const inputLen = Math.hypot(inputForward, inputRight);
-        if (inputLen > 1) {
-            inputForward /= inputLen;
-            inputRight /= inputLen;
-        }
-        const wantCrouch = this.moveState.crouch;
-        let maxSpeed;
-        if (wantCrouch) maxSpeed = this.crouchSpeed; else if (this.moveState.sprint && inputForward > .1) maxSpeed = this.sprintSpeed; else maxSpeed = this.walkSpeed;
-        if (this.onGround) this.bhopTimer = 0; else this.bhopTimer += dt;
-        if (this._justJumped) {
-            this.bhopSpeedBonus = Math.min(7, this.bhopSpeedBonus + 1.8);
-            this._justJumped = false;
-        }
-        if (!this.onGround && (inputForward !== 0 || inputRight !== 0)) {
-            this.bhopSpeedBonus = Math.min(7, this.bhopSpeedBonus + dt * 3.5);
-        }
-        if (this.onGround) {
-            this.bhopSpeedBonus = Math.max(0, this.bhopSpeedBonus - dt * 1);
-        }
-        maxSpeed += this.bhopSpeedBonus;
-        const prevHeight = this.currentHeight;
-        let effTarget = wantCrouch ? this.crouchEyeHeight : this.eyeToFeet;
-        if (!wantCrouch && this._ceilingAbove()) effTarget = this.currentHeight;
-        this.targetHeight = effTarget;
-        const heightSmoothRate = Math.min(1, dt * 12);
-        const newHeight = this.currentHeight + (effTarget - this.currentHeight) * heightSmoothRate;
-        this.currentHeight = newHeight;
-        if (this.flyMode) {
-            const fwd = this._camForwardY();
-            const rt = this._camRight();
-            const look = new THREE.Vector3;
-            engine.camera.getWorldDirection(look);
-            const accel = 55 * dt;
-            const flySpeed = this.moveState.sprint ? this.flySpeed * 1.8 : this.flySpeed;
-            const desired = new THREE.Vector3;
-            desired.addScaledVector(fwd, inputForward * flySpeed);
-            desired.addScaledVector(rt, inputRight * flySpeed);
-            if (this.moveState.crouch) desired.y -= flySpeed;
-            if (this.moveState.jumpHeld) desired.y += flySpeed;
-            this.velocity.x += (desired.x - this.velocity.x) * Math.min(1, accel);
-            this.velocity.z += (desired.z - this.velocity.z) * Math.min(1, accel);
-            this.velocity.y += (desired.y - this.velocity.y) * Math.min(1, accel);
-            const delta = this.velocity.clone().multiplyScalar(dt);
-            const pos = engine.camera.position;
-            const r = this.radius, h = this.currentHeight;
-            const blocks = this._nearbyBlocks(3);
-            const tryMove = (ax, val) => {
-                const np = pos.clone();
-                np[ax] += val;
-                for (const b of blocks) {
-                    const bp = b.position, bs = b.scale;
-                    if (np.x > bp.x - bs.x / 2 - r && np.x < bp.x + bs.x / 2 + r && np.z > bp.z - bs.z / 2 - r && np.z < bp.z + bs.z / 2 + r) {
-                        const top = bp.y + bs.y / 2, bot = bp.y - bs.y / 2;
-                        const feet = np.y - h, head = np.y + .1;
-                        if (top > feet + .05 && bot < head - .05) {
-                            return;
-                        }
-                    }
-                }
-                pos[ax] = np[ax];
-            };
-            tryMove("x", delta.x);
-            tryMove("y", delta.y);
-            tryMove("z", delta.z);
-            this.onGround = false;
-            this.canJump = false;
-        } else {
-            const fwd = this._camForwardY();
-            const rt = this._camRight();
-            const accel = this.onGround ? this.groundAccel : this.airAccel;
-            const fric = this.onGround ? this.groundFriction : this.airFriction;
-            const desired = new THREE.Vector3;
-            desired.addScaledVector(fwd, inputForward * maxSpeed);
-            desired.addScaledVector(rt, inputRight * maxSpeed);
-            if (this.onGround) {
-                const horiz = new THREE.Vector2(this.velocity.x, this.velocity.z);
-                const spd = horiz.length();
-                if (spd > .01) {
-                    const drop = Math.max(0, spd - fric * dt * Math.max(1, spd * .25));
-                    horiz.multiplyScalar(drop / spd);
-                    this.velocity.x = horiz.x;
-                    this.velocity.z = horiz.y;
-                }
-            } else {
-                this.velocity.x -= this.velocity.x * this.airFriction * dt;
-                this.velocity.z -= this.velocity.z * this.airFriction * dt;
-            }
-            const wishDir = desired.clone();
-            const wishSpeed = wishDir.length();
-            if (wishSpeed > .001) {
-                wishDir.normalize();
-                const currentSpeed = this.velocity.x * wishDir.x + this.velocity.z * wishDir.z;
-                const addSpeed = Math.max(0, wishSpeed - currentSpeed);
-                const accelAmt = Math.min(addSpeed, accel * dt * (this.onGround ? 1 : 1.2));
-                this.velocity.x += wishDir.x * accelAmt;
-                this.velocity.z += wishDir.z * accelAmt;
-            }
-            this.lastFallSpeed = this.velocity.y;
-            this.velocity.y -= this.gravity * dt;
-            if (this.moveState.jumpHeld && this.onGround && this.canJump && !wantCrouch) {
-                this.velocity.y = this.jumpPower;
-                this.canJump = false;
-                this.onGround = false;
-                this._justJumped = true;
-            }
-            this.onGround = false;
-            const oldPos = engine.camera.position.clone();
-            const oldVel = this.velocity.clone();
-            const delta = this.velocity.clone().multiplyScalar(dt);
-            this._capsuleMove(delta, false);
-            const horizSpeedBefore = Math.hypot(oldVel.x, oldVel.z);
-            const horizSpeedAfter = Math.hypot(this.velocity.x, this.velocity.z);
-            const impact = horizSpeedBefore - horizSpeedAfter;
-            if (impact > 14) {
-                const dmg = Math.min(60, Math.round((impact - 12) * 5));
-                this._takeDamage(dmg);
-                this.velocity.x *= .3;
-                this.velocity.z *= .3;
-                if (impact > 22 && !this.isRagdoll) {
-                    this.toggleRagdoll();
-                }
-            }
-        }
-        const speedH = Math.hypot(this.velocity.x, this.velocity.z);
-        if (this.onGround && speedH > .8) {
-            const baseInterval = this.moveState.sprint ? .28 : wantCrouch ? .7 : .42;
-            const stepInterval = baseInterval * (6 / Math.max(3.5, speedH));
-            if (engine.clock.elapsedTime - this.lastStepTime > stepInterval) {
-                try {
-                    audioEngine.playFootstep(this.currentMat);
-                } catch (e) {}
-                this.lastStepTime = engine.clock.elapsedTime;
-            }
-        }
-        this.bobPhase += dt * (this.onGround ? speedH * 1.4 : 0);
-        const bobAmp = Math.min(.05, speedH / this.sprintSpeed * .035 + this.bhopSpeedBonus * .003);
-        this.viewBob.x = Math.sin(this.bobPhase * 2) * bobAmp;
-        this.viewBob.y = Math.abs(Math.cos(this.bobPhase * 2)) * bobAmp * .8;
-        this.recoil *= Math.max(0, 1 - dt * 8);
-        this.attackAnim *= Math.max(0, 1 - dt * 7);
-        if (this.vmGroup) {
-            this.vmGroup.position.x = this.viewBob.x + (Math.random() - .5) * this.recoil * .02;
-            this.vmGroup.position.y = -.15 + this.viewBob.y - this.attackAnim * .08 - this.recoil * .03;
-            this.vmGroup.position.z = this.attackAnim * .12 - this.recoil * .05;
-            this.vmGroup.rotation.x = -.1 + this.attackAnim * .35 + this.recoil * .15;
-            this.vmGroup.rotation.z = Math.sin(this.bobPhase) * .005;
-        }
-        this._updateFOV(dt, speedH);
-
-    },
-    _updateFOV: function(dt, speedH) {
-        const baseFOV = Math.min(120, Math.max(20, engine.cameraFov || parseFloat(localStorage.getItem("mmcg_camera_fov_55") || "60") || 60));
-        let targetFOV = baseFOV;
-        if (this.flyMode) targetFOV = this.moveState.sprint ? baseFOV + 18 : baseFOV + 10;
-        else if (this.isRagdoll) targetFOV = baseFOV;
-        else if (this.moveState.sprint && speedH > 4) targetFOV = baseFOV + 12 + this.bhopSpeedBonus * .6;
-        targetFOV = Math.min(120, Math.max(20, targetFOV));
-        engine.camera.fov += (targetFOV - engine.camera.fov) * Math.min(1, dt * 5);
-        engine.camera.updateProjectionMatrix();
-    },
-    _ceilingAbove: function() {
-        const pos = engine.camera.position;
-        const blocks = this._nearbyBlocks(1);
-        for (const b of blocks) {
-            const bp = b.position, bs = b.scale;
-            if (pos.x > bp.x - bs.x / 2 - this.radius && pos.x < bp.x + bs.x / 2 + this.radius && pos.z > bp.z - bs.z / 2 - this.radius && pos.z < bp.z + bs.z / 2 + this.radius) {
-                const blockBottom = bp.y - bs.y / 2;
-                if (blockBottom > pos.y && blockBottom < pos.y + (this.eyeToFeet - this.currentHeight) + .15) return true;
-            }
-        }
-        return false;
-    },
-    _capsuleMove: function(delta, isRagdoll) {
-        const pos = engine.camera.position;
-        const r = this.radius;
-        const h = this.currentHeight;
-        const blocks = this._nearbyBlocks(3);
-        const isWall = b => {
-            const bp = b.position, bs = b.scale;
-            const blockTop = bp.y + bs.y / 2;
-            const blockBot = bp.y - bs.y / 2;
-            const feet = pos.y - h;
-            const head = pos.y + .1;
-            const blockOverlapsBody = blockBot < head - .02 && blockTop > feet + .02;
-            const tooHighToStep = blockTop > feet + .5;
-            const isCeiling = blockBot < head && blockBot > feet - .2;
-            return blockOverlapsBody && (tooHighToStep || isCeiling);
-        };
-        if (delta.x !== 0) {
-            const wantX = pos.x + delta.x;
-            let pushed = false;
-            let pushX = wantX;
-            for (const b of blocks) {
-                const bp = b.position, bs = b.scale;
-                const minX = bp.x - bs.x / 2 - r, maxX = bp.x + bs.x / 2 + r;
-                if (wantX > minX && wantX < maxX) {
-                    const minZ = bp.z - bs.z / 2 - r, maxZ = bp.z + bs.z / 2 + r;
-                    if (pos.z > minZ && pos.z < maxZ) {
-                        if (isWall(b)) {
-                            const pushPos = delta.x > 0 ? minX - 1e-4 : maxX + 1e-4;
-                            if (!pushed || (delta.x > 0 ? pushPos < pushX : pushPos > pushX)) {
-                                pushX = pushPos;
-                            }
-                            pushed = true;
-                        }
-                    }
-                }
-            }
-            pos.x = pushed ? pushX : wantX;
-            if (pushed) this.velocity.x = 0;
-        }
-        if (delta.z !== 0) {
-            const wantZ = pos.z + delta.z;
-            let pushed = false;
-            let pushZ = wantZ;
-            for (const b of blocks) {
-                const bp = b.position, bs = b.scale;
-                const minZ = bp.z - bs.z / 2 - r, maxZ = bp.z + bs.z / 2 + r;
-                if (wantZ > minZ && wantZ < maxZ) {
-                    const minX = bp.x - bs.x / 2 - r, maxX = bp.x + bs.x / 2 + r;
-                    if (pos.x > minX && pos.x < maxX) {
-                        if (isWall(b)) {
-                            const pushPos = delta.z > 0 ? minZ - 1e-4 : maxZ + 1e-4;
-                            if (!pushed || (delta.z > 0 ? pushPos < pushZ : pushPos > pushZ)) {
-                                pushZ = pushPos;
-                            }
-                            pushed = true;
-                        }
-                    }
-                }
-            }
-            pos.z = pushed ? pushZ : wantZ;
-            if (pushed) this.velocity.z = 0;
-        }
-        if (delta.y !== 0) {
-            pos.y += delta.y;
-        }
-        let groundY = -Infinity;
-        let groundMat = null;
-        const feetNow = pos.y - h;
-        for (const b of blocks) {
-            const bp = b.position, bs = b.scale;
-            const minX = bp.x - bs.x / 2 - r, maxX = bp.x + bs.x / 2 + r;
-            const minZ = bp.z - bs.z / 2 - r, maxZ = bp.z + bs.z / 2 + r;
-            if (pos.x > minX && pos.x < maxX && pos.z > minZ && pos.z < maxZ) {
-                const topY = bp.y + bs.y / 2;
-                if (topY <= pos.y + .02 + (isRagdoll ? .5 : 0)) {
-                    if (topY > groundY) {
-                        groundY = topY;
-                        groundMat = b.userData?.materialType || "Concrete";
-                    }
-                }
-            }
-        }
-        let ceilingY = Infinity;
-        const headNow = pos.y + .1;
-        for (const b of blocks) {
-            const bp = b.position, bs = b.scale;
-            const minX = bp.x - bs.x / 2 - r, maxX = bp.x + bs.x / 2 + r;
-            const minZ = bp.z - bs.z / 2 - r, maxZ = bp.z + bs.z / 2 + r;
-            if (pos.x > minX && pos.x < maxX && pos.z > minZ && pos.z < maxZ) {
-                const botY = bp.y - bs.y / 2;
-                if (botY >= headNow - .3 && botY < ceilingY) {
-                    ceilingY = botY;
-                }
-            }
-        }
-        const feetTargetY = groundY + h;
-        const headTargetY = ceilingY - .1;
-        if (!this.flyMode || isRagdoll) {
-            const maxStep = isRagdoll ? .8 : .4;
-            if (this.velocity.y <= 0 && groundY > -Infinity && feetTargetY > pos.y - .05 && feetTargetY <= pos.y + maxStep) {
-                pos.y = feetTargetY;
-                this.velocity.y = 0;
-                this.onGround = true;
-                this.canJump = true;
-                this.currentMat = groundMat;
-            }
-            if (this.velocity.y > 0 && ceilingY < Infinity && pos.y > headTargetY - .05) {
-                pos.y = headTargetY;
-                this.velocity.y = 0;
-            }
-            if (!this.onGround) {
-                this.canJump = false;
-            }
-            if (this.onGround && this.lastFallSpeed < -14 && !isRagdoll) {
-                const fdamage = Math.round((-this.lastFallSpeed - 13) * 4);
-                this._takeDamage(Math.min(45, fdamage), Math.random() < .5 ? "lleg" : "rleg");
-            }
-            if (pos.y < -80) {
-                if (engine.spawnPointObj) {
-                    engine.camera.position.copy(engine.spawnPointObj.position);
-                    engine.camera.position.y = engine.spawnPointObj.position.y - 1 + this.eyeToFeet;
-                } else {
-                    engine.camera.position.set(0, 5 + this.eyeToFeet, 0);
-                }
-                this.velocity.set(0, 0, 0);
-                this.bhopSpeedBonus = 0;
-                this.isRagdoll = false;
-                document.getElementById("gb-btn-sleep")?.classList.remove("active");
-            }
-        } else {
-            this.onGround = false;
-            this.canJump = false;
-        }
-    }
-};
 
 window.uiManager = {
     mergeMode: "texture",
@@ -14308,8 +12967,6 @@ window.uiManager = {
 
 window.engine = engine;
 
-window.gameplay = gameplay;
-
 window.uiManager = uiManager;
 
 window.audioEngine = audioEngine;
@@ -14319,8 +12976,6 @@ window.i18n = i18n;
 i18n.init();
 
 engine.init();
-
-gameplay.init();
 
 uiManager.init();
 
@@ -15370,7 +14025,7 @@ window.multiplayerClient = {
             document.head.appendChild(st);
         }
 
-        const toolbar = document.querySelector("#playtest-btn")?.parentElement;
+        const toolbar = document.querySelector("#btn-world-pause-toggle")?.parentElement;
         if (toolbar && !document.getElementById("mp-toolbar-btn")) {
             const btn = document.createElement("button");
             btn.id = "mp-toolbar-btn";
@@ -15382,7 +14037,7 @@ window.multiplayerClient = {
             btn.onmouseover = () => { btn.style.background = "rgba(94,196,110,0.18)"; btn.style.color = "white"; };
             btn.onmouseout = () => { btn.style.background = "rgba(94,196,110,0.08)"; btn.style.color = "var(--td-ok)"; };
             btn.onclick = () => this.openModal();
-            toolbar.insertBefore(btn, document.getElementById("playtest-btn"));
+            toolbar.insertBefore(btn, document.getElementById("btn-world-pause-toggle"));
         }
 
         if (!document.getElementById("mp-modal")) {
@@ -15640,6 +14295,7 @@ window.multiplayerClient = {
             setVal("setting-skybox", shared.skybox || "day");
             setVal("setting-weather", shared.weather || "clear");
             setVal("setting-fog-color", shared.fogColor || "#8bc5eb");
+            if(window.fogColorPicker)fogColorPicker.setHex(shared.fogColor || "#8bc5eb");
             setVal("setting-fog-start", shared.fogStart ?? 15);
             setVal("setting-fog-end", shared.fogEnd ?? 250);
             setVal("setting-sun-angle", shared.sunAngle ?? 180);
@@ -16424,6 +15080,417 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
     </div>
 
 
+<script>
+/* =====================================================
+   FOG COLOR PICKER
+   ===================================================== */
+window.fogColorPicker = (function() {
+    // HSV state
+    let H = 207, S = 0.41, V = 0.92, A = 1;
+
+    // Preset palette (fog-relevant sky/atmosphere colors)
+    const PRESETS = [
+        '#8bc5eb','#b8d4e8','#c9d8e4','#dce8f0',
+        '#f0e8d8','#e8d4b8','#d4c0a0','#b0b8c8',
+        '#8090a8','#606878','#404850','#202830',
+        '#ffffff','#c8d8e8','#a0b8d0','#6888a8',
+    ];
+
+    // ---- Conversion helpers ----
+    function hsvToRgb(h,s,v) {
+        let r,g,b,i=Math.floor(h/60),f=h/60-i,p=v*(1-s),q=v*(1-f*s),t=v*(1-(1-f)*s);
+        switch(i%6){case 0:r=v;g=t;b=p;break;case 1:r=q;g=v;b=p;break;case 2:r=p;g=v;b=t;break;case 3:r=p;g=q;b=v;break;case 4:r=t;g=p;b=v;break;case 5:r=v;g=p;b=q;break;}
+        return [Math.round(r*255),Math.round(g*255),Math.round(b*255)];
+    }
+    function rgbToHsv(r,g,b) {
+        r/=255;g/=255;b/=255;
+        const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;
+        let h=0,s=max===0?0:d/max,v=max;
+        if(d){if(max===r)h=((g-b)/d)%6;else if(max===g)h=(b-r)/d+2;else h=(r-g)/d+4;h=Math.round(h*60);if(h<0)h+=360;}
+        return [h,s,v];
+    }
+    function hexToRgb(hex) {
+        hex=hex.replace('#','');if(hex.length===3)hex=hex.split('').map(x=>x+x).join('');
+        const n=parseInt(hex,16);return[(n>>16)&255,(n>>8)&255,n&255];
+    }
+    function rgbToHex(r,g,b) {
+        return '#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
+    }
+    function hexColorFromState() {
+        const [r,g,b]=hsvToRgb(H,S,V);return rgbToHex(r,g,b);
+    }
+
+    // ---- Canvas drawing ----
+    function drawSV() {
+        const canvas=document.getElementById('fog-sv-canvas');if(!canvas)return;
+        const wrap=document.getElementById('fog-sv-wrap');
+        canvas.width=wrap.offsetWidth||200;canvas.height=wrap.offsetHeight||112;
+        const ctx=canvas.getContext('2d');
+        // Base hue fill
+        const baseColor=hsvToRgb(H,1,1);
+        ctx.fillStyle=`rgb(${baseColor.join(',')})`;
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        // White gradient L→R
+        const gW=ctx.createLinearGradient(0,0,canvas.width,0);
+        gW.addColorStop(0,'rgba(255,255,255,1)');gW.addColorStop(1,'rgba(255,255,255,0)');
+        ctx.fillStyle=gW;ctx.fillRect(0,0,canvas.width,canvas.height);
+        // Black gradient T→B
+        const gB=ctx.createLinearGradient(0,0,0,canvas.height);
+        gB.addColorStop(0,'rgba(0,0,0,0)');gB.addColorStop(1,'rgba(0,0,0,1)');
+        ctx.fillStyle=gB;ctx.fillRect(0,0,canvas.width,canvas.height);
+        // Thumb
+        const thumb=document.getElementById('fog-sv-thumb');
+        const tx=S*canvas.width,ty=(1-V)*canvas.height;
+        thumb.style.left=tx+'px';thumb.style.top=ty+'px';
+    }
+    function drawHue() {
+        const canvas=document.getElementById('fog-hue-canvas');if(!canvas)return;
+        const wrap=document.getElementById('fog-hue-wrap');
+        canvas.width=wrap.offsetWidth||200;canvas.height=wrap.offsetHeight||14;
+        const ctx=canvas.getContext('2d');
+        const g=ctx.createLinearGradient(0,0,canvas.width,0);
+        for(let i=0;i<=360;i+=60)g.addColorStop(i/360,`hsl(${i},100%,50%)`);
+        ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);
+        const thumb=document.getElementById('fog-hue-thumb');
+        thumb.style.left=(H/360*canvas.width)+'px';
+    }
+    function drawAlpha() {
+        const canvas=document.getElementById('fog-alpha-canvas');if(!canvas)return;
+        const wrap=document.getElementById('fog-alpha-wrap');
+        canvas.width=wrap.offsetWidth||200;canvas.height=wrap.offsetHeight||14;
+        const ctx=canvas.getContext('2d');
+        // Checker
+        const sz=6;for(let x=0;x<canvas.width;x+=sz)for(let y=0;y<canvas.height;y+=sz){ctx.fillStyle=((x/sz+y/sz)%2===0)?'#ccc':'#888';ctx.fillRect(x,y,sz,sz);}
+        const [r,g,b]=hsvToRgb(H,S,V);
+        const ga=ctx.createLinearGradient(0,0,canvas.width,0);
+        ga.addColorStop(0,`rgba(${r},${g},${b},0)`);ga.addColorStop(1,`rgba(${r},${g},${b},1)`);
+        ctx.fillStyle=ga;ctx.fillRect(0,0,canvas.width,canvas.height);
+        const thumb=document.getElementById('fog-alpha-thumb');
+        thumb.style.left=(A*canvas.width)+'px';
+    }
+    function redrawAll() { drawSV();drawHue();drawAlpha(); }
+
+    // ---- Sync UI from HSV ----
+    function syncUIFromHSV() {
+        const hex=hexColorFromState();
+        const [r,g,b]=hsvToRgb(H,S,V);
+        // hidden input
+        const inp=document.getElementById('setting-fog-color');
+        if(inp)inp.value=hex;
+        // swatch button
+        const sw=document.getElementById('fog-color-swatch-btn');
+        if(sw){sw.style.background=hex;
+            const lum=0.299*r+0.587*g+0.114*b;
+            const fgColor=lum>140?'rgba(0,0,0,0.6)':'rgba(255,255,255,0.85)';
+            document.getElementById('fog-color-swatch-hex').style.color=fgColor;
+            document.getElementById('fog-color-swatch-hex').textContent=hex.toUpperCase();
+        }
+        // text inputs
+        const hi=document.getElementById('fog-hex-input');if(hi&&document.activeElement!==hi)hi.value=hex.toUpperCase();
+        const ri=document.getElementById('fog-r-input');if(ri&&document.activeElement!==ri)ri.value=r;
+        const gi=document.getElementById('fog-g-input');if(gi&&document.activeElement!==gi)gi.value=g;
+        const bi=document.getElementById('fog-b-input');if(bi&&document.activeElement!==bi)bi.value=b;
+        redrawAll();
+    }
+    function applyToEngine() {
+        if(window.engine&&typeof window.engine.updateEnvironment==='function')window.engine.updateEnvironment();
+        if(window.historyManager&&typeof window.historyManager.takeSnapshot==='function')window.historyManager.takeSnapshot();
+    }
+    function setHex(hex) {
+        try{const [r,g,b]=hexToRgb(hex);const [h,s,v]=rgbToHsv(r,g,b);H=h;S=s;V=v;}catch(e){}
+        syncUIFromHSV();applyToEngine();
+    }
+
+    // ---- Drag helpers ----
+    function makeDraggable(el, onDrag) {
+        function move(e){
+            const t=e.touches?e.touches[0]:e;
+            const r=el.getBoundingClientRect();
+            const x=Math.max(0,Math.min(1,(t.clientX-r.left)/r.width));
+            const y=Math.max(0,Math.min(1,(t.clientY-r.top)/r.height));
+            onDrag(x,y);
+        }
+        el.addEventListener('mousedown',e=>{e.preventDefault();move(e);const up=()=>{document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up);};document.addEventListener('mousemove',move);document.addEventListener('mouseup',up);});
+        el.addEventListener('touchstart',e=>{e.preventDefault();move(e);const up=()=>{document.removeEventListener('touchmove',move);document.removeEventListener('touchend',up);};document.addEventListener('touchmove',move,{passive:false});document.addEventListener('touchend',up);},{passive:false});
+    }
+
+    // ---- Presets ----
+    function buildPresets() {
+        const wrap=document.getElementById('fog-presets');if(!wrap)return;
+        wrap.innerHTML='';
+        PRESETS.forEach(hex=>{
+            const btn=document.createElement('button');
+            btn.style.cssText=`width:18px;height:18px;background:${hex};border:1px solid rgba(255,255,255,0.15);cursor:pointer;flex-shrink:0;transition:transform 0.1s,box-shadow 0.1s;`;
+            btn.title=hex;
+            btn.onmouseover=()=>{btn.style.transform='scale(1.25)';btn.style.boxShadow='0 2px 6px rgba(0,0,0,0.5)';};
+            btn.onmouseout=()=>{btn.style.transform='';btn.style.boxShadow='';};
+            btn.onclick=()=>{setHex(hex);};
+            wrap.appendChild(btn);
+        });
+    }
+
+    // ---- Eyedropper ----
+    let _eyedropperActive = false;
+    let _eyeKeyListener = null;
+    let _eyeMoveListener = null;
+    let _eyeOverlay = null;
+    let _eyeHint = null;
+    let _eyePreviewDot = null;
+    let _eyePreviewHex = null;
+    // Elements to hide during eyedropper
+    const UI_HIDE_IDS = ['ui-layer','export-modal','bake-progress-modal','exit-dialog-modal','help-guide-modal','settings-modal','ai-builder-modal-overlay','texture-picker-modal-overlay','collection-modal-overlay'];
+
+    function _showUI() {
+        UI_HIDE_IDS.forEach(id=>{
+            const el=document.getElementById(id);
+            if(el&&el._eyedropperHidden){el.style.visibility='';delete el._eyedropperHidden;}
+        });
+    }
+    function _hideUI() {
+        UI_HIDE_IDS.forEach(id=>{
+            const el=document.getElementById(id);
+            if(el&&el.style.visibility!=='hidden'){el.style.visibility='hidden';el._eyedropperHidden=true;}
+        });
+    }
+
+    function _destroyOverlay() {
+        if(_eyeOverlay){_eyeOverlay.remove();_eyeOverlay=null;_eyeHint=null;_eyePreviewDot=null;_eyePreviewHex=null;}
+    }
+
+    function cancelEyedropper() {
+        _eyedropperActive=false;
+        _showUI();
+        _destroyOverlay();
+        if(_eyeKeyListener){document.removeEventListener('keydown',_eyeKeyListener);_eyeKeyListener=null;}
+        if(_eyeMoveListener){document.removeEventListener('mousemove',_eyeMoveListener);_eyeMoveListener=null;}
+        document.removeEventListener('touchstart',_eyeTouchHandler,true);
+        document.body.style.cursor='';
+    }
+
+    function _eyeTouchHandler(e) {
+        if(!_eyedropperActive)return;
+        e.preventDefault();e.stopPropagation();
+        const t=e.touches[0];
+        _pickFromScreenAt(t.clientX,t.clientY);
+    }
+
+    function _buildOverlay() {
+        const ov=document.createElement('div');
+        ov.id='fog-ed-overlay';
+        ov.style.cssText='position:fixed;inset:0;z-index:2147483647;cursor:crosshair;background:transparent;';
+        // Top hint bar
+        const hint=document.createElement('div');
+        hint.style.cssText='position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-content:center;padding:14px;pointer-events:none;';
+        hint.innerHTML=`<div style="
+            display:inline-flex;align-items:center;gap:10px;
+            background:rgba(10,10,12,0.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+            border:1px solid rgba(255,138,61,0.35);
+            padding:9px 16px;
+            box-shadow:0 4px 24px rgba(0,0,0,0.6);
+        ">
+            <svg width="14" height="14" viewBox="0 0 15 15" fill="none" style="color:#ff8a3d;flex-shrink:0">
+                <path d="M13.5 1.5a1.5 1.5 0 00-2.12 0L9.5 3.38l-.88-.88a1 1 0 00-1.41 0L5.79 3.91l-.35-.35a.75.75 0 10-1.06 1.06l.35.35-3.5 3.5A1 1 0 001 9.2v1.3h1.3a1 1 0 00.7-.29l3.5-3.5.35.35a.75.75 0 001.06-1.06l-.35-.35 1.41-1.41.89.88 1.94 1.94-1.5 1.5a.75.75 0 001.06 1.06l1.5-1.5.59.58a.75.75 0 001.06-1.06l-.59-.58 1-1a1.5 1.5 0 000-2.12L13.5 1.5zM2 10.5v.5h.5l3.21-3.21-.5-.5L2 10.5z" fill="currentColor"/>
+            </svg>
+            <span style="color:#e8e8e8;font-family:inherit;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;">Click anywhere to pick a color</span>
+            <span style="width:1px;height:12px;background:rgba(255,255,255,0.15);flex-shrink:0;"></span>
+            <button onclick="fogColorPicker._cancelAndReopen()" style="
+                background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);
+                color:#8a8a90;padding:3px 10px;cursor:pointer;
+                font-family:inherit;font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;
+                transition:color 0.1s,border-color 0.1s;pointer-events:auto;
+            " onmouseover="this.style.color='#fff';this.style.borderColor='rgba(255,255,255,0.4)'"
+               onmouseout="this.style.color='#8a8a90';this.style.borderColor='rgba(255,255,255,0.2)'">ESC</button>
+        </div>`;
+        // Color preview bubble (follows cursor)
+        const dot=document.createElement('div');
+        dot.style.cssText='position:fixed;width:44px;height:44px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,0.7),0 0 0 1px rgba(0,0,0,0.4);pointer-events:none;transform:translate(-50%,-50%);display:none;';
+        const hexLabel=document.createElement('div');
+        hexLabel.style.cssText='position:fixed;background:rgba(10,10,12,0.9);border:1px solid rgba(255,255,255,0.15);padding:3px 8px;font-family:"JetBrains Mono","SF Mono",monospace;font-size:11px;color:#e8e8e8;letter-spacing:0.06em;text-transform:uppercase;pointer-events:none;white-space:nowrap;display:none;box-shadow:0 2px 8px rgba(0,0,0,0.5);';
+        ov.appendChild(hint);
+        ov.appendChild(dot);
+        ov.appendChild(hexLabel);
+        document.body.appendChild(ov);
+        _eyeOverlay=ov;_eyeHint=hint;_eyePreviewDot=dot;_eyePreviewHex=hexLabel;
+        return ov;
+    }
+
+    // Sample color from Three.js renderer canvas at screen coords
+    function _sampleFromCanvas(cx,cy) {
+        // Try to get the Three.js renderer canvas
+        const canvases=document.querySelectorAll('canvas');
+        for(const cv of canvases){
+            if(cv.id==='fog-sv-canvas'||cv.id==='fog-hue-canvas'||cv.id==='fog-alpha-canvas'||cv.id==='fog-eyedropper-magnifier')continue;
+            const rect=cv.getBoundingClientRect();
+            if(cx>=rect.left&&cx<=rect.right&&cy>=rect.top&&cy<=rect.bottom){
+                try{
+                    const x=Math.round((cx-rect.left)*(cv.width/rect.width));
+                    const y=Math.round((cy-rect.top)*(cv.height/rect.height));
+                    // Need preserveDrawingBuffer=true. Try anyway:
+                    const gl=cv.getContext('webgl2')||cv.getContext('webgl')||cv.getContext('experimental-webgl');
+                    if(gl){
+                        const px=new Uint8Array(4);
+                        gl.readPixels(x,cv.height-y,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);
+                        if(px[3]>0)return rgbToHex(px[0],px[1],px[2]);
+                    }
+                    // 2D canvas fallback
+                    const ctx2=cv.getContext('2d');
+                    if(ctx2){
+                        const d=ctx2.getImageData(x,y,1,1).data;
+                        return rgbToHex(d[0],d[1],d[2]);
+                    }
+                }catch(err){}
+            }
+        }
+        return null;
+    }
+
+    let _lastMoveHex='#8bc5eb';
+
+    function _updatePreviewAt(cx,cy,hex) {
+        if(!_eyePreviewDot||!_eyePreviewHex)return;
+        _lastMoveHex=hex;
+        _eyePreviewDot.style.display='block';
+        _eyePreviewDot.style.left=cx+'px';
+        _eyePreviewDot.style.top=cy+'px';
+        _eyePreviewDot.style.background=hex;
+        // Hex label — offset so it doesn't cover the dot
+        _eyePreviewHex.style.display='block';
+        _eyePreviewHex.style.left=(cx+28)+'px';
+        _eyePreviewHex.style.top=(cy+28)+'px';
+        _eyePreviewHex.textContent=hex.toUpperCase();
+    }
+
+    function _pickFromScreenAt(cx,cy) {
+        // Try canvas sampling
+        const sampled=_sampleFromCanvas(cx,cy);
+        const picked=sampled||_lastMoveHex;
+        cancelEyedropper();
+        setHex(picked);
+        applyToEngine();
+        open();
+    }
+
+    function startEyedropper() {
+        // ---- Native EyeDropper API (Chrome 95+, Edge 95+) ----
+        if(window.EyeDropper) {
+            // Hide UI first
+            _hideUI();
+            // Small delay so UI disappears before picker opens
+            setTimeout(()=>{
+                const ed=new EyeDropper();
+                ed.open().then(result=>{
+                    _showUI();
+                    setHex(result.sRGBHex);
+                    applyToEngine();
+                    open();
+                }).catch(()=>{
+                    _showUI();
+                    open();
+                });
+            },80);
+            return;
+        }
+
+        // ---- Fallback: capture color from 3D canvas ----
+        _eyedropperActive=true;
+        _hideUI();
+        const ov=_buildOverlay();
+
+        // Mouse move: sample canvas under cursor, show preview
+        _eyeMoveListener=e=>{
+            if(!_eyedropperActive)return;
+            const hex=_sampleFromCanvas(e.clientX,e.clientY)||_lastMoveHex;
+            _updatePreviewAt(e.clientX,e.clientY,hex);
+        };
+        document.addEventListener('mousemove',_eyeMoveListener);
+
+        // Click: pick
+        ov.addEventListener('click',e=>{
+            if(!_eyedropperActive)return;
+            _pickFromScreenAt(e.clientX,e.clientY);
+        });
+
+        // Touch
+        document.addEventListener('touchstart',_eyeTouchHandler,{capture:true,passive:false});
+
+        // ESC key
+        _eyeKeyListener=e=>{if(e.key==='Escape'){cancelEyedropper();open();}};
+        document.addEventListener('keydown',_eyeKeyListener);
+    }
+
+    function _cancelAndReopen() { cancelEyedropper(); open(); }
+    function onEyedropperClick() {} // kept for compat, unused
+
+    // ---- Open/close ----
+    function open() {
+        const panel=document.getElementById('fog-color-picker-panel');
+        if(!panel)return;
+        panel.style.display='block';
+        buildPresets();
+        // Sync current color from hidden input
+        const inp=document.getElementById('setting-fog-color');
+        if(inp&&inp.value)setHexSilent(inp.value);
+        else syncUIFromHSV();
+        // Setup drag after panel is visible
+        requestAnimationFrame(()=>{
+            setupDrags();
+            redrawAll();
+        });
+    }
+    function setHexSilent(hex) {
+        try{const [r,g,b]=hexToRgb(hex);const [h,s,v]=rgbToHsv(r,g,b);H=h;S=s;V=v;}catch(e){}
+        syncUIFromHSV();
+    }
+    function close() {
+        const panel=document.getElementById('fog-color-picker-panel');
+        if(panel)panel.style.display='none';
+    }
+
+    // ---- Drag setup ----
+    let _dragsSetup=false;
+    function setupDrags() {
+        if(_dragsSetup)return;_dragsSetup=true;
+        const svWrap=document.getElementById('fog-sv-wrap');
+        if(svWrap){makeDraggable(svWrap,(x,y)=>{S=x;V=1-y;syncUIFromHSV();applyToEngine();});}
+        const hueWrap=document.getElementById('fog-hue-wrap');
+        if(hueWrap){makeDraggable(hueWrap,(x)=>{H=Math.round(x*360);syncUIFromHSV();applyToEngine();});}
+        const alphaWrap=document.getElementById('fog-alpha-wrap');
+        if(alphaWrap){makeDraggable(alphaWrap,(x)=>{A=x;syncUIFromHSV();applyToEngine();});}
+    }
+
+    // ---- Input handlers ----
+    function onHexInput(val) {
+        if(/^#[0-9a-fA-F]{6}$/.test(val)){setHex(val);}
+        else if(/^[0-9a-fA-F]{6}$/.test(val)){setHex('#'+val);}
+    }
+    function onRGBInput() {
+        const r=parseInt(document.getElementById('fog-r-input').value)||0;
+        const g=parseInt(document.getElementById('fog-g-input').value)||0;
+        const b=parseInt(document.getElementById('fog-b-input').value)||0;
+        const hex=rgbToHex(Math.min(255,r),Math.min(255,g),Math.min(255,b));
+        setHex(hex);
+    }
+
+    // ---- Public API ----
+    return {open,close,startEyedropper,onEyedropperClick,onHexInput,onRGBInput,setHex,_cancelAndReopen};
+})();
+
+// Hover effects for eyedropper buttons
+document.addEventListener('DOMContentLoaded',()=>{
+    ['fog-eyedropper-launch-btn','fog-cp-eyedropper-btn'].forEach(id=>{
+        const btn=document.getElementById(id);
+        if(!btn)return;
+        btn.addEventListener('mouseenter',()=>{btn.style.borderColor='var(--td-accent)';btn.style.color='var(--td-accent)';});
+        btn.addEventListener('mouseleave',()=>{btn.style.borderColor='var(--td-border)';btn.style.color='var(--td-text-dim)';});
+    });
+    // Swatch button hover
+    const sw=document.getElementById('fog-color-swatch-btn');
+    if(sw){
+        sw.addEventListener('mouseenter',()=>{sw.style.borderColor='var(--td-border-strong)';sw.style.boxShadow='0 0 0 1px var(--td-border-strong)';});
+        sw.addEventListener('mouseleave',()=>{sw.style.borderColor='var(--td-border)';sw.style.boxShadow='';});
+    }
+});
+</script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1c97df0cce6dbdb',t:'MTc4NDI5Mzg4MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1da1f66af61e436',t:'MTc4NDQ2ODI2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1db77f3b9dbe3f8',t:'MTc4NDQ4MjM3OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1eaf0a80fefc9d4',t:'MTc4NDY0NDYwOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f"}' crossorigin="anonymous"></script>
