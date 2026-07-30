@@ -1491,7 +1491,6 @@
 
                 <div class="text-sm font-semibold pr-2 text-white flex items-center gap-2">
                     <span id="current-map-name" class="truncate max-w-[140px] md:max-w-[240px]" style="letter-spacing: 0.08em;">Map Name</span>
-                    <span class="px-1.5 py-0.5 text-[10px] mono" style="background: var(--td-accent); color: #000;">PRO</span>
                 </div>
             </div>
 
@@ -2421,7 +2420,7 @@
                                     <input type="range" id="setting-env-reflection-interval" min="0.02" max="30" step="0.01" value="0.02" style="direction: rtl;" class="flex-1" oninput="document.getElementById('env-reflection-interval-val').innerText = (parseFloat(this.value).toFixed(2)) + 's';" onchange="engine.setEnvReflectionInterval(parseFloat(this.value));">
                                     <span id="env-reflection-interval-val" class="mono text-xs w-10 text-right" style="color: var(--td-ok);">0.02s</span>
                                 </div>
-                                <button onclick="engine.setAllReflectionsBlurZero();" class="w-full mb-2 px-2 py-1.5 text-xs uppercase tracking-[0.1em] transition" style="background: var(--td-bg-1); border: 1px solid var(--td-border); color: var(--td-text);" onmouseover="this.style.borderColor='var(--td-accent)'; this.style.color='var(--td-accent)'" onmouseout="this.style.borderColor='var(--td-border)'; this.style.color='var(--td-text)'">Set All Materials Blur to 10</button>
+                                <button onclick="engine.setAllReflectionsBlurToDefaults();" title="Reset every cube's reflection blur to the default of its own material: Concrete 15, Grass/Dirt/Wood 20, Sand/Snow/Carpet 30, Metal 10, Water 0" class="w-full mb-2 px-2 py-1.5 text-xs uppercase tracking-[0.1em] transition" style="background: var(--td-bg-1); border: 1px solid var(--td-border); color: var(--td-text);" onmouseover="this.style.borderColor='var(--td-accent)'; this.style.color='var(--td-accent)'" onmouseout="this.style.borderColor='var(--td-border)'; this.style.color='var(--td-text)'">Set All Materials Blur to Default</button>
                                 <div class="flex items-center gap-2 mb-1">
                                     <label class="td-label" style="font-size: 9px; width: 62px;">Status</label>
                                     <span id="env-reflection-status" class="text-[10px] mono" style="color: var(--td-text-muted);">Disabled</span>
@@ -4969,9 +4968,24 @@ function getDefaultReflectivityForTexture(textureId, materialType) {
 function getDefaultReflectBlurForTexture(textureId, materialType) {
     const key = canonicalTextureKey(textureId);
     if (key === "Glass") return .035;
-    const preset = MATERIAL_PRESETS[materialType] || MATERIAL_PRESETS.Concrete;
-    return preset.roughness;
+    if (isWaterLike(key, materialType)) return 0;
+    return MATERIAL_DEFAULT_REFLECT_BLUR[materialType] ?? MATERIAL_DEFAULT_REFLECT_BLUR.Concrete;
 }
+
+// Default "Reflection Blur" per physics material, in material units
+// (slider 0-100 divided by 100): Concrete 15, Grass 20, Dirt 20, Sand 30,
+// Metal 10, Snow 30, Wood 20, Carpet (Fabric) 30, Water 0.
+const MATERIAL_DEFAULT_REFLECT_BLUR = {
+    Concrete: .15,
+    Grass: .2,
+    Dirt: .2,
+    Sand: .3,
+    Metal: .1,
+    Snow: .3,
+    Wood: .2,
+    Carpet: .3,
+    Water: 0
+};
 
 function getFallbackGoreBoxMaterialName(materialType) {
     return GOREBOX_FALLBACK_MATERIAL_NAMES[materialType] || GOREBOX_FALLBACK_MATERIAL_NAMES.Concrete;
@@ -6985,7 +6999,11 @@ void main(){
     },
     refreshObjectMaterial: function(obj, forceRebuild = false) {
         if (!obj || !obj.material || obj.userData?.type === "spawn") return;
-        if (obj.userData?.shapeType === "glbImport" && obj.material?.userData?._sharedImportMat) return;
+        // GLB/OBJ-imported cubes used to be skipped here while they carried the
+        // one shared _sharedImportMat, which made panel edits (texture, material
+        // type, color, tiling, reflections) silently do nothing on them. Imports
+        // now use the regular pooled materials, so they follow the exact same
+        // refresh path as any other cube.
         const tex = obj.userData.texture || "grid";
         const matT = obj.userData.materialType || "Concrete";
         const isWater = isWaterLike(tex, matT);
@@ -7008,19 +7026,21 @@ void main(){
             this.spawnPointObj.material.needsUpdate = true;
         }
     },
-    setAllReflectionsBlurZero: function() {
-        // Sets reflection blur (roughness) to 0.10 (slider value 10) on every
-        // block in the scene so env-map reflections read as near-sharp
-        // instead of fully blurred, while retaining a slight softness.
-        // Water keeps its own fixed near-zero roughness elsewhere and isn't
-        // affected here beyond having its userData field reset too.
+    setAllReflectionsBlurToDefaults: function() {
+        // Sets every block's reflection blur (roughness) to the default of its
+        // own physics material (MATERIAL_DEFAULT_REFLECT_BLUR): Concrete .15,
+        // Grass/Dirt/Wood .20, Sand/Snow/Carpet .30, Metal .10, Water 0 —
+        // instead of one flat value for the whole map.
         this.blocks?.forEach(obj => {
             if (!obj?.userData || obj.userData.type === "spawn") return;
-            obj.userData.skyboxBlur = .1;
+            obj.userData.skyboxBlur = getDefaultReflectBlurForTexture(obj.userData.texture || "grid", obj.userData.materialType || "Concrete");
         });
         this.syncAllObjectMaterials(true);
         // Keep the per-object inspector panel in sync if a block is selected.
-        if (this.selectedBlocks?.length) this.updateSelectionPanels();
+        if (this.selectedBlocks?.length) {
+            this.updateSelectionPanels();
+            this.updateUIFromObject();
+        }
         if (window.historyManager && !window.historyManager.isRestoring) window.historyManager.takeSnapshot();
     },
     getWaterReflectionTarget: function() {
@@ -8545,14 +8565,12 @@ void main(){
         const initialReflect = reflectivity !== null && reflectivity !== undefined ? reflectivity : getDefaultReflectivityForTexture(tex, matT);
         const initialBlur = reflectBlur !== null && reflectBlur !== undefined ? reflectBlur : getDefaultReflectBlurForTexture(tex, matT);
         const created = [];
-        const sharedMat = createMaterial(tex, matT, col, {
-            reflectivity: initialReflect,
-            reflectBlur: initialBlur
-        });
-        sharedMat.polygonOffset = true;
-        sharedMat.polygonOffsetFactor = -1;
-        sharedMat.polygonOffsetUnits = -1;
-        sharedMat.userData._sharedImportMat = true;
+        // Materials come from the shared pool (acquireCubeMaterialFor) instead of
+        // one hand-made _sharedImportMat. Every cube of one import has identical
+        // parameters, so the pool still serves a single shared material instance,
+        // but these cubes now fully behave like regular cubes: texture / material
+        // tag / color / tiling / reflections can be edited from the panel and the
+        // change is visible immediately.
         const baseBoxGeo = createBlockGeometry(tex, matT);
         const ab = new THREE.Vector3, ac = new THREE.Vector3, normal = new THREE.Vector3;
         const center = new THREE.Vector3, localX = new THREE.Vector3, localY = new THREE.Vector3;
@@ -8593,7 +8611,7 @@ void main(){
             center.addScaledVector(localX, offX).addScaledVector(localY, offY);
             mat4.makeBasis(localX, localY, normal);
             quat.setFromRotationMatrix(mat4);
-            const mesh = new THREE.Mesh(baseBoxGeo.clone(), sharedMat);
+            const mesh = new THREE.Mesh(baseBoxGeo.clone());
             mesh.castShadow = isShadowCaster(tex, matT);
             mesh.receiveShadow = true;
             mesh.position.copy(center);
@@ -8615,6 +8633,7 @@ void main(){
                 shapeType: "glbImport",
                 shapePart: true
             };
+            mesh.material = this.acquireCubeMaterialFor(mesh);
             this.updateCubeUVs(mesh);
             this.scene.add(mesh);
             this.blocks.push(mesh);
@@ -9508,6 +9527,7 @@ void main(){
         const blur = (parseFloat(document.getElementById("inp-reflect-blur").value) || 0) / 100;
         const resolvedMaterialName = resolveGoreBoxMaterialName(tex, matT);
         const isMulti = this.selectedBlocks.length > 1;
+        let materialBlurSnapped = false;
         this.selectedBlocks.forEach((obj, idx) => {
             if (!isMulti) {
                 [ "x", "y", "z" ].forEach(a => {
@@ -9537,7 +9557,13 @@ void main(){
                         }
                     }
                 }, 30);
-                obj.userData.materialType = matT;
+                if (obj.userData.materialType !== matT) {
+                    // Physics material switched: snap reflection blur to the new
+                    // material's default (MATERIAL_DEFAULT_REFLECT_BLUR).
+                    obj.userData.materialType = matT;
+                    obj.userData.skyboxBlur = getDefaultReflectBlurForTexture(tex, matT);
+                    if (idx === 0) materialBlurSnapped = true;
+                }
                 obj.userData.colorHex = col;
                 obj.userData.materialName = resolvedMaterialName;
                 obj.userData.sourceTag = matT;
@@ -9545,6 +9571,15 @@ void main(){
                 this.refreshObjectMaterial(obj, true);
             }
         });
+        if (materialBlurSnapped) {
+            // Reflect the snapped default in the panel slider + its label so the
+            // UI never shows a stale blur value after a material switch.
+            const blurInp = document.getElementById("inp-reflect-blur");
+            const blurStr = String(Math.round((this.selectedBlocks[0].userData.skyboxBlur ?? 0) * 100));
+            if (blurInp) blurInp.value = blurStr;
+            const blurLbl = document.getElementById("blur-val");
+            if (blurLbl) blurLbl.innerText = blurStr;
+        }
         this.updateSelectionPanels();
         if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
     },
@@ -11868,6 +11903,24 @@ window.uiManager = {
                 });
             }
         });
+        const brushMatSel = document.getElementById("sel-material");
+        if (brushMatSel) {
+            brushMatSel.addEventListener("change", () => {
+                // No selection = this select drives the brush for future cubes:
+                // snap the blur slider to the material's default so newly spawned
+                // cubes inherit it. With a selection, updateObjectFromUI already
+                // snapped the blur of the edited cubes (and this same slider) its
+                // own way, so stay out of that path.
+                if (engine.selectedBlocks && engine.selectedBlocks.length) return;
+                const blurInp = document.getElementById("inp-reflect-blur");
+                if (!blurInp) return;
+                const texNow = document.getElementById("sel-texture")?.value || "grid";
+                const v = String(Math.round(getDefaultReflectBlurForTexture(texNow, brushMatSel.value) * 100));
+                blurInp.value = v;
+                const lbl = document.getElementById("blur-val");
+                if (lbl) lbl.innerText = v;
+            });
+        }
         const texSel = document.getElementById("sel-texture");
         if (texSel) {
             texSel.addEventListener("change", () => {
@@ -12779,8 +12832,32 @@ window.uiManager = {
         document.getElementById("export-modal").classList.remove("hidden");
         uiManager.setExportType(uiManager.exportType || "zip");
         uiManager.setMergeMode(uiManager.mergeMode || "texture");
+
+        // Drop the live viewport's Render Resolution to the minimum while
+        // the Export window is open — restored again in hideExportModal().
+        if (typeof engine !== "undefined" && engine.applyPixelRatio) {
+            const pr = document.getElementById("setting-pixel-ratio");
+            uiManager._savedExportPixelRatio = engine.currentPixelRatio ?? (pr ? parseFloat(pr.value) : 0.7);
+            engine.applyPixelRatio(0.2);
+            if (pr) pr.value = 0.2;
+            const lbl = document.getElementById("pixel-ratio-val");
+            if (lbl) lbl.innerText = "0.20x";
+        }
     },
-    hideExportModal: () => document.getElementById("export-modal").classList.add("hidden"),
+    hideExportModal: () => {
+        document.getElementById("export-modal").classList.add("hidden");
+
+        // Restore the viewport Render Resolution that was active before
+        // the Export window was opened.
+        if (uiManager._savedExportPixelRatio !== undefined && typeof engine !== "undefined" && engine.applyPixelRatio) {
+            engine.applyPixelRatio(uiManager._savedExportPixelRatio);
+            const pr = document.getElementById("setting-pixel-ratio");
+            if (pr) pr.value = uiManager._savedExportPixelRatio;
+            const lbl = document.getElementById("pixel-ratio-val");
+            if (lbl) lbl.innerText = Number(uiManager._savedExportPixelRatio).toFixed(2) + "x";
+            uiManager._savedExportPixelRatio = undefined;
+        }
+    },
     settingsStorageKey: "mmcg_saved_settings_snapshot_55",
     _readSavedSettings: function() {
         try {
@@ -16220,10 +16297,33 @@ window.renderStudio = {
     // -----------------------------------------------------------------
     // Open / close
     // -----------------------------------------------------------------
+    // Helper: pushes a new value into the viewport's "Render Resolution"
+    // (pixel ratio) slider — updates the engine, the slider position and
+    // its label, exactly like the existing MIN shortcut button does.
+    _setViewportPixelRatio: function(value) {
+        if (typeof engine === "undefined" || !engine.applyPixelRatio) return;
+        engine.applyPixelRatio(value);
+        const pr = document.getElementById("setting-pixel-ratio");
+        if (pr) pr.value = value;
+        const lbl = document.getElementById("pixel-ratio-val");
+        if (lbl) lbl.innerText = Number(value).toFixed(2) + "x";
+    },
+
     open: function() {
         this.installUI();
         const overlay = document.getElementById("rs-overlay");
         if (!overlay) return;
+
+        // Drop the live viewport's Render Resolution to the minimum while
+        // the Render Studio window is open (it covers the whole screen
+        // anyway, so there's no point rendering the background scene at
+        // full resolution) — restored again in close().
+        if (typeof engine !== "undefined" && engine.applyPixelRatio) {
+            const pr = document.getElementById("setting-pixel-ratio");
+            this._savedPixelRatio = engine.currentPixelRatio ?? (pr ? parseFloat(pr.value) : 0.7);
+            this._setViewportPixelRatio(0.2);
+        }
+
         this._buildResGrid();
         this._buildSsaaRow();
         this._buildFormatRow();
@@ -16241,6 +16341,13 @@ window.renderStudio = {
         const overlay = document.getElementById("rs-overlay");
         if (overlay) overlay.classList.add("hidden");
         this._open = false;
+
+        // Restore the viewport Render Resolution that was active before
+        // the Render Studio window was opened.
+        if (this._savedPixelRatio !== undefined) {
+            this._setViewportPixelRatio(this._savedPixelRatio);
+            this._savedPixelRatio = undefined;
+        }
     },
 
     // -----------------------------------------------------------------
@@ -16803,10 +16910,47 @@ window.renderStudio = {
         const a = document.createElement("a");
         a.href = this._lastBlobUrl;
         const ext = this.prefs.format === "jpeg" ? "jpg" : "png";
-        a.download = `${this._lastFilenameBase}.${ext}`;
+        const filename = `${this._lastFilenameBase}.${ext}`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         a.remove();
+        this._showDownloadToast(filename);
+    },
+
+    // Короткое уведомление (~2 с) об успешном скачивании картинки с её именем.
+    // Тот же визуальный язык, что и у тостов приложения (зелёный, снизу по центру),
+    // но z-index выше 130, чтобы всплывать поверх окна Render Studio.
+    _toastTimer: null,
+    _showDownloadToast: function(filename) {
+        const old = document.getElementById("rs-download-toast");
+        if (old) old.remove();
+        if (this._toastTimer) { clearTimeout(this._toastTimer); this._toastTimer = null; }
+
+        const d = document.createElement("div");
+        d.id = "rs-download-toast";
+        d.className = "modal-enter";
+        d.style.cssText = "position:fixed;bottom:28px;left:50%;transform:translateX(-50%);"
+            + "display:flex;align-items:center;gap:9px;max-width:min(92vw,640px);"
+            + "padding:11px 18px;z-index:150;pointer-events:none;"
+            + "background:rgba(94,196,110,0.94);border:1px solid rgba(255,255,255,0.25);"
+            + "box-shadow:0 10px 34px rgba(0,0,0,0.45);"
+            + "color:#fff;font-size:11.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;";
+        const icon = document.createElement("span");
+        icon.innerHTML = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14" style="flex:0 0 auto;"><path d="M4 10.5l4 4 8-9"/></svg>';
+        const label = document.createElement("span");
+        label.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+        label.textContent = "Downloaded " + filename;
+        d.appendChild(icon);
+        d.appendChild(label);
+        document.body.appendChild(d);
+
+        this._toastTimer = setTimeout(() => {
+            d.style.opacity = "0";
+            d.style.transition = "opacity 0.25s";
+            setTimeout(() => d.remove(), 260);
+            this._toastTimer = null;
+        }, 2000);
     }
 };
 
@@ -16826,5 +16970,5 @@ document.addEventListener("DOMContentLoaded", () => {
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1c97df0cce6dbdb',t:'MTc4NDI5Mzg4MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1da1f66af61e436',t:'MTc4NDQ2ODI2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1db77f3b9dbe3f8',t:'MTc4NDQ4MjM3OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1eaf0a80fefc9d4',t:'MTc4NDY0NDYwOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f"}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a234b5320e8ae4b5',t:'MTc4NTQxODEyMA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a23525862f3eca25',t:'MTc4NTQyMjcyMA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
