@@ -2451,7 +2451,11 @@
                                 <input type="range" id="setting-dof-blur" min="2" max="28" step="0.5" value="8.5" class="flex-1" oninput="document.getElementById('dof-blur-val').innerText=Number(this.value).toFixed(1)+'px'; engine.updateGraphics();">
                                 <span id="dof-blur-val" class="mono text-xs w-12 text-right" style="color: var(--td-info);">8.5px</span>
                             </div>
-                            <p class="text-[10px] leading-tight mt-1" style="color: var(--td-text-muted);">Размываются только те кубы, которые находятся очень близко к камере. Всё, что дальше — резко.</p>
+                            <label class="flex items-center gap-2 mb-1 cursor-pointer">
+                                <input type="checkbox" id="setting-dof-bgblur" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();">
+                                <span class="text-[10px]" style="color: var(--td-text-dim);">Blur background too (cinematic)</span>
+                            </label>
+                            <p class="text-[10px] leading-tight mt-1" style="color: var(--td-text-muted);">По умолчанию размываются только кубы близко к камере, фон остаётся резким (классический вид). Включите «Blur background too», чтобы размывался и дальний фон — кино-эффект.</p>
                         </div>
 
                         <label class="flex items-center gap-2 mb-2 cursor-pointer">
@@ -6217,6 +6221,7 @@ const engine = {
                 uFocusRange: { value: 4.5 },
                 uBokehSize:  { value: 8.5 },
                 uStrength:   { value: 1.0 },
+                uBgBlur:     { value: 0.0 },   /* 0 = classic foreground-only look ("как раньше"), 1 = blur background too */
             },
             vertexShader: `varying vec2 vUv;
 void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
@@ -6230,22 +6235,35 @@ uniform float uFocusDist;
 uniform float uFocusRange;
 uniform float uBokehSize;
 uniform float uStrength;
+uniform float uBgBlur;
 varying vec2 vUv;
 
 float unpackDepth(vec4 r){
     return dot(r, vec4(1.0/16777216.0, 1.0/65536.0, 1.0/256.0, 1.0));
 }
-float sampleLinearZ(vec2 uv){
+/* Returns (linear view-space Z, skyFlag). The sky is packed as a white
+   marker by the depth pre-pass; we flag it so it stays tack-sharp —
+   a blurred sky reads as a bug, not as depth of field. */
+vec2 sampleDepth(vec2 uv){
     vec4 raw = texture2D(tDepth, uv);
-    if(raw.r > 0.999 && raw.g > 0.999) return uFar;
-    return unpackDepth(raw) * uFar;
+    if(raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);
+    return vec2(unpackDepth(raw) * uFar, 0.0);
 }
-/* Foreground-only CoC: 0 beyond focus range, blurred when close to camera */
-float cocPx(float z){
-    if (z > uFocusDist) return 0.0;
+/* Symmetric CoC: an in-focus band of [uFocusDist ± uFocusRange], with bokeh
+   ramping up both IN FRONT of and BEHIND the band. Sign encodes side:
+   negative = foreground, positive = background.
+   (Previously this was foreground-only — "if (z > uFocusDist) return 0.0" —
+   so in any normal scene, where nearly everything is farther than the 8 m
+   default focus, enabling DOF visibly did nothing.) */
+float cocPx(float z, float sky){
+    if (sky > 0.5) return 0.0;
     float d = z - uFocusDist;
-    float r = min(0.0, d + uFocusRange);
-    return clamp(r / max(uFocusRange * 1.5, 0.5), -1.0, 0.0) * uBokehSize * uStrength;
+    /* Режим «как раньше» (uBgBlur = 0): фон дальше плоскости фокуса остаётся
+       резким, размывается только передний план. При uBgBlur = 1 полоса
+       резкости [uFocusDist ± uFocusRange], и боке растёт в обе стороны. */
+    if (uBgBlur < 0.5 && d > 0.0) return 0.0;
+    float r = (d < 0.0) ? min(0.0, d + uFocusRange) : max(0.0, d - uFocusRange);
+    return clamp(r / max(uFocusRange * 1.5, 0.5), -1.0, 1.0) * uBokehSize * uStrength;
 }
 /* IGN per-pixel rotation */
 float ign(vec2 p){ return fract(52.9829189 * fract(0.06711056*p.x + 0.00583715*p.y)); }
@@ -6278,8 +6296,8 @@ void tap(vec2 uv, vec2 d, float cosR, float sinR, float absCoc, vec2 px,
     vec2 offset = rot(d, cosR, sinR) * absCoc * px;
     vec2 tapUV  = clamp(uv + offset, vec2(0.001), vec2(0.999));
     vec4 col    = texture2D(tDiffuse, tapUV);
-    float tapZ  = sampleLinearZ(tapUV);
-    float tapC  = cocPx(tapZ);
+    vec2  tapD  = sampleDepth(tapUV);
+    float tapC  = cocPx(tapD.x, tapD.y);
     /* bg: tap must be behind focus or have large enough coc to "reach" here */
     float bgM   = clamp(tapC / max(absCoc, 0.01), 0.0, 1.0);
     bgCol += col * bgM;  bgW += bgM;
@@ -6291,8 +6309,8 @@ void tap(vec2 uv, vec2 d, float cosR, float sinR, float absCoc, vec2 px,
 
 void main(){
     vec2  px      = 1.0 / (resolution * vec2(resolution.y/resolution.x, 1.0));
-    float centerZ = sampleLinearZ(vUv);
-    float coc     = cocPx(centerZ);
+    vec2  centerD = sampleDepth(vUv);
+    float coc     = cocPx(centerD.x, centerD.y);
     float absCoc  = abs(coc);
     vec4  sharpC  = texture2D(tDiffuse, vUv);
 
@@ -9680,6 +9698,7 @@ void main(){
                 this.dofPass.uniforms.uFocusRange.value = parseFloat(document.getElementById("setting-dof-range")?.value ?? "4.5");
                 const _rawBokeh = parseFloat(document.getElementById("setting-dof-blur")?.value ?? "8.5");
                 this.dofPass.uniforms.uBokehSize.value = this.isMobile ? Math.min(_rawBokeh, 8.5) : _rawBokeh;
+                this.dofPass.uniforms.uBgBlur.value = (document.getElementById("setting-dof-bgblur")?.checked ?? false) ? 1.0 : 0.0;
             }
         }
         if (this.updateDepthEncodingUniforms) this.updateDepthEncodingUniforms();
@@ -14206,6 +14225,20 @@ window.multiplayerClient = {
             btn.onmouseout = () => { btn.style.background = "rgba(94,196,110,0.08)"; btn.style.color = "var(--td-ok)"; };
             btn.onclick = () => this.openModal();
             toolbar.insertBefore(btn, document.getElementById("btn-world-pause-toggle"));
+
+            // RENDER button — placeholder, no functionality yet.
+            if (!document.getElementById("btn-render-toggle")) {
+                const renderBtn = document.createElement("button");
+                renderBtn.id = "btn-render-toggle";
+                renderBtn.className = "flex items-center gap-2 px-3 py-1.5 text-xs uppercase tracking-[0.1em] font-semibold transition";
+                renderBtn.style.color = "var(--td-accent)";
+                renderBtn.style.border = "1px solid rgba(255,138,61,0.45)";
+                renderBtn.style.background = "rgba(255,138,61,0.10)";
+                renderBtn.innerHTML = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="2.4" fill="currentColor" stroke="none"/></svg><span>Render</span>';
+                renderBtn.onmouseover = () => { renderBtn.style.background = "rgba(255,138,61,0.22)"; renderBtn.style.color = "white"; renderBtn.style.borderColor = "var(--td-accent)"; };
+                renderBtn.onmouseout = () => { renderBtn.style.background = "rgba(255,138,61,0.10)"; renderBtn.style.color = "var(--td-accent)"; renderBtn.style.borderColor = "rgba(255,138,61,0.45)"; };
+                toolbar.insertBefore(renderBtn, document.getElementById("btn-world-pause-toggle"));
+            }
         }
 
         if (!document.getElementById("mp-modal")) {
@@ -15659,8 +15692,915 @@ document.addEventListener('DOMContentLoaded',()=>{
     }
 });
 </script>
+<script>
+
+// =====================================================================
+// RENDER STUDIO — high-quality still-frame renderer for MAPCG.
+//
+// Design principles:
+//  - Every parameter here maps 1:1 onto a real field of the already-
+//    working renderer (composer/ssaoPass/bloomPass/dofPass/env-reflection/
+//    shadow map / toneMappingExposure). Nothing is decorative.
+//  - The render re-uses the exact same code path as the live viewport
+//    (updateGraphics() + composer.render()/renderer.render(), the same
+//    depth-pre-pass), just temporarily at a higher resolution and with
+//    swapped-in quality settings — so the output can never visually
+//    diverge from what engine.updateGraphics() already knows how to draw.
+//  - The whole operation is fully reversible: every touched engine/DOM
+//    field is captured before the render and restored in a `finally`
+//    block, even on error.
+// =====================================================================
+window.renderStudio = {
+    _open: false,
+    _rendering: false,
+    _lastBlobUrl: null,
+    _lastFilenameBase: null,
+
+    // ---- persisted user prefs for the render dialog (not the live scene) ----
+    prefs: {
+        resPreset: "1920x1080",
+        customW: 1920,
+        customH: 1080,
+        useViewportAspect: false,
+        ssaa: 2,                 // 1 = off, 2 = 2x SSAA, 4 = 4x SSAA
+        shadowQuality: 4,        // 0..4 -> 128..4096 (render allows one tier above the live max)
+        aoEnabled: true,
+        aoIntensity: 1.2,
+        bloomEnabled: true,
+        bloomStrength: 1.5,
+        dofEnabled: false,
+        dofFocus: 8,
+        dofRange: 4.5,
+        dofBlur: 8.5,
+        dofAutoFocus: false,
+        dofBgBlur: false,   // false = classic foreground-only look ("как раньше")
+        envReflEnabled: true,
+        envReflQuality: 1024,
+        exposure: 1,
+        hideGrid: true,
+        hideGizmo: true,
+        hideOutlines: true,
+        format: "png",
+        jpegQuality: 0.92
+    },
+
+    // -----------------------------------------------------------------
+    // UI bootstrap
+    // -----------------------------------------------------------------
+    installUI: function() {
+        if (!document.getElementById("rs-style")) {
+            const st = document.createElement("style");
+            st.id = "rs-style";
+            st.textContent = `
+.rs-overlay{position:fixed;inset:0;background:var(--td-bg-0);z-index:130;display:flex;align-items:stretch;justify-content:stretch;pointer-events:auto}
+.rs-overlay.hidden{display:none}
+.rs-modal{width:100%;height:100%;max-height:100%;background:var(--td-bg-1);border:none;box-shadow:none;display:flex;flex-direction:column;overflow:hidden}
+.rs-head{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--td-border);flex:0 0 auto}
+.rs-title{font-size:13px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--td-accent);display:flex;align-items:center;gap:8px}
+.rs-close{width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--td-text-dim);transition:color .12s;cursor:pointer;background:none;border:none}
+.rs-close:hover{color:var(--td-danger)}
+.rs-body{display:flex;flex:1 1 auto;min-height:0}
+.rs-preview{flex:1 1 auto;background:
+  linear-gradient(45deg,#232327 25%,transparent 25%),
+  linear-gradient(-45deg,#232327 25%,transparent 25%),
+  linear-gradient(45deg,transparent 75%,#232327 75%),
+  linear-gradient(-45deg,transparent 75%,#232327 75%);
+  background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0;
+  background-color:#18181a;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;padding:32px;min-height:0}
+.rs-preview img{max-width:100%;max-height:100%;object-fit:contain;box-shadow:0 12px 60px rgba(0,0,0,.65);image-rendering:auto}
+.rs-preview-empty{color:var(--td-text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.12em;text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px}
+.rs-progress-wrap{position:absolute;inset:0;background:rgba(10,10,12,.86);display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+.rs-progress-wrap.show{display:flex}
+.rs-spinner{width:34px;height:34px;border-radius:50%;border:2px solid rgba(255,255,255,.12);border-top-color:var(--td-accent);animation:rsSpin .8s linear infinite}
+@keyframes rsSpin{to{transform:rotate(360deg)}}
+.rs-progress-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--td-text-dim)}
+.rs-panel{flex:0 0 400px;border-left:1px solid var(--td-border);overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:18px}
+.rs-section{display:flex;flex-direction:column;gap:8px}
+.rs-section-title{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--td-text-dim);display:flex;align-items:center;justify-content:space-between;padding-bottom:6px;border-bottom:1px solid var(--td-border)}
+.rs-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.rs-row-label{font-size:11px;color:var(--td-text);flex:0 0 auto}
+.rs-row-val{font-size:11px;color:var(--td-text-dim);font-family:'JetBrains Mono','SF Mono',monospace;min-width:44px;text-align:right;flex:0 0 auto}
+.rs-slider-row{display:flex;align-items:center;gap:8px}
+.rs-slider-row input[type=range]{flex:1}
+.rs-select{background:var(--td-bg-2);border:1px solid var(--td-border);color:var(--td-text);padding:6px 8px;font-size:11px;width:100%;outline:none}
+.rs-select:focus{border-color:var(--td-accent)}
+.rs-numinput{background:var(--td-bg-2);border:1px solid var(--td-border);color:var(--td-text);padding:5px 7px;font-size:11px;width:64px;outline:none;text-align:center}
+.rs-numinput:focus{border-color:var(--td-accent)}
+.rs-toggle{position:relative;width:32px;height:18px;flex:0 0 auto;cursor:pointer}
+/* The invisible <input> must sit ABOVE the decorative track/thumb, and the
+   track/thumb must not intercept hit-testing — otherwise every click lands
+   on a dumb <span> and the switch can never toggle (this silently killed
+   the DOF/AO/Bloom/EnvRefl section switches). Explicit width/height 100%
+   (not top/bottom stretching) is required: <input> is a replaced element,
+   for which top+bottom together do NOT resize the box. */
+.rs-toggle input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:1}
+.rs-toggle-track{position:absolute;inset:0;background:var(--td-bg-3);border:1px solid var(--td-border);transition:.15s;pointer-events:none}
+.rs-toggle-thumb{position:absolute;top:1px;left:1px;width:14px;height:14px;background:var(--td-text-dim);transition:.15s;pointer-events:none}
+.rs-toggle input:checked ~ .rs-toggle-track{background:rgba(255,138,61,.28);border-color:var(--td-accent)}
+.rs-toggle input:checked ~ .rs-toggle-thumb{transform:translateX(14px);background:var(--td-accent)}
+.rs-subgroup{display:flex;flex-direction:column;gap:8px;padding:10px;background:var(--td-bg-2);border:1px solid var(--td-border)}
+.rs-subgroup.dim{opacity:.4;pointer-events:none}
+.rs-resgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.rs-res-btn{background:var(--td-bg-2);border:1px solid var(--td-border);color:var(--td-text-dim);padding:7px 6px;font-size:10.5px;font-weight:600;letter-spacing:.04em;cursor:pointer;transition:.12s;text-align:center}
+.rs-res-btn:hover{border-color:var(--td-border-strong);color:#fff}
+.rs-res-btn.is-active{background:rgba(255,138,61,.16);border-color:var(--td-accent);color:var(--td-accent-bright)}
+.rs-custom-res{display:flex;align-items:center;gap:6px}
+.rs-custom-res span{color:var(--td-text-muted);font-size:11px}
+.rs-foot{flex:0 0 auto;border-top:1px solid var(--td-border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.rs-eta{font-size:10.5px;color:var(--td-text-muted);font-family:'JetBrains Mono','SF Mono',monospace}
+.rs-btn{padding:9px 16px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;border:1px solid var(--td-border);background:var(--td-bg-2);color:var(--td-text);transition:.12s;display:flex;align-items:center;gap:7px}
+.rs-btn:hover{border-color:var(--td-border-strong);color:#fff}
+.rs-btn.primary{background:rgba(255,138,61,.16);border-color:rgba(255,138,61,.55);color:var(--td-accent-bright)}
+.rs-btn.primary:hover{background:rgba(255,138,61,.28);border-color:var(--td-accent);color:#fff}
+.rs-btn.ok{background:rgba(94,196,110,.16);border-color:rgba(94,196,110,.5);color:var(--td-ok)}
+.rs-btn.ok:hover{background:rgba(94,196,110,.26);color:#fff}
+.rs-btn:disabled{opacity:.4;pointer-events:none}
+.rs-fmt-row{display:flex;gap:6px}
+.rs-fmt-row .rs-res-btn{flex:1}
+@media(max-width:820px){.rs-body{flex-direction:column}.rs-panel{flex:0 0 auto;width:auto;border-left:none;border-top:1px solid var(--td-border);max-height:50vh}.rs-preview{flex:1 1 auto;min-height:200px}}
+`;
+            document.head.appendChild(st);
+        }
+
+        if (!document.getElementById("rs-overlay")) {
+            const overlay = document.createElement("div");
+            overlay.id = "rs-overlay";
+            overlay.className = "rs-overlay hidden";
+            overlay.innerHTML = this._modalHTML();
+            document.body.appendChild(overlay);
+        }
+
+        // Wire the existing toolbar "Render" button (previously a placeholder).
+        const btn = document.getElementById("btn-render-toggle");
+        if (btn) {
+            btn.onclick = () => this.open();
+        }
+    },
+
+    _modalHTML: function() {
+        return `
+<div class="rs-modal modal-enter">
+  <div class="rs-head">
+    <div class="rs-title">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15"><circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="2.4" fill="currentColor" stroke="none"/></svg>
+      <span>Render</span>
+    </div>
+    <button class="rs-close" onclick="renderStudio.close()"><span class="ui-icon ui-icon-mask" data-icon="Close" alt="" style="width:13px;height:13px;object-fit:contain;"></span></button>
+  </div>
+  <div class="rs-body">
+    <div class="rs-preview" id="rs-preview">
+      <div class="rs-preview-empty" id="rs-preview-empty">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.2" width="30" height="30"><rect x="2.5" y="4" width="15" height="12" rx="1"/><circle cx="7" cy="9" r="1.6"/><path d="M2.5 14l4.5-4 3 2.5 3-3 4.5 4.5"/></svg>
+        <span>No render yet<br>Configure parameters and press Render</span>
+      </div>
+      <img id="rs-preview-img" style="display:none">
+      <div class="rs-progress-wrap" id="rs-progress-wrap">
+        <div class="rs-spinner"></div>
+        <div class="rs-progress-label" id="rs-progress-label">Rendering...</div>
+      </div>
+    </div>
+    <div class="rs-panel">
+
+      <div class="rs-section">
+        <div class="rs-section-title">Resolution</div>
+        <div class="rs-resgrid" id="rs-res-grid"></div>
+        <div class="rs-custom-res" id="rs-custom-res-row" style="display:none;">
+          <input type="number" class="rs-numinput" id="rs-custom-w" min="64" max="7680" value="1920">
+          <span>×</span>
+          <input type="number" class="rs-numinput" id="rs-custom-h" min="64" max="7680" value="1080">
+        </div>
+        <label class="rs-row" style="cursor:pointer;">
+          <span class="rs-row-label" style="color:var(--td-text-dim);">Match current viewport aspect</span>
+          <span class="rs-toggle"><input type="checkbox" id="rs-viewport-aspect"><span class="rs-toggle-track"></span><span class="rs-toggle-thumb"></span></span>
+        </label>
+      </div>
+
+      <div class="rs-section">
+        <div class="rs-section-title">Sampling</div>
+        <div class="rs-fmt-row" id="rs-ssaa-row"></div>
+        <div style="font-size:10px;color:var(--td-text-muted);line-height:1.4;">Renders at N× resolution then downsamples — real anti-aliasing, not a filter.</div>
+      </div>
+
+      <div class="rs-section">
+        <div class="rs-section-title">Shadows</div>
+        <div class="rs-slider-row">
+          <input type="range" id="rs-shadow-quality" min="0" max="4" step="1" value="4">
+          <span class="rs-row-val" id="rs-shadow-quality-val">4096</span>
+        </div>
+      </div>
+
+      <div class="rs-section">
+        <div class="rs-section-title">
+          <span>Ambient Occlusion</span>
+          <span class="rs-toggle"><input type="checkbox" id="rs-ao-enabled" checked><span class="rs-toggle-track"></span><span class="rs-toggle-thumb"></span></span>
+        </div>
+        <div class="rs-subgroup" id="rs-ao-group">
+          <div class="rs-row"><span class="rs-row-label">Intensity</span><span class="rs-row-val" id="rs-ao-intensity-val">1.20</span></div>
+          <input type="range" id="rs-ao-intensity" min="0" max="1.5" step="0.05" value="1.20">
+        </div>
+      </div>
+
+      <div class="rs-section">
+        <div class="rs-section-title">
+          <span>Bloom</span>
+          <span class="rs-toggle"><input type="checkbox" id="rs-bloom-enabled" checked><span class="rs-toggle-track"></span><span class="rs-toggle-thumb"></span></span>
+        </div>
+        <div class="rs-subgroup" id="rs-bloom-group">
+          <div class="rs-row"><span class="rs-row-label">Strength</span><span class="rs-row-val" id="rs-bloom-strength-val">1.50</span></div>
+          <input type="range" id="rs-bloom-strength" min="0" max="3" step="0.05" value="1.5">
+        </div>
+      </div>
+
+      <div class="rs-section">
+        <div class="rs-section-title">
+          <span>Depth of Field</span>
+          <span class="rs-toggle"><input type="checkbox" id="rs-dof-enabled"><span class="rs-toggle-track"></span><span class="rs-toggle-thumb"></span></span>
+        </div>
+        <div class="rs-subgroup dim" id="rs-dof-group">
+          <label class="rs-row" style="cursor:pointer;">
+            <span class="rs-row-label" style="color:var(--td-text-dim);">Auto-focus on selection</span>
+            <span class="rs-toggle"><input type="checkbox" id="rs-dof-autofocus"><span class="rs-toggle-track"></span><span class="rs-toggle-thumb"></span></span>
+          </label>
+          <div class="rs-row"><span class="rs-row-label">Focus distance</span><span class="rs-row-val" id="rs-dof-focus-val">8.0m</span></div>
+          <input type="range" id="rs-dof-focus" min="1" max="100" step="0.5" value="8">
+          <div class="rs-row"><span class="rs-row-label">Focus range</span><span class="rs-row-val" id="rs-dof-range-val">4.5m</span></div>
+          <input type="range" id="rs-dof-range" min="0.5" max="40" step="0.5" value="4.5">
+          <div class="rs-row"><span class="rs-row-label">Bokeh size</span><span class="rs-row-val" id="rs-dof-blur-val">8.5px</span></div>
+          <input type="range" id="rs-dof-blur" min="2" max="28" step="0.5" value="8.5">
+          <label class="rs-row" style="cursor:pointer;">
+            <span class="rs-row-label" style="color:var(--td-text-dim);">Blur background (far objects)</span>
+            <span class="rs-toggle"><input type="checkbox" id="rs-dof-bgblur"><span class="rs-toggle-track"></span><span class="rs-toggle-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="rs-section">
+        <div class="rs-section-title">
+          <span>Environment Reflections</span>
+          <span class="rs-toggle"><input type="checkbox" id="rs-envrefl-enabled" checked><span class="rs-toggle-track"></span><span class="rs-toggle-thumb"></span></span>
+        </div>
+        <div class="rs-subgroup" id="rs-envrefl-group">
+          <div class="rs-row"><span class="rs-row-label">Capture quality</span></div>
+          <select class="rs-select" id="rs-envrefl-quality">
+            <option value="256">256px</option>
+            <option value="512">512px</option>
+            <option value="1024" selected>1024px (recommended)</option>
+            <option value="2048">2048px</option>
+          </select>
+          <div style="font-size:10px;color:var(--td-text-muted);line-height:1.4;">Forces a fresh cubemap capture from the camera position right before rendering.</div>
+        </div>
+      </div>
+
+      <div class="rs-section">
+        <div class="rs-section-title">Exposure</div>
+        <div class="rs-slider-row">
+          <input type="range" id="rs-exposure" min="0.2" max="3" step="0.05" value="1">
+          <span class="rs-row-val" id="rs-exposure-val">1.00</span>
+        </div>
+      </div>
+
+      <div class="rs-section">
+        <div class="rs-section-title">Scene Cleanup</div>
+        <label class="rs-row" style="cursor:pointer;"><span class="rs-row-label" style="color:var(--td-text-dim);">Hide grid</span><span class="rs-toggle"><input type="checkbox" id="rs-hide-grid" checked><span class="rs-toggle-track"></span><span class="rs-toggle-thumb"></span></span></label>
+        <label class="rs-row" style="cursor:pointer;"><span class="rs-row-label" style="color:var(--td-text-dim);">Hide gizmo / transform handles</span><span class="rs-toggle"><input type="checkbox" id="rs-hide-gizmo" checked><span class="rs-toggle-track"></span><span class="rs-toggle-thumb"></span></span></label>
+        <label class="rs-row" style="cursor:pointer;"><span class="rs-row-label" style="color:var(--td-text-dim);">Hide selection outline</span><span class="rs-toggle"><input type="checkbox" id="rs-hide-outlines" checked><span class="rs-toggle-track"></span><span class="rs-toggle-thumb"></span></span></label>
+      </div>
+
+      <div class="rs-section">
+        <div class="rs-section-title">Output Format</div>
+        <div class="rs-fmt-row" id="rs-format-row"></div>
+        <div id="rs-jpeg-quality-row" style="display:none;">
+          <div class="rs-row"><span class="rs-row-label">JPEG quality</span><span class="rs-row-val" id="rs-jpeg-quality-val">92%</span></div>
+          <input type="range" id="rs-jpeg-quality" min="0.5" max="1" step="0.01" value="0.92">
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="rs-foot">
+    <div class="rs-eta" id="rs-eta">—</div>
+    <div style="display:flex;gap:8px;">
+      <button class="rs-btn ok" id="rs-download-btn" style="display:none;" onclick="renderStudio.download()">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="13" height="13"><path d="M10 3v10M6 9l4 4 4-4M4 16.5h12"/></svg>
+        Download
+      </button>
+      <button class="rs-btn primary" id="rs-render-btn" onclick="renderStudio.render()">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="13" height="13"><circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="2.4" fill="currentColor" stroke="none"/></svg>
+        Render Image
+      </button>
+    </div>
+  </div>
+</div>`;
+    },
+
+    // -----------------------------------------------------------------
+    // Open / close
+    // -----------------------------------------------------------------
+    open: function() {
+        this.installUI();
+        const overlay = document.getElementById("rs-overlay");
+        if (!overlay) return;
+        this._buildResGrid();
+        this._buildSsaaRow();
+        this._buildFormatRow();
+        this._bindControls();
+        this._syncUIFromPrefs();
+        this._updateEta();
+        overlay.classList.remove("hidden");
+        const modal = overlay.querySelector(".rs-modal");
+        if (modal) { modal.classList.remove("modal-enter"); void modal.offsetWidth; modal.classList.add("modal-enter"); }
+        this._open = true;
+    },
+
+    close: function() {
+        if (this._rendering) return; // don't allow closing mid-render (would corrupt restore state)
+        const overlay = document.getElementById("rs-overlay");
+        if (overlay) overlay.classList.add("hidden");
+        this._open = false;
+    },
+
+    // -----------------------------------------------------------------
+    // Sub-UI builders (resolution presets / SSAA / format — button groups)
+    // -----------------------------------------------------------------
+    _resPresets: [
+        { key: "1280x720", label: "1280×720", w: 1280, h: 720 },
+        { key: "1920x1080", label: "1920×1080", w: 1920, h: 1080 },
+        { key: "2560x1440", label: "2560×1440", w: 2560, h: 1440 },
+        { key: "3840x2160", label: "3840×2160 (4K)", w: 3840, h: 2160 },
+        { key: "current", label: "Current viewport", w: 0, h: 0 },
+        { key: "custom", label: "Custom", w: 0, h: 0 }
+    ],
+
+    _buildResGrid: function() {
+        const grid = document.getElementById("rs-res-grid");
+        if (!grid) return;
+        grid.innerHTML = "";
+        this._resPresets.forEach(p => {
+            const b = document.createElement("button");
+            b.className = "rs-res-btn";
+            b.textContent = p.label;
+            b.dataset.key = p.key;
+            b.onclick = () => {
+                this.prefs.resPreset = p.key;
+                document.getElementById("rs-custom-res-row").style.display = p.key === "custom" ? "flex" : "none";
+                this._refreshResButtons();
+                this._updateEta();
+            };
+            grid.appendChild(b);
+        });
+        this._refreshResButtons();
+    },
+
+    _refreshResButtons: function() {
+        document.querySelectorAll("#rs-res-grid .rs-res-btn").forEach(b => {
+            b.classList.toggle("is-active", b.dataset.key === this.prefs.resPreset);
+        });
+        const customRow = document.getElementById("rs-custom-res-row");
+        if (customRow) customRow.style.display = this.prefs.resPreset === "custom" ? "flex" : "none";
+    },
+
+    _buildSsaaRow: function() {
+        const row = document.getElementById("rs-ssaa-row");
+        if (!row) return;
+        row.innerHTML = "";
+        [ [1, "Off"], [2, "2× SSAA"], [4, "4× SSAA"] ].forEach(([val, label]) => {
+            const b = document.createElement("button");
+            b.className = "rs-res-btn";
+            b.textContent = label;
+            b.dataset.val = val;
+            b.onclick = () => { this.prefs.ssaa = val; this._refreshSsaaButtons(); this._updateEta(); };
+            row.appendChild(b);
+        });
+        this._refreshSsaaButtons();
+    },
+
+    _refreshSsaaButtons: function() {
+        document.querySelectorAll("#rs-ssaa-row .rs-res-btn").forEach(b => {
+            b.classList.toggle("is-active", Number(b.dataset.val) === this.prefs.ssaa);
+        });
+    },
+
+    _buildFormatRow: function() {
+        const row = document.getElementById("rs-format-row");
+        if (!row) return;
+        row.innerHTML = "";
+        [ ["png", "PNG (lossless)"], ["jpeg", "JPEG"] ].forEach(([val, label]) => {
+            const b = document.createElement("button");
+            b.className = "rs-res-btn";
+            b.textContent = label;
+            b.dataset.val = val;
+            b.onclick = () => {
+                this.prefs.format = val;
+                this._refreshFormatButtons();
+                document.getElementById("rs-jpeg-quality-row").style.display = val === "jpeg" ? "block" : "none";
+            };
+            row.appendChild(b);
+        });
+        this._refreshFormatButtons();
+    },
+
+    _refreshFormatButtons: function() {
+        document.querySelectorAll("#rs-format-row .rs-res-btn").forEach(b => {
+            b.classList.toggle("is-active", b.dataset.val === this.prefs.format);
+        });
+    },
+
+    // -----------------------------------------------------------------
+    // Wire up all inputs <-> prefs
+    // -----------------------------------------------------------------
+    _bound: false,
+    // Small helper: binds an event handler to an element by id, but never
+    // throws if the element is missing. Without this, a single null
+    // getElementById() used to abort the whole _bindControls() call partway
+    // through — which is exactly why DOF (and everything listed after it)
+    // could silently end up with no working listeners at all while AO/Bloom
+    // (bound earlier) kept working. Every control is now independent.
+    _on: function(id, event, handler) {
+        const el = document.getElementById(id);
+        if (!el) { console.warn("[renderStudio] missing element #" + id + " — skipping bind"); return; }
+        el[event] = handler;
+    },
+    _bindControls: function() {
+        if (this._bound) return;
+        this._bound = true;
+        const $ = id => document.getElementById(id);
+        const on = (id, event, handler) => this._on(id, event, handler);
+
+        on("rs-custom-w", "oninput", e => { this.prefs.customW = Math.max(64, parseInt(e.target.value) || 1920); this._updateEta(); });
+        on("rs-custom-h", "oninput", e => { this.prefs.customH = Math.max(64, parseInt(e.target.value) || 1080); this._updateEta(); });
+        on("rs-viewport-aspect", "onchange", e => { this.prefs.useViewportAspect = e.target.checked; });
+
+        on("rs-shadow-quality", "oninput", e => {
+            this.prefs.shadowQuality = parseInt(e.target.value, 10);
+            const sizes = [128, 256, 512, 1024, 4096];
+            const lbl = $("rs-shadow-quality-val");
+            if (lbl) lbl.innerText = sizes[this.prefs.shadowQuality];
+        });
+
+        on("rs-ao-enabled", "onchange", e => { this.prefs.aoEnabled = e.target.checked; $("rs-ao-group")?.classList.toggle("dim", !e.target.checked); });
+        on("rs-ao-intensity", "oninput", e => { this.prefs.aoIntensity = parseFloat(e.target.value); const l = $("rs-ao-intensity-val"); if (l) l.innerText = this.prefs.aoIntensity.toFixed(2); });
+
+        on("rs-bloom-enabled", "onchange", e => { this.prefs.bloomEnabled = e.target.checked; $("rs-bloom-group")?.classList.toggle("dim", !e.target.checked); });
+        on("rs-bloom-strength", "oninput", e => { this.prefs.bloomStrength = parseFloat(e.target.value); const l = $("rs-bloom-strength-val"); if (l) l.innerText = this.prefs.bloomStrength.toFixed(2); });
+
+        on("rs-dof-enabled", "onchange", e => { this.prefs.dofEnabled = e.target.checked; $("rs-dof-group")?.classList.toggle("dim", !e.target.checked); });
+        on("rs-dof-autofocus", "onchange", e => {
+            this.prefs.dofAutoFocus = e.target.checked;
+            const focusSlider = $("rs-dof-focus");
+            if (focusSlider) focusSlider.disabled = e.target.checked;
+        });
+        on("rs-dof-focus", "oninput", e => { this.prefs.dofFocus = parseFloat(e.target.value); const l = $("rs-dof-focus-val"); if (l) l.innerText = this.prefs.dofFocus.toFixed(1) + "m"; });
+        on("rs-dof-range", "oninput", e => { this.prefs.dofRange = parseFloat(e.target.value); const l = $("rs-dof-range-val"); if (l) l.innerText = this.prefs.dofRange.toFixed(1) + "m"; });
+        on("rs-dof-blur", "oninput", e => { this.prefs.dofBlur = parseFloat(e.target.value); const l = $("rs-dof-blur-val"); if (l) l.innerText = this.prefs.dofBlur.toFixed(1) + "px"; });
+        on("rs-dof-bgblur", "onchange", e => { this.prefs.dofBgBlur = e.target.checked; });
+
+        on("rs-envrefl-enabled", "onchange", e => { this.prefs.envReflEnabled = e.target.checked; $("rs-envrefl-group")?.classList.toggle("dim", !e.target.checked); });
+        on("rs-envrefl-quality", "onchange", e => { this.prefs.envReflQuality = parseInt(e.target.value, 10); });
+
+        on("rs-exposure", "oninput", e => { this.prefs.exposure = parseFloat(e.target.value); const l = $("rs-exposure-val"); if (l) l.innerText = this.prefs.exposure.toFixed(2); });
+
+        on("rs-hide-grid", "onchange", e => { this.prefs.hideGrid = e.target.checked; });
+        on("rs-hide-gizmo", "onchange", e => { this.prefs.hideGizmo = e.target.checked; });
+        on("rs-hide-outlines", "onchange", e => { this.prefs.hideOutlines = e.target.checked; });
+
+        on("rs-jpeg-quality", "oninput", e => { this.prefs.jpegQuality = parseFloat(e.target.value); const l = $("rs-jpeg-quality-val"); if (l) l.innerText = Math.round(this.prefs.jpegQuality * 100) + "%"; });
+    },
+
+    _syncUIFromPrefs: function() {
+        const $ = id => document.getElementById(id);
+        // Safe setters: skip silently (with a console warning) instead of
+        // throwing on a missing element, so one absent node can never abort
+        // the rest of the sync — which previously left later fields (e.g.
+        // DOF, coming after AO/Bloom in source order) never initialized.
+        const setVal = (id, v) => { const el = $(id); if (el) el.value = v; else console.warn("[renderStudio] sync: missing #" + id); };
+        const setChecked = (id, v) => { const el = $(id); if (el) el.checked = v; else console.warn("[renderStudio] sync: missing #" + id); };
+        const setText = (id, v) => { const el = $(id); if (el) el.innerText = v; };
+        const setDim = (id, dim) => { $(id)?.classList.toggle("dim", dim); };
+        const setDisabled = (id, v) => { const el = $(id); if (el) el.disabled = v; };
+        const setDisplay = (id, v) => { const el = $(id); if (el) el.style.display = v; };
+
+        const p = this.prefs;
+        setVal("rs-custom-w", p.customW);
+        setVal("rs-custom-h", p.customH);
+        setChecked("rs-viewport-aspect", p.useViewportAspect);
+
+        setVal("rs-shadow-quality", p.shadowQuality);
+        const sizes = [128, 256, 512, 1024, 4096];
+        setText("rs-shadow-quality-val", sizes[p.shadowQuality]);
+
+        setChecked("rs-ao-enabled", p.aoEnabled);
+        setDim("rs-ao-group", !p.aoEnabled);
+        setVal("rs-ao-intensity", p.aoIntensity);
+        setText("rs-ao-intensity-val", p.aoIntensity.toFixed(2));
+
+        setChecked("rs-bloom-enabled", p.bloomEnabled);
+        setDim("rs-bloom-group", !p.bloomEnabled);
+        setVal("rs-bloom-strength", p.bloomStrength);
+        setText("rs-bloom-strength-val", p.bloomStrength.toFixed(2));
+
+        setChecked("rs-dof-enabled", p.dofEnabled);
+        setDim("rs-dof-group", !p.dofEnabled);
+        setChecked("rs-dof-autofocus", p.dofAutoFocus);
+        setVal("rs-dof-focus", p.dofFocus);
+        setDisabled("rs-dof-focus", p.dofAutoFocus);
+        setText("rs-dof-focus-val", p.dofFocus.toFixed(1) + "m");
+        setVal("rs-dof-range", p.dofRange);
+        setText("rs-dof-range-val", p.dofRange.toFixed(1) + "m");
+        setVal("rs-dof-blur", p.dofBlur);
+        setText("rs-dof-blur-val", p.dofBlur.toFixed(1) + "px");
+        setChecked("rs-dof-bgblur", p.dofBgBlur);
+
+        setChecked("rs-envrefl-enabled", p.envReflEnabled);
+        setDim("rs-envrefl-group", !p.envReflEnabled);
+        setVal("rs-envrefl-quality", String(p.envReflQuality));
+
+        setVal("rs-exposure", p.exposure);
+        setText("rs-exposure-val", p.exposure.toFixed(2));
+
+        setChecked("rs-hide-grid", p.hideGrid);
+        setChecked("rs-hide-gizmo", p.hideGizmo);
+        setChecked("rs-hide-outlines", p.hideOutlines);
+
+        setVal("rs-jpeg-quality", p.jpegQuality);
+        setText("rs-jpeg-quality-val", Math.round(p.jpegQuality * 100) + "%");
+        setDisplay("rs-jpeg-quality-row", p.format === "jpeg" ? "block" : "none");
+    },
+
+    // -----------------------------------------------------------------
+    // Resolve target pixel size from current prefs
+    // -----------------------------------------------------------------
+    _resolveTargetSize: function() {
+        const p = this.prefs;
+        let w, h;
+        if (p.resPreset === "current") {
+            w = engine.renderer.domElement.width;
+            h = engine.renderer.domElement.height;
+        } else if (p.resPreset === "custom") {
+            w = Math.max(64, Math.round(p.customW));
+            h = Math.max(64, Math.round(p.customH));
+        } else {
+            const preset = this._resPresets.find(r => r.key === p.resPreset) || this._resPresets[1];
+            w = preset.w; h = preset.h;
+        }
+        if (p.useViewportAspect && p.resPreset !== "current") {
+            const aspect = engine.camera.aspect || (window.innerWidth / window.innerHeight);
+            h = Math.round(w / aspect);
+        }
+        // Hard safety cap: WebGL render targets can fail to allocate past ~8K on many GPUs.
+        const MAX_DIM = 8192;
+        w = Math.min(w, MAX_DIM);
+        h = Math.min(h, MAX_DIM);
+        return { w, h };
+    },
+
+    _updateEta: function() {
+        const el = document.getElementById("rs-eta");
+        if (!el) return;
+        const { w, h } = this._resolveTargetSize();
+        const ssaa = this.prefs.ssaa || 1;
+        const rw = w * ssaa, rh = h * ssaa;
+        const mp = (rw * rh / 1e6).toFixed(1);
+        el.innerText = `Output ${w}×${h} · rendering at ${rw}×${rh} (${mp} MP internally)`;
+    },
+
+    // -----------------------------------------------------------------
+    // THE RENDER — captures state, applies quality settings via the
+    // engine's own updateGraphics() pipeline, renders one frame at the
+    // requested resolution through the real composer chain, reads back
+    // the pixels, downsamples if SSAA>1, then restores everything.
+    // -----------------------------------------------------------------
+    render: async function() {
+        if (this._rendering) return;
+        if (typeof engine === "undefined" || !engine.renderer || !engine.composer) {
+            alert("Engine not ready.");
+            return;
+        }
+        this._rendering = true;
+        const renderBtn = document.getElementById("rs-render-btn");
+        const downloadBtn = document.getElementById("rs-download-btn");
+        const progressWrap = document.getElementById("rs-progress-wrap");
+        const progressLabel = document.getElementById("rs-progress-label");
+        const previewEmpty = document.getElementById("rs-preview-empty");
+        if (renderBtn) renderBtn.disabled = true;
+        if (progressWrap) progressWrap.classList.add("show");
+        if (previewEmpty) previewEmpty.style.display = "none";
+        const setStage = (msg) => { if (progressLabel) progressLabel.innerText = msg; };
+
+        // Snapshot of everything we are about to touch, restored in `finally`.
+        const snap = this._captureState();
+
+        try {
+            setStage("Preparing scene...");
+            await this._nextFrame();
+
+            const { w: outW, h: outH } = this._resolveTargetSize();
+            const ssaa = this.prefs.ssaa || 1;
+            const rw = Math.max(1, Math.round(outW * ssaa));
+            const rh = Math.max(1, Math.round(outH * ssaa));
+
+            this._applyRenderSettings(snap);
+            await this._nextFrame();
+
+            setStage("Sizing buffers...");
+            engine.camera.aspect = outW / outH;
+            engine.camera.updateProjectionMatrix();
+            engine.renderer.setPixelRatio(1);
+            engine.renderer.setSize(rw, rh, false);
+            if (engine.composer) engine.composer.setSize(rw, rh);
+            if (engine._depthTarget) engine._depthTarget.setSize(Math.floor(rw / 2), Math.floor(rh / 2));
+            if (engine.ssaoPass && engine.ssaoPass.uniforms) {
+                engine.ssaoPass.uniforms.resolution.value.set(rw, rh);
+                engine.ssaoPass.uniforms.uDepthResolution.value.set(Math.floor(rw / 2), Math.floor(rh / 2));
+                engine.ssaoPass.uniforms.tDepth.value = engine._depthTarget.texture;
+            }
+            if (engine.dofPass && engine.dofPass.uniforms) {
+                engine.dofPass.uniforms.resolution.value.set(rw, rh);
+                engine.dofPass.uniforms.tDepth.value = engine._depthTarget.texture;
+            }
+            if (engine.bloomPass && engine.bloomPass.setSize) engine.bloomPass.setSize(rw, rh);
+            if (engine.updateDepthEncodingUniforms) engine.updateDepthEncodingUniforms();
+
+            if (this.prefs.envReflEnabled && engine._envReflectionEnabled !== undefined) {
+                setStage("Capturing environment reflections...");
+                if (typeof engine.setEnvReflectionionQuality === "function") {
+                    engine.setEnvReflectionionQuality(this.prefs.envReflQuality);
+                }
+                if (typeof engine._captureEnvReflection === "function") {
+                    await engine._captureEnvReflection();
+                }
+            }
+
+            setStage("Rendering frame...");
+            await this._nextFrame();
+            this._renderOneFrame();
+
+            setStage("Reading back pixels...");
+            await this._nextFrame();
+            const fullCanvas = engine.renderer.domElement;
+
+            let finalCanvas;
+            if (ssaa > 1) {
+                setStage("Downsampling (" + ssaa + "x SSAA)...");
+                await this._nextFrame();
+                finalCanvas = document.createElement("canvas");
+                finalCanvas.width = outW;
+                finalCanvas.height = outH;
+                const ctx = finalCanvas.getContext("2d");
+                ctx.imageSmoothingEnabled = true;
+                if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
+                ctx.drawImage(fullCanvas, 0, 0, fullCanvas.width, fullCanvas.height, 0, 0, outW, outH);
+            } else {
+                finalCanvas = document.createElement("canvas");
+                finalCanvas.width = outW;
+                finalCanvas.height = outH;
+                finalCanvas.getContext("2d").drawImage(fullCanvas, 0, 0);
+            }
+
+            setStage("Encoding " + this.prefs.format.toUpperCase() + "...");
+            await this._nextFrame();
+            const mime = this.prefs.format === "jpeg" ? "image/jpeg" : "image/png";
+            const quality = this.prefs.format === "jpeg" ? this.prefs.jpegQuality : undefined;
+            const blob = await new Promise(resolve => finalCanvas.toBlob(resolve, mime, quality));
+
+            if (this._lastBlobUrl) URL.revokeObjectURL(this._lastBlobUrl);
+            this._lastBlobUrl = URL.createObjectURL(blob);
+            const projectName = (window.appState?.currentProjectName || "MAPCG_Render").replace(/\s+/g, "_");
+            const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+            this._lastFilenameBase = `${projectName}_${outW}x${outH}_${ts}`;
+
+            const img = document.getElementById("rs-preview-img");
+            img.src = this._lastBlobUrl;
+            img.style.display = "block";
+            if (downloadBtn) downloadBtn.style.display = "flex";
+
+        } catch (err) {
+            console.error("[renderStudio] render failed:", err);
+            alert("Render failed: " + (err?.message || err));
+        } finally {
+            setStage("Restoring viewport...");
+            this._restoreState(snap);
+            if (progressWrap) progressWrap.classList.remove("show");
+            if (renderBtn) renderBtn.disabled = false;
+            this._rendering = false;
+        }
+    },
+
+    // Renders exactly one frame through the live pipeline: depth pre-pass
+    // (if AO/DOF need it) then composer.render() or a direct render — the
+    // same branch the animate() loop takes, so the result matches 1:1.
+    _renderOneFrame: function() {
+        const e = engine;
+        try {
+            if ((e.ssaoPass.enabled || e.dofPass?.enabled) && e._depthTarget) {
+                const prevOverride = e.scene.overrideMaterial;
+                e.scene.overrideMaterial = e._depthPackMat;
+                const savedSkyVis = e._hideSkyForDepthPass ? e._hideSkyForDepthPass() : null;
+                if (!e._tmpClearColor) e._tmpClearColor = new THREE.Color();
+                e.renderer.getClearColor(e._tmpClearColor);
+                const prevClearAlpha = e.renderer.getClearAlpha();
+                e.renderer.setClearColor(0xffffff, 1);
+                e.renderer.setRenderTarget(e._depthTarget);
+                e.renderer.clear();
+                e.renderer.render(e.scene, e.camera);
+                if (e._restoreSkyAfterDepthPass) e._restoreSkyAfterDepthPass(savedSkyVis);
+                e.scene.overrideMaterial = prevOverride;
+                e.renderer.setRenderTarget(null);
+                e.renderer.setClearColor(e._tmpClearColor, prevClearAlpha);
+            }
+            const useComposer = e.bloomPass.enabled || e.ssaoPass.enabled || (e.dofPass && e.dofPass.enabled);
+            if (useComposer) {
+                e.composer.render();
+                e._blitQuad = e._blitQuad || (() => {
+                    const scene = new THREE.Scene();
+                    const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+                    const mat = new THREE.MeshBasicMaterial({ map: null, depthTest: false, depthWrite: false, toneMapped: false });
+                    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+                    quad.frustumCulled = false;
+                    scene.add(quad);
+                    return { scene, cam, mat };
+                })();
+                e._blitQuad.mat.map = e.composer.readBuffer.texture;
+                e.renderer.setRenderTarget(null);
+                e.renderer.render(e._blitQuad.scene, e._blitQuad.cam);
+            } else {
+                e.renderer.setRenderTarget(null);
+                e.renderer.render(e.scene, e.camera);
+            }
+        } catch (err) {
+            console.error("[renderStudio] frame render error:", err);
+            throw err;
+        }
+    },
+
+    _nextFrame: function() {
+        return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    },
+
+    // -----------------------------------------------------------------
+    // State capture / apply / restore
+    // -----------------------------------------------------------------
+    _captureState: function() {
+        const e = engine;
+        const dom = id => document.getElementById(id);
+        const domVal = id => dom(id) ? dom(id).value : undefined;
+        const domChecked = id => dom(id) ? dom(id).checked : undefined;
+
+        return {
+            rendererW: e.renderer.domElement.width,
+            rendererH: e.renderer.domElement.height,
+            pixelRatio: e.currentPixelRatio || 1,
+            cameraAspect: e.camera.aspect,
+            exposure: e.renderer.toneMappingExposure,
+
+            domShadowQuality: domVal("setting-shadow-quality"),
+            domBloomEnabled: domChecked("setting-bloom"),
+            domBloomStrength: domVal("setting-bloom-strength"),
+            domAoEnabled: domChecked("setting-ssao"),
+            domAoIntensity: domVal("setting-ao-intensity"),
+            domDofEnabled: domChecked("setting-dof"),
+            domDofFocus: domVal("setting-dof-focus"),
+            domDofRange: domVal("setting-dof-range"),
+            domDofBlur: domVal("setting-dof-blur"),
+            domDofBgBlur: domChecked("setting-dof-bgblur"),
+
+            envReflQuality: e._envReflectionQuality,
+
+            gridVisible: e.gridHelper ? e.gridHelper.visible : undefined,
+            gizmoVisible: e.transformControl ? e.transformControl.visible : undefined,
+            outlineVisible: (e.outlines || []).map(o => o.visible),
+            cloudsVisible: e.cloudsObj ? e.cloudsObj.visible : undefined,
+            weatherParticlesVisible: e.weatherParticles ? e.weatherParticles.visible : undefined,
+            spawnVisible: e.spawnPointObj ? e.spawnPointObj.visible : undefined,
+
+            adaptiveResEnabled: e.adaptiveResEnabled
+        };
+    },
+
+    _applyRenderSettings: function(snap) {
+        const e = engine;
+        const p = this.prefs;
+        const dom = id => document.getElementById(id);
+        const setVal = (id, v) => { const el = dom(id); if (el) el.value = v; };
+        const setChecked = (id, v) => { const el = dom(id); if (el) el.checked = v; };
+
+        // Temporarily disable adaptive/performance resolution scaling so it
+        // can't silently shrink our render mid-frame.
+        e.adaptiveResEnabled = false;
+
+        // Push render-quality values into the SAME DOM inputs the live
+        // graphics settings panel uses, then call the engine's own
+        // updateGraphics() — guarantees pixel-for-pixel identical behavior
+        // to the real-time viewport, just with higher-quality numbers.
+        setVal("setting-shadow-quality", p.shadowQuality);
+        setChecked("setting-bloom", p.bloomEnabled);
+        setVal("setting-bloom-strength", p.bloomStrength);
+        setChecked("setting-ssao", p.aoEnabled);
+        setVal("setting-ao-intensity", p.aoIntensity);
+        setChecked("setting-dof", p.dofEnabled);
+
+        let focusDist = p.dofFocus;
+        if (p.dofEnabled && p.dofAutoFocus && e.selectedBlocks && e.selectedBlocks.length && e.camera) {
+            const target = new THREE.Vector3();
+            e.selectedBlocks[0].getWorldPosition(target);
+            focusDist = e.camera.position.distanceTo(target);
+        }
+        setVal("setting-dof-focus", focusDist);
+        setVal("setting-dof-range", p.dofRange);
+        setVal("setting-dof-blur", p.dofBlur);
+        setChecked("setting-dof-bgblur", p.dofBgBlur);
+
+        if (typeof e.updateGraphics === "function") e.updateGraphics();
+
+        // updateGraphics() unconditionally resets exposure to 1 — apply the
+        // render's exposure value AFTER it, so it actually sticks.
+        e.renderer.toneMappingExposure = p.exposure;
+
+        // Scene cleanup: hide non-render decorations using the same pattern
+        // the AO-bake pipeline uses (temporary, restored afterward).
+        if (p.hideGrid && e.gridHelper) e.gridHelper.visible = false;
+        if (p.hideGizmo && e.transformControl) e.transformControl.visible = false;
+        if (p.hideOutlines && e.outlines) e.outlines.forEach(o => { o.visible = false; });
+    },
+
+    _restoreState: function(snap) {
+        const e = engine;
+        const dom = id => document.getElementById(id);
+        const setVal = (id, v) => { const el = dom(id); if (el && v !== undefined) el.value = v; };
+        const setChecked = (id, v) => { const el = dom(id); if (el && v !== undefined) el.checked = v; };
+
+        try {
+            setVal("setting-shadow-quality", snap.domShadowQuality);
+            setChecked("setting-bloom", snap.domBloomEnabled);
+            setVal("setting-bloom-strength", snap.domBloomStrength);
+            setChecked("setting-ssao", snap.domAoEnabled);
+            setVal("setting-ao-intensity", snap.domAoIntensity);
+            setChecked("setting-dof", snap.domDofEnabled);
+            setVal("setting-dof-focus", snap.domDofFocus);
+            setVal("setting-dof-range", snap.domDofRange);
+            setVal("setting-dof-blur", snap.domDofBlur);
+            setChecked("setting-dof-bgblur", snap.domDofBgBlur);
+            if (typeof e.updateGraphics === "function") e.updateGraphics();
+            e.renderer.toneMappingExposure = snap.exposure;
+
+            if (snap.envReflQuality !== undefined && typeof e.setEnvReflectionionQuality === "function" && snap.envReflQuality !== e._envReflectionQuality) {
+                e.setEnvReflectionionQuality(snap.envReflQuality);
+            }
+
+            if (e.gridHelper && snap.gridVisible !== undefined) e.gridHelper.visible = snap.gridVisible;
+            if (e.transformControl && snap.gizmoVisible !== undefined) e.transformControl.visible = snap.gizmoVisible;
+            if (e.outlines && snap.outlineVisible) {
+                e.outlines.forEach((o, i) => { if (snap.outlineVisible[i] !== undefined) o.visible = snap.outlineVisible[i]; });
+            }
+
+            e.adaptiveResEnabled = snap.adaptiveResEnabled;
+
+            e.camera.aspect = snap.cameraAspect;
+            e.camera.updateProjectionMatrix();
+            // The live viewport always keeps renderer pixel ratio pinned at 1
+            // and drives actual pixel size through setSize() with an
+            // already-scaled w/h (see applyPixelRatio / onWindowResize) — so
+            // restoring means going back to that same invariant, not
+            // re-applying devicePixelRatio.
+            e.renderer.setPixelRatio(1);
+            if (typeof e.onWindowResize === "function") {
+                e.onWindowResize();
+            } else {
+                e.renderer.setSize(snap.rendererW, snap.rendererH, false);
+                if (e.composer) e.composer.setSize(snap.rendererW, snap.rendererH);
+            }
+        } catch (err) {
+            console.error("[renderStudio] restore error:", err);
+        }
+    },
+
+    // -----------------------------------------------------------------
+    download: function() {
+        if (!this._lastBlobUrl) return;
+        const a = document.createElement("a");
+        a.href = this._lastBlobUrl;
+        const ext = this.prefs.format === "jpeg" ? "jpg" : "png";
+        a.download = `${this._lastFilenameBase}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+    // Install once the toolbar (and its Render button placeholder) exists.
+    const tryInstall = () => {
+        if (document.getElementById("btn-render-toggle")) {
+            renderStudio.installUI();
+        } else {
+            setTimeout(tryInstall, 400);
+        }
+    };
+    tryInstall();
+});
+
+</script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1c97df0cce6dbdb',t:'MTc4NDI5Mzg4MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1da1f66af61e436',t:'MTc4NDQ2ODI2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1db77f3b9dbe3f8',t:'MTc4NDQ4MjM3OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1eaf0a80fefc9d4',t:'MTc4NDY0NDYwOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f"}' crossorigin="anonymous"></script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a23435a76d4d48d5',t:'MTc4NTQxMjg5NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
