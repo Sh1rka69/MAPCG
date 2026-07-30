@@ -1443,10 +1443,10 @@
                     </button>
 
                     <div class="flex items-center gap-1 pl-2 ml-1" style="border-left: 1px solid var(--td-border);">
-                        <button onclick="window.historyManager.undo()" data-i18n-title="titleUndo" class="p-1.5 transition" style="color: var(--td-text-dim);" onmouseover="this.style.color='white'" onmouseout="this.style.color='var(--td-text-dim)'" title="Undo (Ctrl+Z)">
+                        <button id="btn-undo" onclick="window.historyManager.undo()" data-i18n-title="titleUndo" class="p-1.5 transition" style="color: var(--td-text-dim);" onmouseover="this.style.color='white'" onmouseout="this.style.color='var(--td-text-dim)'" title="Undo (Ctrl+Z)">
                             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M7 6L3 10l4 4M3 10h10a4 4 0 010 8"/></svg>
                         </button>
-                        <button onclick="window.historyManager.redo()" data-i18n-title="titleRedo" class="p-1.5 transition" style="color: var(--td-text-dim);" onmouseover="this.style.color='white'" onmouseout="this.style.color='var(--td-text-dim)'" title="Redo (Ctrl+Y)">
+                        <button id="btn-redo" onclick="window.historyManager.redo()" data-i18n-title="titleRedo" class="p-1.5 transition" style="color: var(--td-text-dim);" onmouseover="this.style.color='white'" onmouseout="this.style.color='var(--td-text-dim)'" title="Redo (Ctrl+Y)">
                             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M13 6l4 4-4 4M17 10H7a4 4 0 000 8"/></svg>
                         </button>
                     </div>
@@ -3241,10 +3241,71 @@ window.historyManager = {
     undoStack: [],
     redoStack: [],
     isRestoring: false,
+    _busy: false,
+    _pendingSnapshot: false,
     init: function() {
         this.undoStack = [];
         this.redoStack = [];
         this.takeSnapshot();
+        this.updateButtons();
+    },
+    // Lightweight description of which custom assets (textures / normal maps)
+    // are bound to the project right now. We deliberately store only vault
+    // IDs here — never the base64 payloads — so 50 undo steps cost kilobytes
+    // instead of hundreds of megabytes. The pixels themselves live in
+    // projectAssetVault and survive undo/redo untouched.
+    captureAssets: function() {
+        if (typeof activeProjectCustomTextures !== "object") return null;
+        const textures = Object.keys(activeProjectCustomTextures || {}).map(key => ({
+            key: key,
+            vaultId: activeProjectCustomTextures[key]?.userData?.vaultId || null
+        }));
+        const normalMaps = Object.keys(activeProjectNormalMaps || {}).map(key => ({
+            key: key,
+            vaultId: activeProjectNormalMaps[key]?.vaultId || null
+        }));
+        return {
+            textures: textures,
+            normalMaps: normalMaps
+        };
+    },
+    restoreAssets: function(assets) {
+        if (!assets || typeof projectAssetVault === "undefined") return false;
+        let changed = false;
+        const wantedTex = new Map((assets.textures || []).map(e => [ e.key, e.vaultId ]));
+        Object.keys(activeProjectCustomTextures || {}).forEach(key => {
+            if (!wantedTex.has(key)) {
+                delete activeProjectCustomTextures[key];
+                changed = true;
+            }
+        });
+        wantedTex.forEach((vaultId, key) => {
+            const rec = projectAssetVault.get(vaultId) || projectAssetVault.getLatest("texture", key);
+            if (rec && rec.texture && activeProjectCustomTextures[key] !== rec.texture) {
+                activeProjectCustomTextures[key] = rec.texture;
+                changed = true;
+            }
+        });
+        const wantedNm = new Map((assets.normalMaps || []).map(e => [ e.key, e.vaultId ]));
+        Object.keys(activeProjectNormalMaps || {}).forEach(key => {
+            if (!wantedNm.has(key)) {
+                delete activeProjectNormalMaps[key];
+                changed = true;
+            }
+        });
+        wantedNm.forEach((vaultId, key) => {
+            const rec = projectAssetVault.get(vaultId) || projectAssetVault.getLatest("normal", key);
+            if (rec && rec.texture && activeProjectNormalMaps[key]?.texture !== rec.texture) {
+                activeProjectNormalMaps[key] = {
+                    texture: rec.texture,
+                    name: rec.name,
+                    dataUrl: rec.dataUrl,
+                    vaultId: rec.id
+                };
+                changed = true;
+            }
+        });
+        return changed;
     },
     takeSnapshot: function() {
         if (this.isRestoring) return;
@@ -3253,34 +3314,90 @@ window.historyManager = {
             blocks: engine.blocks.map(b => engine.serializeObject(b)),
             lights: engine.manualLights.map(l => engine.serializeObject(l)),
             spawn: engine.spawnPointObj ? engine.serializeObject(engine.spawnPointObj) : null,
-            env: engine.getEnvState()
+            env: engine.getEnvState(),
+            assets: this.captureAssets()
         };
-        this.undoStack.push(JSON.stringify(state));
+        const serialized = JSON.stringify(state);
+        // Skip no-op snapshots (identical state) so Undo never "does nothing".
+        if (this.undoStack.length && this.undoStack[this.undoStack.length - 1] === serialized) return;
+        this.undoStack.push(serialized);
         if (this.undoStack.length > 50) this.undoStack.shift();
         this.redoStack = [];
+        this.updateButtons();
     },
-    undo: function() {
-        if (this.undoStack.length <= 1) return;
+    canUndo: function() {
+        return this.undoStack.length > 1 && !this._busy;
+    },
+    canRedo: function() {
+        return this.redoStack.length > 0 && !this._busy;
+    },
+    undo: async function() {
+        if (this._busy || this.undoStack.length <= 1) return;
+        this._busy = true;
         this.isRestoring = true;
-        this.redoStack.push(this.undoStack.pop());
-        this.restoreState(JSON.parse(this.undoStack[this.undoStack.length - 1]));
-        this.isRestoring = false;
+        try {
+            this.redoStack.push(this.undoStack.pop());
+            await this.restoreState(JSON.parse(this.undoStack[this.undoStack.length - 1]));
+        } catch (e) {
+            console.error("Undo failed:", e);
+        } finally {
+            this.isRestoring = false;
+            this._busy = false;
+            this.updateButtons();
+        }
     },
-    redo: function() {
-        if (this.redoStack.length === 0) return;
+    redo: async function() {
+        if (this._busy || this.redoStack.length === 0) return;
+        this._busy = true;
         this.isRestoring = true;
-        const nextStateStr = this.redoStack.pop();
-        this.undoStack.push(nextStateStr);
-        this.restoreState(JSON.parse(nextStateStr));
-        this.isRestoring = false;
+        try {
+            const nextStateStr = this.redoStack.pop();
+            this.undoStack.push(nextStateStr);
+            await this.restoreState(JSON.parse(nextStateStr));
+        } catch (e) {
+            console.error("Redo failed:", e);
+        } finally {
+            this.isRestoring = false;
+            this._busy = false;
+            this.updateButtons();
+        }
     },
-    restoreState: function(state) {
+    restoreState: async function(state) {
         engine.deselect();
-        engine.loadMapData({
+        // 1) Re-bind the custom textures / normal maps of that moment BEFORE
+        //    the geometry is rebuilt, so every material picks the right map
+        //    on its first creation (no flash of "grid" fallback).
+        this.restoreAssets(state.assets);
+        // 2) Rebuild the scene, explicitly telling loadMapData to keep the
+        //    project asset registry intact — this is exactly what used to
+        //    nuke every custom texture on Undo.
+        await engine.loadMapData({
             blocks: state.spawn ? [ ...state.blocks, state.spawn ] : state.blocks,
             lights: state.lights || [],
             env: state.env
+        }, null, {
+            preserveAssets: true
         });
+        // 3) Resync the texture dropdown / picker with the restored registry.
+        if (window.uiManager) {
+            uiManager.refreshTextureOptions();
+            uiManager._syncTexturePickerTrigger?.();
+            const overlay = document.getElementById("texture-picker-modal-overlay");
+            if (overlay && !overlay.classList.contains("hidden")) uiManager._refreshTexturePickerBody?.();
+        }
+        engine.syncAllObjectMaterials(true);
+        engine.updateSelectionPanels?.();
+    },
+    updateButtons: function() {
+        const apply = (id, enabled) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.disabled = !enabled;
+            btn.style.opacity = enabled ? "1" : "0.35";
+            btn.style.pointerEvents = enabled ? "auto" : "none";
+        };
+        apply("btn-undo", this.undoStack.length > 1);
+        apply("btn-redo", this.redoStack.length > 0);
     }
 };
 
@@ -5376,6 +5493,101 @@ let activeProjectNormalMaps = {};
 
 let activeProjectTextureKeys = new Set;
 
+/**
+ * projectAssetVault
+ * -----------------
+ * Persistent, GPU-side registry of every custom texture / normal map that has
+ * ever been decoded for the currently open project.
+ *
+ * Why it exists: rebuilding the scene (Undo / Redo / remote sync) used to wipe
+ * `activeProjectCustomTextures`, and since the history snapshots never carried
+ * the image payloads, all custom textures silently fell back to "grid" until
+ * the project was reopened. The vault decouples *which* textures are bound
+ * (cheap, snapshot-able IDs) from *the pixels themselves* (expensive, kept
+ * alive here), so undo/redo is instant and lossless.
+ *
+ * Entries are only really destroyed when the user deletes a texture or when a
+ * different project is opened (`resetFor`).
+ */
+const projectAssetVault = {
+    _items: new Map(),
+    _seq: 0,
+    _ownerProjectId: null,
+
+    _makeId: function(kind, key) {
+        this._seq += 1;
+        return `${kind}:${key}#${this._seq}`;
+    },
+
+    /** Drops everything that belongs to another project. Safe to call often. */
+    resetFor: function(projectId) {
+        if (this._ownerProjectId === projectId) return;
+        this._items.forEach(rec => {
+            try { rec.texture?.dispose?.(); } catch (e) {}
+        });
+        this._items.clear();
+        this._ownerProjectId = projectId ?? null;
+    },
+
+    /** Registers a decoded texture and returns its stable vault id. */
+    register: function(kind, key, texture, name, dataUrl) {
+        if (!texture) return null;
+        // Re-registering the exact same THREE texture object must not duplicate.
+        for (const [ id, rec ] of this._items) {
+            if (rec.texture === texture) {
+                rec.key = key;
+                rec.name = name ?? rec.name;
+                rec.dataUrl = dataUrl ?? rec.dataUrl;
+                return id;
+            }
+        }
+        const id = this._makeId(kind, key);
+        this._items.set(id, {
+            id: id,
+            kind: kind,
+            key: key,
+            name: name || key,
+            dataUrl: dataUrl || null,
+            texture: texture
+        });
+        texture.userData = texture.userData || {};
+        texture.userData.vaultId = id;
+        return id;
+    },
+
+    get: function(id) {
+        if (!id) return null;
+        return this._items.get(id) || null;
+    },
+
+    /**
+     * Fallback lookup by (kind, key) — used when a snapshot predates the vault
+     * or the id was lost. Returns the most recently registered match.
+     */
+    getLatest: function(kind, key) {
+        let found = null;
+        this._items.forEach(rec => {
+            if (rec.kind === kind && rec.key === key) found = rec;
+        });
+        return found;
+    },
+
+    /** Hard-removes an asset (real user deletion), disposing GPU memory. */
+    forget: function(id) {
+        const rec = this._items.get(id);
+        if (!rec) return;
+        try { rec.texture?.dispose?.(); } catch (e) {}
+        this._items.delete(id);
+    },
+
+    forgetByKey: function(kind, key) {
+        [ ...this._items.values() ].forEach(rec => {
+            if (rec.kind === kind && rec.key === key) this.forget(rec.id);
+        });
+    }
+};
+window.projectAssetVault = projectAssetVault;
+
 function getActiveTexture(textureId) {
     const key = canonicalTextureKey(textureId);
     if (activeProjectCustomTextures[key]) return activeProjectCustomTextures[key];
@@ -6383,11 +6595,11 @@ void main(){
         this.scene.add(this.skyEnvGroup);
         this.initStarsAndMoon();
         this.initClouds();
-        this.ambientLight = new THREE.AmbientLight(16777215, .22);
+        this.ambientLight = new THREE.AmbientLight(16777215, .11);
         this.scene.add(this.ambientLight);
-        this.hemiLight = new THREE.HemisphereLight(15267071, 13088412, .12);
+        this.hemiLight = new THREE.HemisphereLight(15267071, 13088412, .06);
         this.scene.add(this.hemiLight);
-        this.dirLight = new THREE.DirectionalLight(16773852, .86);
+        this.dirLight = new THREE.DirectionalLight(16773852, 1.0);
         this.dirLight.position.set(100, 150, 100);
         this.dirLight.castShadow = true;
         this.dirLight.shadow.mapSize.width = 512;
@@ -7694,6 +7906,17 @@ void main(){
         if ((event.ctrlKey || event.metaKey) && event.code === "KeyD") {
             event.preventDefault();
             this.duplicateObject();
+            return;
+        }
+        // Undo / Redo shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z).
+        if ((event.ctrlKey || event.metaKey) && event.code === "KeyZ") {
+            event.preventDefault();
+            if (event.shiftKey) window.historyManager.redo(); else window.historyManager.undo();
+            return;
+        }
+        if ((event.ctrlKey || event.metaKey) && event.code === "KeyY") {
+            event.preventDefault();
+            window.historyManager.redo();
             return;
         }
         if (event.ctrlKey || event.metaKey) return;
@@ -10104,11 +10327,11 @@ void main(){
         const sceneBrightness = this.getSceneBrightness?.() ?? 1;
         this.setNightSky(false);
         if (skybox === "day") {
-            this.dirLight.intensity = .86 * sceneBrightness;
+            this.dirLight.intensity = 1.0 * sceneBrightness;
             this.dirLight.color.setHex(16773852);
-            this.ambientLight.intensity = .22 * sceneBrightness;
+            this.ambientLight.intensity = .11 * sceneBrightness;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .12 * sceneBrightness;
+                this.hemiLight.intensity = .06 * sceneBrightness;
                 this.hemiLight.color.setHex(15267071);
                 this.hemiLight.groundColor.setHex(13088412);
             }
@@ -10116,11 +10339,11 @@ void main(){
             this.sky.visible = true;
             if (this.cloudsObj) this.cloudsObj.visible = true;
         } else if (skybox === "sunrise") {
-            this.dirLight.intensity = .72 * sceneBrightness;
+            this.dirLight.intensity = .84 * sceneBrightness;
             this.dirLight.color.setHex(16761482);
-            this.ambientLight.intensity = .16 * sceneBrightness;
+            this.ambientLight.intensity = .08 * sceneBrightness;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .10 * sceneBrightness;
+                this.hemiLight.intensity = .05 * sceneBrightness;
                 this.hemiLight.color.setHex(16770240);
                 this.hemiLight.groundColor.setHex(12098176);
             }
@@ -10128,11 +10351,11 @@ void main(){
             this.sky.visible = true;
             if (this.cloudsObj) this.cloudsObj.visible = true;
         } else if (skybox === "dusk") {
-            this.dirLight.intensity = .62 * sceneBrightness;
+            this.dirLight.intensity = .72 * sceneBrightness;
             this.dirLight.color.setHex(16742212);
-            this.ambientLight.intensity = .12 * sceneBrightness;
+            this.ambientLight.intensity = .06 * sceneBrightness;
             if (this.hemiLight) {
-                this.hemiLight.intensity = .08 * sceneBrightness;
+                this.hemiLight.intensity = .04 * sceneBrightness;
                 this.hemiLight.color.setHex(16756864);
                 this.hemiLight.groundColor.setHex(9401445);
             }
@@ -11124,19 +11347,23 @@ void main(){
         const mapLights = this.manualLights.map(l => this.serializeObject(l));
         const localTexturesToSave = {};
         for (let key in activeProjectCustomTextures) {
-            if (activeProjectCustomTextures[key].userData?.originalDataUrl) {
+            const t = activeProjectCustomTextures[key];
+            const url = t?.userData?.originalDataUrl || t?.userData?.sourceDataUrl;
+            if (url) {
                 localTexturesToSave[key] = {
-                    name: activeProjectCustomTextures[key].userData.originalName,
-                    dataUrl: activeProjectCustomTextures[key].userData.originalDataUrl
+                    name: t.userData.originalName || key,
+                    dataUrl: url
                 };
             }
         }
         const normalMapsToSave = {};
         for (let key in activeProjectNormalMaps) {
-            if (activeProjectNormalMaps[key] && activeProjectNormalMaps[key].dataUrl) {
+            const nm = activeProjectNormalMaps[key];
+            const nmUrl = nm?.dataUrl || nm?.texture?.userData?.sourceDataUrl;
+            if (nmUrl) {
                 normalMapsToSave[key] = {
-                    name: activeProjectNormalMaps[key].name,
-                    dataUrl: activeProjectNormalMaps[key].dataUrl
+                    name: nm.name || key,
+                    dataUrl: nmUrl
                 };
             }
         }
@@ -11158,7 +11385,12 @@ void main(){
             setTimeout(() => ind.remove(), 300);
         }, 2e3);
     },
-    loadMapData: async function(data, onProgress) {
+    loadMapData: async function(data, onProgress, options = {}) {
+        // preserveAssets: keep the already-decoded custom textures / normal maps
+        // bound to the project instead of wiping the registry. Used by Undo/Redo
+        // and by multiplayer partial syncs, where the payload intentionally does
+        // not re-ship the image data.
+        const preserveAssets = options.preserveAssets === true;
         const reportProgress = (percent, detail) => {
             try { if (typeof onProgress === "function") onProgress(percent, detail); } catch (e) {}
         };
@@ -11184,12 +11416,18 @@ void main(){
         this.manualLights = [];
         this.spawnPointObj = null;
         this.deselect();
-        activeProjectCustomTextures = {};
-        const sel = document.getElementById("sel-texture");
-        if (sel) {
-            Array.from(sel.options).forEach(opt => {
-                if (opt.value.startsWith("custom_")) opt.remove();
-            });
+        // Only clear the custom-texture registry when the caller is genuinely
+        // loading a different map. On Undo/Redo we must keep it, otherwise every
+        // cube's material falls back to "grid" until the project is reopened.
+        if (!preserveAssets) {
+            activeProjectCustomTextures = {};
+            activeProjectNormalMaps = {};
+            const sel = document.getElementById("sel-texture");
+            if (sel) {
+                Array.from(sel.options).forEach(opt => {
+                    if (opt.value.startsWith("custom_")) opt.remove();
+                });
+            }
         }
         if (data && data.projectCustomTextures) {
             const texKeys = Object.keys(data.projectCustomTextures);
@@ -11235,10 +11473,12 @@ void main(){
                             isNormalMap: true
                         };
                         applyGlobalTextureFiltering(tex);
+                        const vId = projectAssetVault.register("normal", key, tex, nmData.name, nmData.dataUrl);
                         activeProjectNormalMaps[key] = {
                             texture: tex,
                             name: nmData.name,
-                            dataUrl: nmData.dataUrl
+                            dataUrl: nmData.dataUrl,
+                            vaultId: vId
                         };
                     } catch (e) {
                         console.warn("Failed to load normal map", key);
@@ -12285,18 +12525,11 @@ window.uiManager = {
                 engine.releaseCubeMaterial(old);
             } catch (e) {}
         });
-        if (activeProjectNormalMaps[key]) {
-            const nm = activeProjectNormalMaps[key];
-            if (nm.texture) {
-                try {
-                    nm.texture.dispose();
-                } catch (e) {}
-            }
-            delete activeProjectNormalMaps[key];
-        }
-        try {
-            tex.dispose();
-        } catch (e) {}
+        // NOTE: we intentionally do NOT dispose the GPU texture here.
+        // It stays parked in projectAssetVault so that pressing Undo right
+        // after a deletion brings the texture back intact. Real GPU cleanup
+        // happens when the project is closed (projectAssetVault.resetFor).
+        if (activeProjectNormalMaps[key]) delete activeProjectNormalMaps[key];
         delete activeProjectCustomTextures[key];
         const sel = document.getElementById("sel-texture");
         if (sel) {
@@ -12536,10 +12769,12 @@ window.uiManager = {
                     isNormalMap: true
                 };
                 applyGlobalTextureFiltering(tex);
+                const nmVaultId = projectAssetVault.register("normal", textureKey, tex, normalName, dataUrl);
                 activeProjectNormalMaps[textureKey] = {
                     texture: tex,
                     name: normalName,
-                    dataUrl: dataUrl
+                    dataUrl: dataUrl,
+                    vaultId: nmVaultId
                 };
                 engine.blocks.forEach(obj => {
                     if (obj.userData.texture === textureKey) {
@@ -12558,6 +12793,7 @@ window.uiManager = {
                 if (engine.scene) {
                     engine.syncAllObjectMaterials(true);
                 }
+                if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
                 resolve();
             };
             img.onerror = () => resolve();
@@ -12574,15 +12810,8 @@ window.uiManager = {
         }
         const first = engine.selectedBlocks[0];
         const texKey = first.userData.texture || "grid";
-        if (activeProjectNormalMaps[texKey]) {
-            const nm = activeProjectNormalMaps[texKey];
-            if (nm.texture) {
-                try {
-                    nm.texture.dispose();
-                } catch (e) {}
-            }
-            delete activeProjectNormalMaps[texKey];
-        }
+        // Unbind only — the decoded map stays in the vault so Undo can restore it.
+        if (activeProjectNormalMaps[texKey]) delete activeProjectNormalMaps[texKey];
         engine.blocks.forEach(obj => {
             if (obj.userData.texture === texKey) {
                 try {
@@ -12595,6 +12824,7 @@ window.uiManager = {
         engine.syncAllObjectMaterials(true);
         const label = document.getElementById("normal-map-label");
         if (label) label.innerText = "No normal map";
+        if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
     },
     addTextureToEngine: function(matKey, texName, dataUrl, autoSelect, persist = true) {
         return new Promise((resolve, reject) => {
@@ -12619,6 +12849,9 @@ window.uiManager = {
                     optimizedHeight: canvas.height
                 };
                 activeProjectCustomTextures[matKey] = tex;
+                // Keep the decoded texture alive in the vault so Undo/Redo can
+                // re-bind it without re-decoding (and without losing it).
+                projectAssetVault.register("texture", matKey, tex, texName, dataUrl);
                 const sel = document.getElementById("sel-texture");
                 if (sel) {
                     const existingOpt = Array.from(sel.options).find(opt => opt.value === matKey);
@@ -12748,6 +12981,9 @@ window.uiManager = {
         }
     },
     loadProject: async function(id, name) {
+        // Opening another project is the only moment where the previous
+        // project's GPU textures may be safely released.
+        projectAssetVault.resetFor(id);
         window.appState.currentProjectId = id;
         window.appState.currentProjectName = name;
         document.getElementById("current-map-name").innerText = name;
@@ -15037,7 +15273,10 @@ window.multiplayerClient = {
             if (this._canFastApplyMapData(mapData)) {
                 await this._fastApplyMapData(mapData, reason);
             } else {
-                await engine.loadMapData(this.mergeMapDataWithLocalGraphics(mapData || { blocks: [], lights: [], env: null }));
+                // If the remote payload carries no asset section, keep the ones
+                // we already have decoded instead of dropping to "grid".
+                const hasRemoteAssets = !!(mapData && (mapData.projectCustomTextures || mapData.projectNormalMaps));
+                await engine.loadMapData(this.mergeMapDataWithLocalGraphics(mapData || { blocks: [], lights: [], env: null }), null, { preserveAssets: !hasRemoteAssets });
                 engine.deselect();
                 this.setStatus("Map synced: " + reason, "ok");
             }
@@ -16970,5 +17209,5 @@ document.addEventListener("DOMContentLoaded", () => {
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1c97df0cce6dbdb',t:'MTc4NDI5Mzg4MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1da1f66af61e436',t:'MTc4NDQ2ODI2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1db77f3b9dbe3f8',t:'MTc4NDQ4MjM3OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1eaf0a80fefc9d4',t:'MTc4NDY0NDYwOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f"}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a23525862f3eca25',t:'MTc4NTQyMjcyMA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a23525862f3eca25',t:'MTc4NTQyMjcyMA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2361b91e965d38e',t:'MTc4NTQzMjc5OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
