@@ -6647,7 +6647,7 @@ void main(){
         this.transformControl.size = 1;
         this.transformControl.addEventListener("dragging-changed", event => {
             this.isTransformDragging = !!event.value;
-            if (this.orbit) this.orbit.enabled = !event.value;
+            if (this.orbit) this.orbit.enabled = !event.value && !this.isBoxSelectMode;
             if (event.value) {
                 this.touchLook.active = false;
                 this.touchLook.pointerId = null;
@@ -7878,6 +7878,7 @@ void main(){
                 this.isBoxSelectMode = true;
                 const btn = document.getElementById("btn-ctrl");
                 if (btn) btn.classList.add("active-tool");
+                if (this.orbit) this.orbit.enabled = false;
             }
             this.startBoxSelect(event);
             return; // prevent normal click handling
@@ -8002,6 +8003,14 @@ void main(){
     toggleBoxSelectMode: function() {
         this.isBoxSelectMode = !this.isBoxSelectMode;
         document.getElementById("btn-ctrl").classList.toggle("active-tool", this.isBoxSelectMode);
+        // Freeze camera while box-select is active so Ctrl doesn't orbit
+        if (this.orbit) {
+            if (this.isBoxSelectMode) {
+                this.orbit.enabled = false;
+            } else if (!this.isTransformDragging) {
+                this.orbit.enabled = true;
+            }
+        }
     },
     toggleShapesPanel: function() {
         this.shapesPanelOpen = !this.shapesPanelOpen;
