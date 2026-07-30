@@ -7869,8 +7869,18 @@ void main(){
     onPointerDown: function(event) {
         this.mouseDownPos.set(event.clientX, event.clientY);
         this.isClickGesture = true;
-        if (this.isBoxSelectMode && event.pointerType === "mouse" && event.button === 0 && !this.boxSelect.active) {
+
+        // PC Ctrl (or manually activated box mode) → start marquee/box select
+        const ctrlHeld = event.ctrlKey || event.metaKey;
+        if ((this.isBoxSelectMode || ctrlHeld) && event.pointerType === "mouse" && event.button === 0 && !this.boxSelect.active) {
+            // If Ctrl was just held, make sure the mode flag is on so end logic works
+            if (ctrlHeld && !this.isBoxSelectMode) {
+                this.isBoxSelectMode = true;
+                const btn = document.getElementById("btn-ctrl");
+                if (btn) btn.classList.add("active-tool");
+            }
             this.startBoxSelect(event);
+            return; // prevent normal click handling
         }
     },
     onPointerMove: function(event) {
@@ -7900,9 +7910,19 @@ void main(){
     onKeyDown: function(event) {
         if (event.target.tagName === "INPUT" || event.target.tagName === "SELECT") return;
         this.keysPressed[event.code] = true;
+
         if (!event.repeat && (event.code === "ShiftLeft" || event.code === "ShiftRight")) {
             if (!this.isMultiSelectMode) this.toggleMultiSelect();
         }
+
+        // Ctrl activates box select / marquee selection (PC keyboard)
+        if (!event.repeat && (event.code === "ControlLeft" || event.code === "ControlRight" || event.key === "Control")) {
+            if (!this.isBoxSelectMode) this.toggleBoxSelectMode();
+        }
+
+        // Ctrl held for box/marquee selection (PC)
+        // We DO NOT early-return here — we let pointer handlers decide.
+        // Only block generic navigation if a shortcut is consumed.
         if ((event.ctrlKey || event.metaKey) && event.code === "KeyD") {
             event.preventDefault();
             this.duplicateObject();
@@ -7919,7 +7939,11 @@ void main(){
             window.historyManager.redo();
             return;
         }
-        if (event.ctrlKey || event.metaKey) return;
+
+        // No blanket early-return for ctrlKey anymore.
+        // Holding Ctrl (or pressing the Ctrl button) enables box/marquee selection.
+        // Pointer handlers will check isBoxSelectMode and startBoxSelect.
+        // Only block for known Ctrl shortcuts (D/Z/Y) which are handled above.
         switch (event.code) {
           case "KeyG":
             this.setTransformMode("translate");
@@ -7948,6 +7972,11 @@ void main(){
         this.keysPressed[event.code] = false;
         if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
             if (this.isMultiSelectMode) this.toggleMultiSelect();
+        }
+
+        // Ctrl released → turn off box/marquee select mode (PC)
+        if (event.code === "ControlLeft" || event.code === "ControlRight" || event.key === "Control") {
+            if (this.isBoxSelectMode) this.toggleBoxSelectMode();
         }
     },
     toggleGridVisibility: function(visible) {
