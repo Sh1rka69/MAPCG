@@ -2045,7 +2045,7 @@
                         <div class="flex flex-col gap-2">
                             <div class="flex items-start gap-2 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
                                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-info); flex-shrink:0; margin-top:1px;"><path d="M4 3.5A1.5 1.5 0 015.5 2H14l4 4v11.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 014 17.5v-14z"/><path d="M14 2v4h4"/></svg>
-                                <span style="color: var(--td-text-dim);"><b style="color: var(--td-text);">Import 3D (OBJ / GLB / GLTF)</b> — your own model gets converted into cubes using a "1 polygon = 1 cube" approach.</span>
+                                <span style="color: var(--td-text-dim);"><b style="color: var(--td-text);">Import 3D (OBJ / GLB / GLTF)</b> — your own model gets converted into cubes. Coplanar faces are rebuilt into clean rectangular plates (door/window openings are preserved), detailed or diagonal geometry falls back to tightly-fitted plates per polygon.</span>
                             </div>
                             <div class="flex items-start gap-2 p-2" style="background: rgba(255,138,61,0.08); border: 1px solid rgba(255,138,61,0.3);">
                                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0; margin-top:1px;"><rect x="3" y="3" width="14" height="14" rx="1"/><rect x="7" y="7" width="6" height="6"/></svg>
@@ -8311,6 +8311,230 @@ void main(){
         });
         return polys;
     },
+    /*  Преобразует «суп» из треугольников импортированной модели в набор
+        аккуратных пластин (2 треугольника -> 4 вершины bbox-прямоугольника).
+        ────────────────────────────────────────────────────────────────────
+        Проблема, которую решает эта функция: экспортёры (SharpGLTF/earcut
+        и т.п.) нарезают большие n-угольники — пол, крышу, стену с дверным
+        проёмом — длинными тонкими «лоскутными» треугольниками. Если каждый
+        такой треугольник обернуть в bbox-куб (старый путь), получаются
+        гигантские перекрывающиеся пластины («взрывная диаграмма», дверь
+        замуровывается, z-fighting).
+        Алгоритм:
+          1. Треугольники группируются в связные компланарные острова
+             (общее ребро + совпадающая нормаль + лежат в одной плоскости).
+          2. Остров с прямоугольным контуром (все рёбра параллельны осям
+             плоскости — типичная архитектура) проецируется в 2D и режется
+             решёткой уникальных координат; заполненные ячейки жадно
+             сливаются в максимальные прямоугольники. Дверные проёмы и
+             окна (дырки в контуре) при этом сохраняются как дырки.
+          3. Острова с диагональными рёбрами (гофра, косые детали) идут по
+             старому пути: попарное слияние треугольников, затем OBB
+             (повёрнутый bbox минимальной площади) на каждый полигон —
+             тонкие пластины вместо гигантских.
+        На выходе — массив полигонов (по 4 вершины), совместимый с
+        существующей обвязкой importModelAsCubes (basis / bbox / box).   */
+    buildImportPlates: function(triangles) {
+        const N = triangles.length;
+        const _n = new THREE.Vector3(), _ab = new THREE.Vector3(), _ac = new THREE.Vector3();
+        const vKey = v => `${v.x.toFixed(4)},${v.y.toFixed(4)},${v.z.toFixed(4)}`;
+        const triNormal = t => {
+            _ab.subVectors(t[1], t[0]);
+            _ac.subVectors(t[2], t[0]);
+            _n.crossVectors(_ab, _ac);
+            const l = _n.length();
+            return l > 1e-12 ? _n.clone().multiplyScalar(1 / l) : new THREE.Vector3();
+        };
+        const normals = triangles.map(triNormal);
+        const edgeKey = (ka, kb) => ka < kb ? ka + "|" + kb : kb + "|" + ka;
+        const edgeMap = new Map();
+        for (let i = 0; i < N; i++) {
+            const ks = triangles[i].map(vKey);
+            for (const [a, b] of [[0,1],[1,2],[2,0]]) {
+                const ek = edgeKey(ks[a], ks[b]);
+                if (!edgeMap.has(ek)) edgeMap.set(ek, []);
+                edgeMap.get(ek).push(i);
+            }
+        }
+
+        // ── 1. компланарные острова (BFS по общим рёбрам) ──────────────
+        const NORM_EPS = 1e-3;   // cos(угла) между нормалями: |dot| >= 1 - eps (~2.5°)
+        const PLANE_EPS = 0.02;  // допуск отклонения от плоскости острова, м (меньше толщины пластины .05)
+        const islandId = new Int32Array(N).fill(-1);
+        const islands = [];
+        const queue = [];
+        for (let i = 0; i < N; i++) {
+            if (islandId[i] >= 0) continue;
+            const cur = [], n0 = normals[i], p0 = triangles[i][0];
+            const valid = n0.lengthSq() > 1e-9;
+            queue.length = 0; queue.push(i); islandId[i] = -2;
+            while (queue.length) {
+                const t = queue.pop(); cur.push(t);
+                if (!valid) continue;
+                const ks = triangles[t].map(vKey);
+                for (const [a, b] of [[0,1],[1,2],[2,0]]) {
+                    const list = edgeMap.get(edgeKey(ks[a], ks[b])) || [];
+                    for (const nb of list) {
+                        if (nb === t || islandId[nb] !== -1) continue;
+                        if (Math.abs(n0.dot(normals[nb])) < 1 - NORM_EPS) continue;
+                        let inside = true;
+                        for (const v of triangles[nb]) {
+                            if (Math.abs(_ab.subVectors(v, p0).dot(n0)) > PLANE_EPS) { inside = false; break; }
+                        }
+                        if (!inside) continue;
+                        islandId[nb] = -2; queue.push(nb);
+                    }
+                }
+            }
+            const id = islands.length;
+            for (const t of cur) islandId[t] = id;
+            islands.push(cur);
+        }
+
+        // ── helpers ─────────────────────────────────────────────────────
+        const boundaryLoops = ids => {
+            const cnt = new Map();
+            for (const t of ids) {
+                const ks = triangles[t].map(vKey);
+                for (const [a, b] of [[0,1],[1,2],[2,0]]) {
+                    const ek = edgeKey(ks[a], ks[b]);
+                    cnt.set(ek, (cnt.get(ek) || 0) + 1);
+                }
+            }
+            const bnd = [...cnt.entries()].filter(([, c]) => c === 1).map(([ek]) => ek);
+            const v2e = new Map();
+            for (const ek of bnd) {
+                const [ka, kb] = ek.split("|");
+                (v2e.get(ka) || v2e.set(ka, []).get(ka)).push(ek);
+                (v2e.get(kb) || v2e.set(kb, []).get(kb)).push(ek);
+            }
+            const loops = [], used = new Set();
+            for (const ek0 of bnd) {
+                if (used.has(ek0)) continue;
+                const [ka, kb] = ek0.split("|");
+                const start = ka, loop = [ka];
+                let curv = kb, ok = true;
+                used.add(ek0);
+                while (curv !== start) {
+                    loop.push(curv);
+                    const nxts = (v2e.get(curv) || []).filter(e => !used.has(e));
+                    if (nxts.length !== 1) { ok = false; break; }
+                    const e = nxts[0]; used.add(e);
+                    const [ea, eb] = e.split("|");
+                    curv = ea === curv ? eb : ea;
+                }
+                if (ok && loop.length >= 3) loops.push(loop);
+            }
+            return loops;
+        };
+        const pointInLoops = (x, y, loops2d) => {
+            let inside = false;
+            for (const loop of loops2d) {
+                let cross = false;
+                for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+                    const [xi, yi] = loop[i], [xj, yj] = loop[j];
+                    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) cross = !cross;
+                }
+                if (cross) inside = !inside; // even-odd по всем контурам (дырки инвертируют)
+            }
+            return inside;
+        };
+        const polyFromRect = (c, ux, uy, sx, sy) => {
+            const hx = sx / 2, hy = sy / 2, o = [];
+            for (const [su, sv] of [[-1,-1],[1,-1],[1,1],[-1,1]]) {
+                o.push(c.clone().addScaledVector(ux, su * hx).addScaledVector(uy, sv * hy));
+            }
+            return o;
+        };
+
+        const out = [];
+        const AXIS_EPS = 2e-3; // допуск «ребро параллельно оси» в координатах плоскости, м
+        const _t = new THREE.Vector3(), _d = new THREE.Vector3();
+
+        for (const ids of islands) {
+            const t0 = triangles[ids[0]], n = normals[ids[0]];
+            if (n.lengthSq() < 1e-9) continue; // вырожденные zero-area грани — мусор, пропускаем
+            const p0 = t0[0];
+            // ортонормированный базис плоскости острова
+            const ref = Math.abs(n.x) < .9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+            const lx = new THREE.Vector3().crossVectors(n, ref).normalize();
+            const ly = new THREE.Vector3().crossVectors(n, lx);
+            const key2p = new Map();
+            for (const t of ids) for (const v of triangles[t]) if (!key2p.has(vKey(v))) key2p.set(vKey(v), v);
+            const uv = p => [ _t.subVectors(p, p0).dot(lx), _t.subVectors(p, p0).dot(ly) ];
+
+            // ── 2. прямоугольный контур? -> точная сеточная нарезка ─────
+            const loops = boundaryLoops(ids);
+            let ok = loops.length > 0;
+            let loops2d = null;
+            if (ok) {
+                loops2d = loops.map(lp => lp.map(k => uv(key2p.get(k))));
+                outer: for (const lp of loops2d) {
+                    for (let i = 0; i < lp.length; i++) {
+                        const [x1, y1] = lp[i], [x2, y2] = lp[(i + 1) % lp.length];
+                        if (Math.abs(x1 - x2) > AXIS_EPS && Math.abs(y1 - y2) > AXIS_EPS) { ok = false; break outer; }
+                    }
+                }
+            }
+            if (ok) {
+                const Us = [...new Set(loops2d.flat().map(p => Math.round(p[0] * 1e3) / 1e3))].sort((a, b) => a - b);
+                const Vs = [...new Set(loops2d.flat().map(p => Math.round(p[1] * 1e3) / 1e3))].sort((a, b) => a - b);
+                const filled = new Set();
+                for (let i = 0; i < Us.length - 1; i++) for (let j = 0; j < Vs.length - 1; j++) {
+                    if (pointInLoops((Us[i] + Us[i+1]) / 2, (Vs[j] + Vs[j+1]) / 2, loops2d)) filled.add(i + "|" + j);
+                }
+                const usedc = new Set();
+                for (let j = 0; j < Vs.length - 1; j++) {
+                    for (let i = 0; i < Us.length - 1; i++) {
+                        const ckey = i + "|" + j;
+                        if (!filled.has(ckey) || usedc.has(ckey)) continue;
+                        let w = 1;
+                        while (filled.has((i + w) + "|" + j) && !usedc.has((i + w) + "|" + j)) w++;
+                        let h = 1, okh = true;
+                        while (okh) {
+                            for (let k = 0; k < w; k++) {
+                                if (!filled.has((i + k) + "|" + (j + h)) || usedc.has((i + k) + "|" + (j + h))) { okh = false; break; }
+                            }
+                            if (okh) h++;
+                        }
+                        for (let a = i; a < i + w; a++) for (let b = j; b < j + h; b++) usedc.add(a + "|" + b);
+                        const cu = (Us[i] + Us[i + w]) / 2, cv = (Vs[j] + Vs[j + h]) / 2;
+                        const c = p0.clone().addScaledVector(lx, cu).addScaledVector(ly, cv);
+                        out.push(polyFromRect(c, lx, ly, Math.max(Us[i + w] - Us[i], .01), Math.max(Vs[j + h] - Vs[j], .01)));
+                    }
+                }
+                continue;
+            }
+
+            // ── 3. диагональный остров: пары треугольников -> OBB ────────
+            const merged = this.mergeTrianglesToQuads(ids.map(t => triangles[t]));
+            for (const poly of merged) {
+                let best = null;
+                for (let e = 0; e < poly.length; e++) {
+                    _d.subVectors(poly[(e + 1) % poly.length], poly[e]);
+                    const L = _d.length();
+                    if (L < 1e-9) continue;
+                    const ux = new THREE.Vector3().crossVectors(n, _d.clone().multiplyScalar(1 / L)).normalize();
+                    const uy = new THREE.Vector3().crossVectors(n, ux);
+                    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                    for (const v of poly) {
+                        const px = _t.subVectors(v, p0).dot(ux), py = _t.subVectors(v, p0).dot(uy);
+                        if (px < minX) minX = px;
+                        if (px > maxX) maxX = px;
+                        if (py < minY) minY = py;
+                        if (py > maxY) maxY = py;
+                    }
+                    const area = (maxX - minX) * (maxY - minY);
+                    if (!best || area < best.area) best = { area, ux, uy, minX, maxX, minY, maxY };
+                }
+                if (!best) continue;
+                const c = p0.clone().addScaledVector(best.ux, (best.minX + best.maxX) / 2)
+                                     .addScaledVector(best.uy, (best.minY + best.maxY) / 2);
+                out.push(polyFromRect(c, best.ux, best.uy, Math.max(best.maxX - best.minX, .01), Math.max(best.maxY - best.minY, .01)));
+            }
+        }
+        return out;
+    },
     importModelAsCubes: function(triangles, thickness = .05) {
         if (!triangles.length) {
             alert(i18n.t("glbImportEmpty"));
@@ -8340,7 +8564,7 @@ void main(){
             seenKeys.add(key);
             return true;
         });
-        const polys = this.mergeTrianglesToQuads(deduped);
+        const polys = this.buildImportPlates(deduped);
         polys.forEach(verts => {
             ab.subVectors(verts[1], verts[0]);
             ac.subVectors(verts[2], verts[0]);
@@ -16602,5 +16826,5 @@ document.addEventListener("DOMContentLoaded", () => {
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1c97df0cce6dbdb',t:'MTc4NDI5Mzg4MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1da1f66af61e436',t:'MTc4NDQ2ODI2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1db77f3b9dbe3f8',t:'MTc4NDQ4MjM3OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1eaf0a80fefc9d4',t:'MTc4NDY0NDYwOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f"}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a23435a76d4d48d5',t:'MTc4NTQxMjg5NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a234b5320e8ae4b5',t:'MTc4NTQxODEyMA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
