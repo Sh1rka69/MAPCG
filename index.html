@@ -1274,6 +1274,7 @@
         </div>
         <p id="loading-text" data-i18n="loadingInit" class="text-gray-500 mt-6 text-xs tracking-[0.2em] uppercase text-center">Initializing...</p>
         <div id="loading-percent" class="text-[#ff8a3d] mt-2 text-2xl font-semibold mono">0%</div>
+        <p id="loading-detail" class="text-gray-600 mt-2 text-[11px] tracking-[0.1em] text-center mono" style="min-height: 1.2em;"></p>
     </div>
 
 
@@ -5375,7 +5376,7 @@ function createMaterial(textureId, matType, colorHex, extra = {}) {
     const isMetal = textureId === "metal";
     const isGlass = textureId === "Glass";
     const isPlasma = textureId === "Plasma";
-    const reflectivity = extra.reflectivity !== undefined ? extra.reflectivity : isGlass ? 2.35 : isMetal || isWater ? preset.envMapIntensity : Math.min(preset.envMapIntensity, .12);
+    const reflectivity = extra.reflectivity !== undefined ? extra.reflectivity : isGlass ? 2.35 : isWater ? preset.envMapIntensity : Math.min(preset.envMapIntensity, .12);
     const reflectBlur = extra.reflectBlur !== undefined ? extra.reflectBlur : isGlass ? .035 : preset.roughness;
     const hasAlpha = !!(texture && texture.userData && texture.userData.hasAlpha) || isGlass;
     const baseColor = new THREE.Color(colorHex || 16777215);
@@ -5442,8 +5443,8 @@ function createMaterial(textureId, matType, colorHex, extra = {}) {
             props.attenuationDistance = undefined;
             props.attenuationColor = undefined;
         } else {
-            props.clearcoat = isMetal ? .2 : .05;
-            props.clearcoatRoughness = isMetal ? .16 : .35;
+            props.clearcoat = .05;
+            props.clearcoatRoughness = .35;
         }
         mat = new THREE.MeshPhysicalMaterial(props);
     } else {
@@ -6815,9 +6816,9 @@ void main(){
         if (this._envReflectionEnabled && this._envReflectionTexture) {
             if (isWaterLike(textureKey, type)) return 3.0;
             if (textureKey === "Glass") return 3.2;
-            if (type === "Metal") return 3.5;
             if (type === "Wood") return 1.2;
             if (type === "Concrete") return 1.0;
+            if (type === "Metal") return 1.0;
             if (type === "Carpet") return 0.4;
             if (type === "Sand") return 0.5;
             if (type === "Dirt") return 0.5;
@@ -6825,7 +6826,7 @@ void main(){
             return 0.8; // fallback for other materials
         }
         if (isWaterLike(textureKey, type)) return Math.min(3.4, Math.max(2.15, base));
-        if (textureKey === "metal" || textureKey === "Glass") return Math.min(2.8, Math.max(1.25, base));
+        if (textureKey === "Glass") return Math.min(2.8, Math.max(1.25, base));
         return Math.min(.14, Math.max(.02, base));
     },
     _cubeMatPool: new Map,
@@ -6866,7 +6867,7 @@ void main(){
         const isMetal = p.tex === "metal";
         const base = p.reflectivity ?? preset.envMapIntensity;
         let envIntensity;
-        if (isWater) envIntensity = Math.min(3.4, Math.max(2.15, base)); else if (p.tex === "metal" || p.tex === "Glass") envIntensity = Math.min(2.8, Math.max(1.25, base)); else envIntensity = Math.min(.14, Math.max(.02, base));
+        if (isWater) envIntensity = Math.min(3.4, Math.max(2.15, base)); else if (p.tex === "Glass") envIntensity = Math.min(2.8, Math.max(1.25, base)); else envIntensity = Math.min(.14, Math.max(.02, base));
         mat.envMap = p.env;
         mat.envMapIntensity = envIntensity;
         const glare = p.glare;
@@ -8349,8 +8350,10 @@ void main(){
         };
         this.scene.add(mesh);
         this.spawnPointObj = mesh;
-        this.deselect();
-        this.selectObject(mesh);
+        if (!this._bulkLoading) {
+            this.deselect();
+            this.selectObject(mesh);
+        }
         if (!data && !window.historyManager.isRestoring) window.historyManager.takeSnapshot();
         if (!data) audioEngine.playSpawn();
     },
@@ -8534,9 +8537,14 @@ void main(){
         this.blocks.push(mesh);
         this.setupStaticMesh(mesh);
         this.registerCullable(mesh);
-        this.updateCullingAround(mesh);
-        if (!this.isMultiSelectMode) this.deselect();
-        this.selectObject(mesh);
+        if (!this._bulkLoading) {
+            // Face culling is recomputed once for everything after a bulk
+            // load finishes (see loadMapData), so skip the expensive
+            // per-neighbor recompute while a project is being loaded.
+            this.updateCullingAround(mesh);
+            if (!this.isMultiSelectMode) this.deselect();
+            this.selectObject(mesh);
+        }
         if (!data && !window.historyManager.isRestoring) window.historyManager.takeSnapshot();
         if (!data) audioEngine.playSpawn();
     },
@@ -8581,8 +8589,10 @@ void main(){
         this.createManualLightSource(mesh);
         this.applyManualLightSettings(mesh);
         if (mesh.material) mesh.material.visible = this.lightContourVisible;
-        if (!this.isMultiSelectMode) this.deselect();
-        this.selectObject(mesh);
+        if (!this._bulkLoading) {
+            if (!this.isMultiSelectMode) this.deselect();
+            this.selectObject(mesh);
+        }
         if (!data && !window.historyManager.isRestoring) window.historyManager.takeSnapshot();
         if (!data) audioEngine.playSpawn();
     },
@@ -10753,7 +10763,10 @@ void main(){
             setTimeout(() => ind.remove(), 300);
         }, 2e3);
     },
-    loadMapData: async function(data) {
+    loadMapData: async function(data, onProgress) {
+        const reportProgress = (percent, detail) => {
+            try { if (typeof onProgress === "function") onProgress(percent, detail); } catch (e) {}
+        };
         if (this.skyboxEnvTimer) {
             clearTimeout(this.skyboxEnvTimer);
             this.skyboxEnvTimer = null;
@@ -10784,9 +10797,15 @@ void main(){
             });
         }
         if (data && data.projectCustomTextures) {
+            const texKeys = Object.keys(data.projectCustomTextures);
             const promises = [];
-            for (let key in data.projectCustomTextures) {
-                promises.push(uiManager.addTextureToEngine(key, data.projectCustomTextures[key].name, data.projectCustomTextures[key].dataUrl, false, false));
+            let texDone = 0;
+            for (const key of texKeys) {
+                const texEntry = data.projectCustomTextures[key];
+                promises.push(uiManager.addTextureToEngine(key, texEntry.name, texEntry.dataUrl, false, false).then(() => {
+                    texDone++;
+                    reportProgress(Math.round((texDone / texKeys.length) * 10), `Texture: ${texEntry.name || key} (${texDone}/${texKeys.length})`);
+                }));
             }
             try {
                 await Promise.all(promises);
@@ -10796,8 +10815,10 @@ void main(){
             uiManager.refreshTextureOptions();
         }
         if (data && data.projectNormalMaps) {
+            const nmKeys = Object.keys(data.projectNormalMaps);
             const nmPromises = [];
-            for (let key in data.projectNormalMaps) {
+            let nmDone = 0;
+            for (const key of nmKeys) {
                 const nmData = data.projectNormalMaps[key];
                 nmPromises.push((async () => {
                     try {
@@ -10826,19 +10847,49 @@ void main(){
                         };
                     } catch (e) {
                         console.warn("Failed to load normal map", key);
+                    } finally {
+                        nmDone++;
+                        reportProgress(10 + Math.round((nmDone / nmKeys.length) * 5), `Normal map: ${nmData.name || key} (${nmDone}/${nmKeys.length})`);
                     }
                 })());
             }
             await Promise.all(nmPromises);
         }
-        if (data && data.blocks) {
-            data.blocks.forEach(bData => {
-                if (bData.type === "spawn") this.addSpawnPoint(bData); else if (bData.type === "light") this.addLight(bData); else this.addCube(bData);
-            });
+        // Bulk-insert all blocks. During this pass we suppress the expensive
+        // per-object selection/UI/culling work that addCube normally does —
+        // it's meaningless mid-load since only the very last object would end
+        // up "selected" anyway. Everything is reconciled once at the end.
+        this._bulkLoading = true;
+        try {
+            if (data && data.blocks) {
+                const total = data.blocks.length;
+                const BATCH_SIZE = 60;
+                for (let i = 0; i < total; i++) {
+                    const bData = data.blocks[i];
+                    if (bData.type === "spawn") this.addSpawnPoint(bData);
+                    else if (bData.type === "light") this.addLight(bData);
+                    else this.addCube(bData);
+                    if (i % BATCH_SIZE === BATCH_SIZE - 1 || i === total - 1) {
+                        const pct = 15 + Math.round(((i + 1) / Math.max(1, total)) * 70);
+                        reportProgress(pct, `Block ${i + 1}/${total}`);
+                        // Yield to the browser so the progress text/bar actually
+                        // paints instead of the whole load happening in one
+                        // uninterrupted synchronous block.
+                        await new Promise(r => requestAnimationFrame(r));
+                    }
+                }
+            }
+            if (data && Array.isArray(data.lights)) {
+                data.lights.forEach(lData => this.addLight(lData));
+            }
+        } finally {
+            this._bulkLoading = false;
         }
-        if (data && Array.isArray(data.lights)) {
-            data.lights.forEach(lData => this.addLight(lData));
-        }
+        // Now that every block exists, do ONE full culling pass instead of the
+        // per-insert neighbor recompute that addCube would otherwise trigger
+        // (which is redundant work when most neighbors don't exist yet).
+        reportProgress(88, "Computing face culling...");
+        this.blocks.forEach(b => this.recomputeFaceCulling(b));
         if (data && data.env) {
             document.getElementById("setting-skybox").value = data.env.skybox || "day";
             document.getElementById("setting-weather").value = data.env.weather || "clear";
@@ -12292,22 +12343,26 @@ window.uiManager = {
         const loadBar = document.getElementById("loading-bar");
         const loadText = document.getElementById("loading-text");
         const loadPercent = document.getElementById("loading-percent");
+        const loadDetail = document.getElementById("loading-detail");
         loadScreen.classList.remove("hidden");
         document.getElementById("main-menu").style.display = "none";
-        const setProgress = (percent, textKey) => {
+        const setProgress = (percent, textKey, detail) => {
             loadBar.style.width = `${percent}%`;
             loadPercent.innerText = `${percent}%`;
-            loadText.innerText = i18n.t(textKey);
+            if (textKey) loadText.innerText = i18n.t(textKey);
+            if (loadDetail) loadDetail.innerText = detail || "";
         };
-        setProgress(10, "loadStep1");
-        await new Promise(r => setTimeout(r, 300));
-        setProgress(40, "loadStep2");
+        setProgress(5, "loadStep1", "");
         const data = await storageManager.getProjectData(id);
-        await new Promise(r => setTimeout(r, 400));
-        setProgress(70, "loadStep3");
+        setProgress(15, "loadStep2", "");
         window.historyManager.isRestoring = true;
         try {
-            await engine.loadMapData(data);
+            await engine.loadMapData(data, (percent, detail) => {
+                // Map the engine's internal 0-100 progress into the 15-90 band
+                // reserved for "generating voxels & textures".
+                const scaled = 15 + Math.round((percent / 100) * 75);
+                setProgress(scaled, "loadStep3", detail);
+            });
             await this.applySavedSettings(false);
         } catch (e) {
             console.error("loadMapData failed:", e);
@@ -12319,18 +12374,14 @@ window.uiManager = {
         }
         window.historyManager.isRestoring = false;
         window.historyManager.init();
-        await new Promise(r => setTimeout(r, 500));
-        setProgress(95, "loadStep4");
+        setProgress(95, "loadStep4", "");
         engine.onWindowResize();
-        await new Promise(r => setTimeout(r, 300));
-        setProgress(100, "loadStep5");
-        setTimeout(() => {
-            loadScreen.classList.add("hidden");
-            document.getElementById("editor-ui").style.display = "block";
-            document.getElementById("ui-layer").style.display = "flex";
-            uiManager.refreshTextureOptions();
-            requestAnimationFrame(() => engine.onWindowResize());
-        }, 400);
+        setProgress(100, "loadStep5", "");
+        loadScreen.classList.add("hidden");
+        document.getElementById("editor-ui").style.display = "block";
+        document.getElementById("ui-layer").style.display = "flex";
+        uiManager.refreshTextureOptions();
+        requestAnimationFrame(() => engine.onWindowResize());
     },
     askToExit: function() {
         const modal = document.getElementById("exit-dialog-modal");
