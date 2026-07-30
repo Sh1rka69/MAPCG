@@ -1388,6 +1388,7 @@
 
     <div id="editor-ui" class="w-full h-full" style="display: none; position: fixed; inset: 0;">
         <canvas id="glcanvas"></canvas>
+        <div id="marquee-select-box" style="display:none; position:fixed; z-index:40; pointer-events:none; border:2px solid #ffd83d; background:rgba(255,216,61,0.15); box-shadow:0 0 0 1px rgba(0,0,0,0.35);"></div>
 
         <div id="ui-layer" class="ui-scale-layer">
 
@@ -1550,6 +1551,10 @@
                         <button onclick="engine.toggleMultiSelect()" id="btn-shift" class="px-3 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition uppercase tracking-[0.1em] w-32" style="background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text-dim);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">
                             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M5 8h10M5 12h10"/></svg>
                             Shift
+                        </button>
+                        <button onclick="engine.toggleBoxSelectMode()" id="btn-ctrl" class="px-3 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition uppercase tracking-[0.1em] w-32" style="background: var(--td-bg-2); border: 1px solid var(--td-border); color: var(--td-text-dim);" onmouseover="this.style.color='white'; this.style.borderColor='var(--td-border-strong)'" onmouseout="this.style.color='var(--td-text-dim)'; this.style.borderColor='var(--td-border)'">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><rect x="4" y="4" width="12" height="12" stroke-dasharray="3 2"/></svg>
+                            Ctrl
                         </button>
                         <button onclick="engine.deleteObject()" id="btn-delete-float" class="hidden px-3 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition uppercase tracking-[0.1em] w-32" style="background: rgba(217,69,69,0.12); border: 1px solid rgba(217,69,69,0.4); color: var(--td-danger);" onmouseover="this.style.background='rgba(217,69,69,0.2)'" onmouseout="this.style.background='rgba(217,69,69,0.12)'">
                             <span class="ui-icon ui-icon-mask" data-icon="Delete"  alt="" style="width:14px;height:14px;object-fit:contain;"></span>
@@ -6063,6 +6068,15 @@ const engine = {
         lastX: 0,
         lastY: 0
     },
+    isBoxSelectMode: false,
+    boxSelect: {
+        active: false,
+        pointerId: null,
+        startX: 0,
+        startY: 0,
+        curX: 0,
+        curY: 0
+    },
     init: function() {
         this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         this.inputMode = this.isMobile ? "touch" : "mouse";
@@ -7462,6 +7476,10 @@ void main(){
             const joystickEl = document.getElementById("mobile-joystick");
             if (joystickEl && joystickEl.contains(e.target)) return;
             if (this.mobileJoystick.pointerId !== null) return;
+            if (this.isBoxSelectMode) {
+                this.startBoxSelect(e);
+                return;
+            }
             tl.active = true;
             tl.pointerId = e.pointerId;
             tl.lastX = e.clientX;
@@ -7510,17 +7528,112 @@ void main(){
         };
         window.addEventListener("pointerup", endLook);
         window.addEventListener("pointercancel", endLook);
+        // Touch-driven box-select: move/end need their own window listeners
+        // since they're keyed off boxSelect.pointerId, not touchLook's.
+        window.addEventListener("pointermove", e => {
+            if (e.pointerType === "mouse") return;
+            if (this.boxSelect.active) this.updateBoxSelect(e);
+        }, { passive: true });
+        const endBoxTouch = e => {
+            if (e.pointerType === "mouse") return;
+            if (this.boxSelect.active) this.endBoxSelect(e);
+        };
+        window.addEventListener("pointerup", endBoxTouch);
+        window.addEventListener("pointercancel", endBoxTouch);
+    },
+    startBoxSelect: function(e) {
+        const bs = this.boxSelect;
+        bs.active = true;
+        bs.pointerId = e.pointerId;
+        bs.startX = e.clientX;
+        bs.startY = e.clientY;
+        bs.curX = e.clientX;
+        bs.curY = e.clientY;
+        // Suppress camera rotation/orbit, gizmo dragging, and click-select
+        // while dragging the marquee box.
+        this.touchLook.active = false;
+        this.touchLook.pointerId = null;
+        this.isClickGesture = false;
+        if (this.orbit) this.orbit.enabled = false;
+        this._boxSelectPrevTransformEnabled = this.transformControl ? this.transformControl.enabled : true;
+        if (this.transformControl) this.transformControl.enabled = false;
+        this._updateBoxSelectVisual();
+    },
+    updateBoxSelect: function(e) {
+        const bs = this.boxSelect;
+        if (!bs.active || e.pointerId !== bs.pointerId) return;
+        bs.curX = e.clientX;
+        bs.curY = e.clientY;
+        this._updateBoxSelectVisual();
+    },
+    endBoxSelect: function(e) {
+        const bs = this.boxSelect;
+        if (!bs.active || (e && e.pointerId !== bs.pointerId)) return;
+        bs.active = false;
+        bs.pointerId = null;
+        if (this.orbit) this.orbit.enabled = true;
+        if (this.transformControl) this.transformControl.enabled = this._boxSelectPrevTransformEnabled !== false;
+        const box = document.getElementById("marquee-select-box");
+        if (box) box.style.display = "none";
+        this._applyBoxSelection(bs.startX, bs.startY, bs.curX, bs.curY);
+    },
+    _updateBoxSelectVisual: function() {
+        const box = document.getElementById("marquee-select-box");
+        if (!box) return;
+        const bs = this.boxSelect;
+        const x1 = Math.min(bs.startX, bs.curX);
+        const y1 = Math.min(bs.startY, bs.curY);
+        const w = Math.abs(bs.curX - bs.startX);
+        const h = Math.abs(bs.curY - bs.startY);
+        box.style.left = x1 + "px";
+        box.style.top = y1 + "px";
+        box.style.width = w + "px";
+        box.style.height = h + "px";
+        box.style.display = "block";
+    },
+    _applyBoxSelection: function(x1, y1, x2, y2) {
+        const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+        const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+        // Treat a near-zero-size drag as a tap, not a box — avoids accidentally
+        // clearing/no-op selecting when the user just taps with Ctrl held.
+        if (maxX - minX < 6 && maxY - minY < 6) return;
+        const candidates = [ ...this.blocks, ...this.manualLights ].filter(b => b && b.visible !== false);
+        const found = [];
+        const ndc = new THREE.Vector3;
+        for (const obj of candidates) {
+            obj.getWorldPosition(ndc);
+            ndc.project(this.camera);
+            if (ndc.z < -1 || ndc.z > 1) continue; // behind camera / outside clip range
+            const sx = (ndc.x * .5 + .5) * window.innerWidth;
+            const sy = (-ndc.y * .5 + .5) * window.innerHeight;
+            if (sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) found.push(obj);
+        }
+        if (found.length === 0) return;
+        found.forEach(obj => {
+            if (!this.selectedBlocks.includes(obj)) this.selectedBlocks.push(obj);
+        });
+        this.buildTransformGroup();
+        this.updateUIFromObject();
+        this.updateSelectionPanels();
     },
     onPointerDown: function(event) {
         this.mouseDownPos.set(event.clientX, event.clientY);
         this.isClickGesture = true;
+        if (this.isBoxSelectMode && event.pointerType === "mouse" && event.button === 0 && !this.boxSelect.active) {
+            this.startBoxSelect(event);
+        }
     },
     onPointerMove: function(event) {
         if (this.mouseDownPos.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 4) {
             this.isClickGesture = false;
         }
+        if (this.boxSelect.active) this.updateBoxSelect(event);
     },
     onPointerUp: function(event) {
+        if (this.boxSelect.active) {
+            this.endBoxSelect(event);
+            return;
+        }
         if (event.target !== this.renderer.domElement) return;
         if (this.isClickGesture) {
             this.mouse.x = event.clientX / window.innerWidth * 2 - 1;
@@ -7595,6 +7708,10 @@ void main(){
     toggleMultiSelect: function() {
         this.isMultiSelectMode = !this.isMultiSelectMode;
         document.getElementById("btn-shift").classList.toggle("active-tool", this.isMultiSelectMode);
+    },
+    toggleBoxSelectMode: function() {
+        this.isBoxSelectMode = !this.isBoxSelectMode;
+        document.getElementById("btn-ctrl").classList.toggle("active-tool", this.isBoxSelectMode);
     },
     toggleShapesPanel: function() {
         this.shapesPanelOpen = !this.shapesPanelOpen;
