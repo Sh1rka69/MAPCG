@@ -98,6 +98,8 @@ function ensureMapContainers(room) {
   if (!room.mapData || typeof room.mapData !== 'object') room.mapData = { blocks: [], lights: [] };
   if (!Array.isArray(room.mapData.blocks)) room.mapData.blocks = [];
   if (!Array.isArray(room.mapData.lights)) room.mapData.lights = [];
+  if (!room.mapData.projectCustomTextures || typeof room.mapData.projectCustomTextures !== 'object') room.mapData.projectCustomTextures = {};
+  if (!room.mapData.projectNormalMaps || typeof room.mapData.projectNormalMaps !== 'object') room.mapData.projectNormalMaps = {};
 }
 function upsertByNetId(arr, obj) {
   const id = objectNetId(obj);
@@ -361,6 +363,57 @@ io.on('connection', socket => {
     room.updatedAt = now();
     socket.to(room.id).emit('mp:env_update', { roomId: room.id, env: room.sharedEnv, authorId: socket.id, revision: room.revision, updatedAt: room.updatedAt });
     cb?.({ ok: true, revision: room.revision });
+  });
+
+  // A player uploaded a new custom texture / normal map, or reused one under a
+  // key that changed content. Broadcast it to everyone currently in the room
+  // and remember it on the room so players who join later get it too via the
+  // regular mp:joined -> mapData.projectCustomTextures/projectNormalMaps path.
+  socket.on('mp:asset_add', (payload = {}, cb) => {
+    const room = rooms.get(String(payload.roomId || socketToRoom.get(socket.id) || ''));
+    if (!room) return cb?.({ ok: false, error: 'Room not found.' });
+    if (!hasEditPermission(room, socket.id)) return cb?.({ ok: false, error: 'No build permission.' });
+    const kind = payload.kind === 'normal' ? 'normal' : 'texture';
+    const key = cleanText(payload.key, 80);
+    const dataUrl = typeof payload.dataUrl === 'string' ? payload.dataUrl : '';
+    if (!key || !dataUrl) return cb?.({ ok: false, error: 'Invalid asset.' });
+    // A single texture can be several MB as a base64 data URL - cap it well
+    // below maxHttpBufferSize so one oversized upload can't hog the room.
+    if (dataUrl.length > 12 * 1024 * 1024) return cb?.({ ok: false, error: 'Texture too large to share (max ~8MB image).' });
+    ensureMapContainers(room);
+    const entry = { name: cleanText(payload.name || key, 120), dataUrl };
+    if (kind === 'normal') room.mapData.projectNormalMaps[key] = entry;
+    else room.mapData.projectCustomTextures[key] = entry;
+    room.updatedAt = now();
+    const author = room.players.get(socket.id);
+    socket.to(room.id).emit('mp:asset_add', {
+      roomId: room.id,
+      kind,
+      key,
+      name: entry.name,
+      dataUrl,
+      authorId: socket.id,
+      authorName: author?.nickname || 'Player'
+    });
+    cb?.({ ok: true });
+  });
+
+  // A player deleted a custom texture / normal map locally (no cubes use it
+  // anymore). Tell everyone else so they can drop it too instead of holding
+  // onto dead assets for the rest of the session.
+  socket.on('mp:asset_remove', (payload = {}, cb) => {
+    const room = rooms.get(String(payload.roomId || socketToRoom.get(socket.id) || ''));
+    if (!room) return cb?.({ ok: false, error: 'Room not found.' });
+    if (!hasEditPermission(room, socket.id)) return cb?.({ ok: false, error: 'No build permission.' });
+    const kind = payload.kind === 'normal' ? 'normal' : 'texture';
+    const key = cleanText(payload.key, 80);
+    if (!key) return cb?.({ ok: false, error: 'Invalid asset key.' });
+    ensureMapContainers(room);
+    if (kind === 'normal') delete room.mapData.projectNormalMaps[key];
+    else delete room.mapData.projectCustomTextures[key];
+    room.updatedAt = now();
+    socket.to(room.id).emit('mp:asset_remove', { roomId: room.id, kind, key, authorId: socket.id });
+    cb?.({ ok: true });
   });
 
   socket.on('mp:chat', (payload = {}, cb) => {
