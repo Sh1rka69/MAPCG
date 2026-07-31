@@ -180,6 +180,7 @@ io.on('connection', socket => {
           guestsCanChat: payload.permissions?.guestsCanChat !== false
         },
         mapData: payload.mapData || { blocks: [], lights: [], env: null },
+        sharedEnv: (payload.mapData && payload.mapData.env) || null,
         players: new Map(),
         chat: [],
         closeTimer: null
@@ -203,6 +204,7 @@ io.on('connection', socket => {
         self: publicPlayer(player),
         players: [...room.players.values()].map(publicPlayer),
         mapData: room.mapData,
+        sharedEnv: room.sharedEnv,
         chat: room.chat
       });
       broadcastRoomList();
@@ -241,6 +243,7 @@ io.on('connection', socket => {
         self: publicPlayer(player),
         players: [...room.players.values()].map(publicPlayer),
         mapData: room.mapData,
+        sharedEnv: room.sharedEnv,
         chat: room.chat
       });
       socket.to(room.id).emit('mp:player_joined', publicPlayer(player));
@@ -264,8 +267,12 @@ io.on('connection', socket => {
     const incomingMap = payload.mapData;
     // Regular editor sync packets intentionally omit heavy assets (custom textures / normal maps)
     // to keep real-time editing responsive. Preserve those assets from the initial room upload.
+    // Sky/weather/sun angle is only ever authoritative via mp:env_update from the host - a guest
+    // building on the map (or the host's own client sending a stale local snapshot) must not be
+    // able to clobber room.sharedEnv through this channel.
     room.mapData = {
       ...incomingMap,
+      env: room.sharedEnv ? { ...(incomingMap.env || {}), ...room.sharedEnv } : (incomingMap.env || prevMap.env || null),
       projectCustomTextures: incomingMap.projectCustomTextures || prevMap.projectCustomTextures || {},
       projectNormalMaps: incomingMap.projectNormalMaps || prevMap.projectNormalMaps || {}
     };
@@ -340,6 +347,22 @@ io.on('connection', socket => {
     socket.to(room.id).emit('mp:camera_update', { playerId: socket.id, camera: p.camera });
   });
 
+  socket.on('mp:env_update', (payload = {}, cb) => {
+    const room = rooms.get(String(payload.roomId || socketToRoom.get(socket.id) || ''));
+    if (!room) return cb?.({ ok: false, error: 'Room not found.' });
+    if (socket.id !== room.hostId) return cb?.({ ok: false, error: 'Only the host can change sky/weather.' });
+    if (!payload.env || typeof payload.env !== 'object') return cb?.({ ok: false, error: 'Invalid env update.' });
+    // Persisted on the room so it survives until the host changes it again -
+    // new players joining later (via mp:joined) and reconnects both pick up
+    // whatever sky/weather/sun angle the host currently has set.
+    room.sharedEnv = payload.env;
+    if (room.mapData) room.mapData.env = { ...(room.mapData.env || {}), ...payload.env };
+    room.revision++;
+    room.updatedAt = now();
+    socket.to(room.id).emit('mp:env_update', { roomId: room.id, env: room.sharedEnv, authorId: socket.id, revision: room.revision, updatedAt: room.updatedAt });
+    cb?.({ ok: true, revision: room.revision });
+  });
+
   socket.on('mp:chat', (payload = {}, cb) => {
     const room = roomOfSocket(socket);
     if (!room) return cb?.({ ok: false, error: 'Not in room.' });
@@ -363,14 +386,8 @@ io.on('connection', socket => {
     const room = roomOfSocket(socket);
     if (room && room.players.has(socket.id)) {
       const rtt = Math.max(0, Math.min(9999, Number(payload.ping || 0)));
-      const player = room.players.get(socket.id);
-      const oldPing = player.ping;
-      player.ping = rtt;
-      // Only broadcast player list if ping changed significantly (>50ms difference)
-      // This prevents constant DOM re-renders every 3 seconds from minor ping fluctuations
-      if (Math.abs(rtt - oldPing) > 50) {
-        emitPlayers(room);
-      }
+      room.players.get(socket.id).ping = rtt;
+      emitPlayers(room);
     }
   });
 
