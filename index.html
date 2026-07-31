@@ -14894,34 +14894,11 @@ window.multiplayerClient = {
     _patched: false,
     _ioLoading: null,
 
-    // Registry of trackable modals/windows: id -> { label, icon, color, priority }.
-    // Higher priority wins when multiple modals happen to be open at once.
-    // 'icon' matches an existing data-icon key from the ButtonsIconsRegular set so the
-    // same glyph used in the 2D toolbar is reused for the 3D nameplate badge.
-    ACTIVITY_REGISTRY: {
-        "rs-overlay":                   { label: "Render",     icon: "Play",       color: "#ff8a3d", priority: 90 },
-        "ai-builder-modal-overlay":     { label: "AI Builder",  icon: "Hammer",     color: "#c48bff", priority: 90 },
-        "settings-modal":               { label: "Settings",    icon: "Settings",   color: "#8fd6a8", priority: 80 },
-        "mp-modal":                     { label: "Multiplayer", icon: "OnOff",      color: "#5ec46e", priority: 70 },
-        "mp-chat":                      { label: "Chat",        icon: "Reply",      color: "#5ec46e", priority: 40 },
-        "collection-modal-overlay":     { label: "Collection",  icon: "Suitcase2",  color: "#ff8a3d", priority: 60 },
-        "texture-picker-modal-overlay": { label: "Textures",    icon: "Search",     color: "#8fd6a8", priority: 60 },
-        "export-modal":                 { label: "Export",      icon: "FileDocument", color: "#ff8a3d", priority: 85 },
-        "new-project-modal":            { label: "New Project", icon: "FileFolder", color: "#8fd6a8", priority: 85 },
-        "help-guide-modal":             { label: "Help Guide",  icon: "Question",   color: "#8fd6a8", priority: 50 },
-        "bake-progress-modal":          { label: "Baking",      icon: "Hammer",     color: "#ff8a3d", priority: 95 },
-        "exit-dialog-modal":            { label: "Exit",        icon: "Exit",       color: "#d94545", priority: 95 }
-    },
-    _activityObserver: null,
-    _currentActivity: null,
-    _lastActivitySentAt: 0,
-
     init: function() {
         this.installUI();
         this.patchEditorHooks();
         this.renderStatus();
         this.startSmoothLoop();
-        this.startActivityTracking();
         setInterval(() => this.tick(), 100);
     },
 
@@ -15139,7 +15116,6 @@ window.multiplayerClient = {
         s.on("mp:env_update", data => this.onRemoteEnvUpdate(data));
         s.on("mp:room_revision", data => { if (this.room && data.roomId === this.room.id) { this.room.revision = data.revision; this.room.updatedAt = data.updatedAt; this.renderCurrentRoom(); } });
         s.on("mp:camera_update", data => this.updateRemoteAvatar(data.playerId, data.camera));
-        s.on("mp:activity_update", data => { console.log("[MAPCG] received mp:activity_update", data); this.updateRemoteActivity(data.playerId, data.activity); });
         s.on("mp:chat", msg => this.onChat(msg));
         s.on("mp:room_closed", data => { this.toast(data.reason || "Server closed", "error"); this.room = null; this.self = null; this.players = []; this.chat = []; this.clearAvatars(); this.renderAll(); });
         s.on("mp:kicked", data => { this.toast(data.reason || "Kicked", "error"); this.leaveRoom(false); });
@@ -15196,10 +15172,6 @@ window.multiplayerClient = {
         this.lastSharedEnvHash = this.hashSharedEnv(this.getSharedEnvState());
         this.renderAll();
         this.toast(this.self?.role === "admin" ? "Server started" : "Connected to server");
-        // Force-push our current activity now that we're in a room (refreshActivity() no-ops
-        // if nothing changed, but the server/room context just did).
-        this._currentActivity = undefined;
-        this.refreshActivity();
     },
 
     leaveRoom: function(emit = true) {
@@ -15809,82 +15781,6 @@ window.multiplayerClient = {
         });
     },
 
-    // Returns true if a modal/overlay element is actually visible on screen right now.
-    // Note: these modals are all `position:fixed`, so offsetParent is unreliable (it's
-    // null for fixed-position elements in most browsers) — getComputedStyle is required.
-    _isActivityElementVisible: function(el) {
-        if (!el) return false;
-        if (el.classList && el.classList.contains("hidden")) return false;
-        const cs = window.getComputedStyle(el);
-        return cs.display !== "none" && cs.visibility !== "hidden" && Number(cs.opacity) !== 0;
-    },
-
-    // Scans the ACTIVITY_REGISTRY for the highest-priority currently-visible modal.
-    // Returns the registry key (string) or null if nothing tracked is open.
-    detectCurrentActivity: function() {
-        let best = null;
-        let bestPriority = -1;
-        const debugRows = [];
-        for (const id in this.ACTIVITY_REGISTRY) {
-            const entry = this.ACTIVITY_REGISTRY[id];
-            const el = document.getElementById(id);
-            const visible = this._isActivityElementVisible(el);
-            debugRows.push(id + ":" + (el ? (visible ? "VISIBLE" : "hidden") : "MISSING"));
-            if (visible && entry.priority > bestPriority) {
-                best = id;
-                bestPriority = entry.priority;
-            }
-        }
-        if (this._lastDebugRows !== debugRows.join(",")) {
-            this._lastDebugRows = debugRows.join(",");
-            console.log("[MAPCG] detectCurrentActivity scan:", debugRows.join(" | "), "=> best:", best);
-        }
-        return best;
-    },
-
-    // Re-evaluates the current activity and, if it changed, pushes it to the server
-    // (server relays it to everyone else in the room) and refreshes our own badge state.
-    refreshActivity: function() {
-        const activity = this.detectCurrentActivity();
-        if (activity === this._currentActivity) return;
-        console.log("[MAPCG] activity changed:", this._currentActivity, "->", activity, "| connected:", !!this.socket?.connected, "| inRoom:", !!this.room);
-        this._currentActivity = activity;
-        if (!this.socket?.connected || !this.room) return;
-        this.socket.emit("mp:activity_update", { activity });
-    },
-
-    startActivityTracking: function() {
-        if (this._activityObserver) return;
-        const ids = Object.keys(this.ACTIVITY_REGISTRY);
-        const schedule = () => {
-            // Debounce slightly: several class/style mutations often land in the same frame
-            // (e.g. an overlay closing while another opens), so wait one tick before deciding.
-            clearTimeout(this._activityDebounce);
-            this._activityDebounce = setTimeout(() => this.refreshActivity(), 30);
-        };
-        this._activityObserver = new MutationObserver(schedule);
-        const observeIfPresent = id => {
-            const el = document.getElementById(id);
-            if (el) this._activityObserver.observe(el, { attributes: true, attributeFilter: ["class", "style"] });
-        };
-        ids.forEach(observeIfPresent);
-        // Some modals (mp-modal, mp-chat, rs-overlay) are created lazily by their own
-        // installUI()/init() calls, possibly after this runs — watch body for their insertion too.
-        const bodyObserver = new MutationObserver(mutations => {
-            let needsRescan = false;
-            for (const m of mutations) {
-                m.addedNodes && m.addedNodes.forEach(node => {
-                    if (node.nodeType === 1 && ids.includes(node.id)) needsRescan = true;
-                });
-            }
-            if (needsRescan) { ids.forEach(observeIfPresent); schedule(); }
-        });
-        bodyObserver.observe(document.body, { childList: true });
-        // Safety net poll (covers any mutation path we didn't anticipate) — cheap, infrequent.
-        setInterval(() => this.refreshActivity(), 2500);
-        this.refreshActivity();
-    },
-
     tick: function() {
         const chatBtn = document.getElementById("mp-chat-floating");
         if (chatBtn) chatBtn.classList.toggle("show", !!this.room);
@@ -15961,123 +15857,13 @@ window.multiplayerClient = {
             label.position.set(0, .55, 0);
             group.add(label);
             engine.scene.add(group);
-            av = { group, label, badge: null, activity: null, playerId, color: player.color || "#8fd6a8", targetPos: null, targetQuat: null };
+            av = { group, label, playerId, color: player.color || "#8fd6a8", targetPos: null, targetQuat: null };
             this.remoteAvatars.set(playerId, av);
             if (camera.pos) group.position.set(camera.pos.x, camera.pos.y, camera.pos.z);
             if (camera.quat) group.quaternion.set(camera.quat.x, camera.quat.y, camera.quat.z, camera.quat.w);
-            // The player list snapshot (from mp:joined / mp:players) may already carry an
-            // activity for this player if they were mid-action before our avatar existed.
-            if (player.activity) this.updateRemoteActivity(playerId, player.activity);
         }
         if (camera.pos) av.targetPos = new THREE.Vector3(camera.pos.x, camera.pos.y, camera.pos.z);
         if (camera.quat) av.targetQuat = new THREE.Quaternion(camera.quat.x, camera.quat.y, camera.quat.z, camera.quat.w).normalize();
-    },
-
-    // Builds the small pill-shaped sprite worn above a player's nameplate showing which
-    // window/modal they currently have open (e.g. the orange "Render" badge).
-    makeActivityBadgeSprite: function(entry) {
-        const canvas = document.createElement("canvas");
-        canvas.width = 512; canvas.height = 128;
-        const ctx = canvas.getContext("2d");
-        ctx.clearRect(0, 0, 512, 128);
-        const label = String(entry.label || "").slice(0, 24);
-        const iconUrl = this.uiIconDataUrl(entry.icon);
-
-        const draw = (icon) => {
-            ctx.clearRect(0, 0, 512, 128);
-            ctx.font = "700 34px Inter, Arial";
-            const textW = ctx.measureText(label).width;
-            const iconSize = icon ? 40 : 0;
-            const gap = icon ? 12 : 0;
-            const padX = 26;
-            const pillW = Math.min(500, textW + iconSize + gap + padX * 2);
-            const pillH = 68;
-            const x0 = (512 - pillW) / 2;
-            const y0 = (128 - pillH) / 2;
-            const r = pillH / 2;
-
-            // Rounded pill background, tinted with the activity color.
-            ctx.fillStyle = this._hexToRgba(entry.color, 0.92);
-            ctx.strokeStyle = "rgba(255,255,255,0.35)";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(x0 + r, y0);
-            ctx.arcTo(x0 + pillW, y0, x0 + pillW, y0 + pillH, r);
-            ctx.arcTo(x0 + pillW, y0 + pillH, x0, y0 + pillH, r);
-            ctx.arcTo(x0, y0 + pillH, x0, y0, r);
-            ctx.arcTo(x0, y0, x0 + pillW, y0, r);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-
-            let cursorX = x0 + padX;
-            if (icon) {
-                ctx.drawImage(icon, cursorX, (128 - iconSize) / 2, iconSize, iconSize);
-                cursorX += iconSize + gap;
-            }
-            ctx.fillStyle = "#0c0c0e";
-            ctx.textAlign = "left";
-            ctx.textBaseline = "middle";
-            ctx.fillText(label, cursorX, 66);
-
-            tex.needsUpdate = true;
-        };
-
-        const tex = new THREE.CanvasTexture(canvas);
-        tex.colorSpace = THREE.SRGBColorSpace;
-        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
-        const spr = new THREE.Sprite(mat);
-        spr.scale.set(2.6, .65, 1);
-
-        if (iconUrl) {
-            const img = new Image();
-            img.onload = () => draw(img);
-            img.onerror = () => draw(null);
-            img.src = iconUrl;
-        } else {
-            draw(null);
-        }
-        return spr;
-    },
-
-    // Looks up a cached UI icon dataURL by its data-icon key (same registry the 2D toolbar
-    // buttons use). Returns null if that icon hasn't loaded/isn't in the set.
-    uiIconDataUrl: function(key) {
-        try { return (typeof uiIcons !== "undefined" && uiIcons[key]) || null; } catch (e) { return null; }
-    },
-
-    _hexToRgba: function(hex, alpha) {
-        const h = String(hex || "#5ec46e").replace("#", "");
-        const full = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
-        const num = parseInt(full, 16) || 0x5ec46e;
-        const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
-        return `rgba(${r},${g},${b},${alpha})`;
-    },
-
-    // Called when we receive mp:activity_update for another player, or when we lazily
-    // create their avatar and already know their last-known activity.
-    updateRemoteActivity: function(playerId, activityKey) {
-        if (!playerId || playerId === this.self?.id) return;
-        console.log("[MAPCG] updateRemoteActivity", playerId, activityKey, "avExists:", !!this.remoteAvatars.get(playerId));
-        const av = this.remoteAvatars.get(playerId);
-        const pInList = this.players.find(p => p.id === playerId);
-        if (pInList) pInList.activity = activityKey || null;
-        if (!av) return; // avatar not spawned yet — activity will be picked up when it is
-        if (av.activity === (activityKey || null)) return;
-        av.activity = activityKey || null;
-
-        if (av.badge) {
-            try { av.group.remove(av.badge); av.badge.material.map.dispose(); av.badge.material.dispose(); } catch (e) {}
-            av.badge = null;
-        }
-        const entry = activityKey ? this.ACTIVITY_REGISTRY[activityKey] : null;
-        if (entry) {
-            const badge = this.makeActivityBadgeSprite(entry);
-            badge.position.set(0, .95, 0);
-            av.group.add(badge);
-            av.badge = badge;
-        }
-        // No activity -> badge stays removed (already handled above), per design: icon simply disappears.
     },
 
     clearAvatars: function() {
