@@ -12726,6 +12726,7 @@ window.uiManager = {
         // happens when the project is closed (projectAssetVault.resetFor).
         if (activeProjectNormalMaps[key]) delete activeProjectNormalMaps[key];
         delete activeProjectCustomTextures[key];
+        if (window.multiplayerClient) multiplayerClient.sendAssetRemove("texture", key);
         const sel = document.getElementById("sel-texture");
         if (sel) {
             const opt = Array.from(sel.options).find(o => o.value === key);
@@ -12989,6 +12990,10 @@ window.uiManager = {
                     engine.syncAllObjectMaterials(true);
                 }
                 if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
+                // Share with the rest of the multiplayer room (no-op if we're
+                // the one currently applying a remote asset - guarded inside
+                // sendAssetUpdate via isApplyingRemote - so this never echoes).
+                if (window.multiplayerClient) multiplayerClient.sendAssetUpdate("normal", textureKey, normalName, dataUrl);
                 resolve();
             };
             img.onerror = () => resolve();
@@ -13007,6 +13012,7 @@ window.uiManager = {
         const texKey = first.userData.texture || "grid";
         // Unbind only — the decoded map stays in the vault so Undo can restore it.
         if (activeProjectNormalMaps[texKey]) delete activeProjectNormalMaps[texKey];
+        if (window.multiplayerClient) multiplayerClient.sendAssetRemove("normal", texKey);
         engine.blocks.forEach(obj => {
             if (obj.userData.texture === texKey) {
                 try {
@@ -13062,6 +13068,11 @@ window.uiManager = {
                     engine.updateObjectFromUI();
                     if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
                 }
+                // Share with the rest of the multiplayer room. Only for genuine
+                // user uploads (persist=true) - restoring a snapshot received
+                // from the network (persist=false) must not immediately bounce
+                // the same texture right back out to everyone.
+                if (persist && window.multiplayerClient) multiplayerClient.sendAssetUpdate("texture", matKey, texName, dataUrl);
                 resolve(tex);
             };
             img.onerror = err => reject(err);
@@ -15114,6 +15125,8 @@ window.multiplayerClient = {
         s.on("mp:map_update", data => this.onRemoteMapUpdate(data));
         s.on("mp:object_update", data => this.onRemoteObjectUpdate(data));
         s.on("mp:env_update", data => this.onRemoteEnvUpdate(data));
+        s.on("mp:asset_add", data => this.onRemoteAssetAdd(data));
+        s.on("mp:asset_remove", data => this.onRemoteAssetRemove(data));
         s.on("mp:room_revision", data => { if (this.room && data.roomId === this.room.id) { this.room.revision = data.revision; this.room.updatedAt = data.updatedAt; this.renderCurrentRoom(); } });
         s.on("mp:camera_update", data => this.updateRemoteAvatar(data.playerId, data.camera));
         s.on("mp:chat", msg => this.onChat(msg));
@@ -15304,6 +15317,91 @@ window.multiplayerClient = {
         this.renderCurrentRoom();
     },
 
+    // Called right after a texture/normal map finishes decoding locally
+    // (addTextureToEngine / applyNormalMapToTexture). Ships the raw image to
+    // everyone else in the room so it shows up for them without waiting for
+    // a full map resync (which never carries assets - see collectMapData's
+    // includeAssets: false on every regular edit sync).
+    sendAssetUpdate: function(kind, key, name, dataUrl) {
+        if (!this.room || !this.socket?.connected || this.isApplyingRemote || !this.canEdit()) return;
+        this.socket.emit("mp:asset_add", { roomId: this.room.id, kind, key, name, dataUrl }, res => {
+            if (res && !res.ok) this.setStatus(res.error || "Texture share failed", "error");
+        });
+    },
+
+    // Called after a texture/normal map is deleted locally and no cube
+    // references it anymore - tells everyone else to drop it too so it
+    // doesn't keep sitting in their memory for the rest of the session.
+    sendAssetRemove: function(kind, key) {
+        if (!this.room || !this.socket?.connected || this.isApplyingRemote || !this.canEdit()) return;
+        this.socket.emit("mp:asset_remove", { roomId: this.room.id, kind, key });
+    },
+
+    onRemoteAssetAdd: async function(data) {
+        if (!this.room || data.roomId !== this.room.id || data.authorId === this.self?.id) return;
+        if (!data.key || !data.dataUrl) return;
+        this.isApplyingRemote = true;
+        try {
+            if (data.kind === "normal") {
+                await uiManager.applyNormalMapToTexture(data.key, data.name || data.key, data.dataUrl);
+            } else {
+                await uiManager.addTextureToEngine(data.key, data.name || data.key, data.dataUrl, false, false);
+            }
+        } catch (e) {
+            console.warn("[MP] Failed to apply remote texture", data.key, e);
+        } finally {
+            this.isApplyingRemote = false;
+        }
+    },
+
+    onRemoteAssetRemove: function(data) {
+        if (!this.room || data.roomId !== this.room.id || data.authorId === this.self?.id) return;
+        if (!data.key) return;
+        if (data.kind === "normal") {
+            if (activeProjectNormalMaps[data.key]) delete activeProjectNormalMaps[data.key];
+        } else {
+            const tex = activeProjectCustomTextures[data.key];
+            if (tex) { try { tex.dispose?.(); } catch (e) {} delete activeProjectCustomTextures[data.key]; }
+        }
+    },
+
+    // Frees any custom texture / normal map that no cube on the current map
+    // references anymore. Guests receive every texture the host has ever
+    // uploaded this session; without this, textures that were swapped out or
+    // whose cubes were deleted would just pile up in memory forever on every
+    // client instead of only where they're actually in use.
+    pruneUnusedRemoteAssets: function() {
+        // Only guests garbage-collect: they only ever receive textures because
+        // someone else uploaded them, so once nothing on the map uses one
+        // there's no reason to keep holding it in memory. The host is the
+        // owner of their own texture library and may keep unused entries
+        // around on purpose (e.g. about to reuse one), so it's left alone.
+        if (!this.room || this.self?.role === "admin") return;
+        const usedKeys = new Set;
+        (engine.blocks || []).forEach(obj => {
+            const key = obj?.userData?.texture;
+            if (key) usedKeys.add(key);
+        });
+        for (const key in activeProjectCustomTextures) {
+            if (usedKeys.has(key)) continue;
+            const tex = activeProjectCustomTextures[key];
+            try { tex?.dispose?.(); } catch (e) {}
+            delete activeProjectCustomTextures[key];
+        }
+        for (const key in activeProjectNormalMaps) {
+            if (usedKeys.has(key)) continue;
+            const nm = activeProjectNormalMaps[key];
+            try { nm?.texture?.dispose?.(); } catch (e) {}
+            delete activeProjectNormalMaps[key];
+        }
+        const sel = document.getElementById("sel-texture");
+        if (sel) {
+            Array.from(sel.options).forEach(opt => {
+                if (opt.value.startsWith("custom_") && !usedKeys.has(opt.value) && !activeProjectCustomTextures[opt.value]) opt.remove();
+            });
+        }
+    },
+
     collectMapData: function(options = {}) {
         const includeAssets = options.includeAssets !== false;
         this.ensureNetIds();
@@ -15481,6 +15579,7 @@ window.multiplayerClient = {
         engine.updateLocalReflections?.(true);
         engine.updateSelectionPanels?.();
         this._restoreSelectionByIds(selectedIds);
+        this.pruneUnusedRemoteAssets();
         this.setStatus("Map synced fast: " + reason, "ok");
     },
 
@@ -15497,6 +15596,7 @@ window.multiplayerClient = {
                 const hasRemoteAssets = !!(mapData && (mapData.projectCustomTextures || mapData.projectNormalMaps));
                 await engine.loadMapData(this.mergeMapDataWithLocalGraphics(mapData || { blocks: [], lights: [], env: null }), null, { preserveAssets: !hasRemoteAssets });
                 engine.deselect();
+                this.pruneUnusedRemoteAssets();
                 this.setStatus("Map synced: " + reason, "ok");
             }
         } catch (e) {
