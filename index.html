@@ -15810,12 +15810,13 @@ window.multiplayerClient = {
     },
 
     // Returns true if a modal/overlay element is actually visible on screen right now.
-    // Uses offsetParent (cheap, no style recalculation) instead of getComputedStyle to
-    // avoid forcing layout on every poll tick.
+    // Note: these modals are all `position:fixed`, so offsetParent is unreliable (it's
+    // null for fixed-position elements in most browsers) — getComputedStyle is required.
     _isActivityElementVisible: function(el) {
         if (!el) return false;
         if (el.classList && el.classList.contains("hidden")) return false;
-        return el.offsetParent !== null || el === document.body;
+        const cs = window.getComputedStyle(el);
+        return cs.display !== "none" && cs.visibility !== "hidden" && Number(cs.opacity) !== 0;
     },
 
     // Scans the ACTIVITY_REGISTRY for the highest-priority currently-visible modal.
