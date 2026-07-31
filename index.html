@@ -13068,6 +13068,28 @@ window.uiManager = {
                     engine.updateObjectFromUI();
                     if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
                 }
+                // When this texture was received from the network (persist=false)
+                // cubes with this key may already exist but render "grid" because
+                // they were spawned before the asset arrived. Rebuild their
+                // materials now that the decoded texture is in activeProjectCustomTextures.
+                if (!persist && engine && engine.blocks) {
+                    let refreshed = false;
+                    engine.blocks.forEach(obj => {
+                        if (obj?.userData?.texture === matKey) {
+                            try {
+                                const old = obj.material;
+                                obj.material = engine.acquireCubeMaterialFor(obj);
+                                engine.releaseCubeMaterial?.(old);
+                                engine.updateCubeUVs?.(obj);
+                                refreshed = true;
+                            } catch (e) {}
+                        }
+                    });
+                    if (refreshed) {
+                        engine.recalculateManualLightSpecular?.();
+                        engine.updateLocalReflections?.(true);
+                    }
+                }
                 // Share with the rest of the multiplayer room. Only for genuine
                 // user uploads (persist=true) - restoring a snapshot received
                 // from the network (persist=false) must not immediately bounce
@@ -15189,7 +15211,9 @@ window.multiplayerClient = {
 
     leaveRoom: function(emit = true) {
         if (emit && this.socket?.connected) this.socket.emit("mp:leave_room");
-        this.room = null; this.self = null; this.players = []; this.chat = []; this.clearAvatars(); this.renderAll();
+        this.room = null; this.self = null; this.players = []; this.chat = []; this.clearAvatars();
+        this._pendingTextureRefreshObjs = new Map();
+        this.renderAll();
     },
 
     updatePermissions: function() {
@@ -15346,6 +15370,55 @@ window.multiplayerClient = {
                 await uiManager.applyNormalMapToTexture(data.key, data.name || data.key, data.dataUrl);
             } else {
                 await uiManager.addTextureToEngine(data.key, data.name || data.key, data.dataUrl, false, false);
+            }
+            // After the asset is decoded, rebuild materials for every cube that
+            // references this key — they may have been created before this asset
+            // arrived (race: mp:object_update can be processed before mp:asset_add
+            // finishes async image decode) and would otherwise keep showing "grid".
+            const key = data.key;
+            let needsSync = false;
+
+            // First drain the explicit pending-refresh queue populated by
+            // onRemoteObjectUpdate when a cube arrived before its texture did.
+            if (this._pendingTextureRefreshObjs && this._pendingTextureRefreshObjs.has(key)) {
+                this._pendingTextureRefreshObjs.get(key).forEach(obj => {
+                    try {
+                        const oldMat = obj.material;
+                        obj.material = engine.acquireCubeMaterialFor(obj);
+                        engine.releaseCubeMaterial?.(oldMat);
+                        engine.updateCubeUVs?.(obj);
+                        obj.updateMatrixWorld?.(true);
+                        needsSync = true;
+                    } catch (e) {
+                        console.warn("[MP] Pending material refresh failed", key, e);
+                    }
+                });
+                this._pendingTextureRefreshObjs.delete(key);
+            }
+
+            // Also do a full scan in case any cube was missed (e.g. loaded via
+            // mp:joined mapData that already had the cube but no asset entry).
+            (engine.blocks || []).forEach(obj => {
+                if (!obj || !obj.userData) return;
+                if (obj.userData.texture !== key) return;
+                try {
+                    const oldMat = obj.material;
+                    obj.material = engine.acquireCubeMaterialFor(obj);
+                    engine.releaseCubeMaterial?.(oldMat);
+                    engine.updateCubeUVs?.(obj);
+                    obj.updateMatrixWorld?.(true);
+                    needsSync = true;
+                } catch (e) {
+                    console.warn("[MP] Material refresh after asset_add failed", key, e);
+                }
+            });
+
+            if (needsSync) {
+                engine.recalculateManualLightSpecular?.();
+                engine.updateLocalReflections?.(true);
+                // Also refresh the selection panel so the texture thumb / normal-map
+                // label shows the newly arrived asset immediately.
+                if (engine.selectedBlocks?.length) engine.updateUIFromObject?.();
             }
         } catch (e) {
             console.warn("[MP] Failed to apply remote texture", data.key, e);
@@ -15711,7 +15784,18 @@ window.multiplayerClient = {
                     this.isApplyingRemote = false;
                 }
                 obj = this._buildNetObjectMap().get(id);
-                if (obj) obj.updateMatrixWorld?.(true);
+                if (obj) {
+                    obj.updateMatrixWorld?.(true);
+                    // If the cube references a custom texture that hasn't been
+                    // decoded yet (asset_add is async), queue it for a material
+                    // rebuild once the asset arrives via onRemoteAssetAdd.
+                    const texKey = obj.userData?.texture;
+                    if (texKey && texKey.startsWith("custom_") && !activeProjectCustomTextures[texKey]) {
+                        if (!this._pendingTextureRefreshObjs) this._pendingTextureRefreshObjs = new Map();
+                        if (!this._pendingTextureRefreshObjs.has(texKey)) this._pendingTextureRefreshObjs.set(texKey, new Set());
+                        this._pendingTextureRefreshObjs.get(texKey).add(obj);
+                    }
+                }
                 return;
             }
             if (this._hasVisualOrStructuralChange(obj, objData)) this._applySerializedToExisting(obj, objData);
