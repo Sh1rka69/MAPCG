@@ -15139,7 +15139,7 @@ window.multiplayerClient = {
         s.on("mp:env_update", data => this.onRemoteEnvUpdate(data));
         s.on("mp:room_revision", data => { if (this.room && data.roomId === this.room.id) { this.room.revision = data.revision; this.room.updatedAt = data.updatedAt; this.renderCurrentRoom(); } });
         s.on("mp:camera_update", data => this.updateRemoteAvatar(data.playerId, data.camera));
-        s.on("mp:activity_update", data => this.updateRemoteActivity(data.playerId, data.activity));
+        s.on("mp:activity_update", data => { console.log("[MAPCG] received mp:activity_update", data); this.updateRemoteActivity(data.playerId, data.activity); });
         s.on("mp:chat", msg => this.onChat(msg));
         s.on("mp:room_closed", data => { this.toast(data.reason || "Server closed", "error"); this.room = null; this.self = null; this.players = []; this.chat = []; this.clearAvatars(); this.renderAll(); });
         s.on("mp:kicked", data => { this.toast(data.reason || "Kicked", "error"); this.leaveRoom(false); });
@@ -15810,12 +15810,12 @@ window.multiplayerClient = {
     },
 
     // Returns true if a modal/overlay element is actually visible on screen right now.
+    // Uses offsetParent (cheap, no style recalculation) instead of getComputedStyle to
+    // avoid forcing layout on every poll tick.
     _isActivityElementVisible: function(el) {
         if (!el) return false;
         if (el.classList && el.classList.contains("hidden")) return false;
-        const cs = window.getComputedStyle(el);
-        if (cs.display === "none" || cs.visibility === "hidden" || Number(cs.opacity) === 0) return false;
-        return true;
+        return el.offsetParent !== null || el === document.body;
     },
 
     // Scans the ACTIVITY_REGISTRY for the highest-priority currently-visible modal.
@@ -15839,6 +15839,7 @@ window.multiplayerClient = {
     refreshActivity: function() {
         const activity = this.detectCurrentActivity();
         if (activity === this._currentActivity) return;
+        console.log("[MAPCG] activity changed:", this._currentActivity, "->", activity, "| connected:", !!this.socket?.connected, "| inRoom:", !!this.room);
         this._currentActivity = activity;
         if (!this.socket?.connected || !this.room) return;
         this.socket.emit("mp:activity_update", { activity });
@@ -15872,7 +15873,7 @@ window.multiplayerClient = {
         });
         bodyObserver.observe(document.body, { childList: true });
         // Safety net poll (covers any mutation path we didn't anticipate) — cheap, infrequent.
-        setInterval(() => this.refreshActivity(), 1000);
+        setInterval(() => this.refreshActivity(), 2500);
         this.refreshActivity();
     },
 
@@ -16049,6 +16050,7 @@ window.multiplayerClient = {
     // create their avatar and already know their last-known activity.
     updateRemoteActivity: function(playerId, activityKey) {
         if (!playerId || playerId === this.self?.id) return;
+        console.log("[MAPCG] updateRemoteActivity", playerId, activityKey, "avExists:", !!this.remoteAvatars.get(playerId));
         const av = this.remoteAvatars.get(playerId);
         const pInList = this.players.find(p => p.id === playerId);
         if (pInList) pInList.activity = activityKey || null;
