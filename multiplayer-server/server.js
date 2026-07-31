@@ -409,8 +409,20 @@ io.on('connection', socket => {
     const key = cleanText(payload.key, 80);
     if (!key) return cb?.({ ok: false, error: 'Invalid asset key.' });
     ensureMapContainers(room);
-    if (kind === 'normal') delete room.mapData.projectNormalMaps[key];
-    else delete room.mapData.projectCustomTextures[key];
+    // Only remove from the room's authoritative store if no block currently
+    // references this key. The client sends asset_remove only when it believes
+    // no cubes use it anymore, but there can be a lag between block deletions
+    // propagating and the prune check firing.  A joining player who receives
+    // mapData with a block that points to a missing texture would see "grid"
+    // for the life of that session, so we keep the asset alive server-side
+    // when blocks still reference it.
+    const isStillUsed = (room.mapData.blocks || []).some(b =>
+      b && b.userData && b.userData.texture === key
+    );
+    if (!isStillUsed) {
+      if (kind === 'normal') delete room.mapData.projectNormalMaps[key];
+      else delete room.mapData.projectCustomTextures[key];
+    }
     room.updatedAt = now();
     socket.to(room.id).emit('mp:asset_remove', { roomId: room.id, kind, key, authorId: socket.id });
     cb?.({ ok: true });
