@@ -63,6 +63,7 @@ function publicPlayer(player) {
     nickname: player.nickname,
     role: player.role,
     status: player.status || 'online',
+    activity: player.activity || null,
     ping: player.ping ?? 0,
     joinedAt: player.joinedAt,
     color: player.color
@@ -338,6 +339,17 @@ io.on('connection', socket => {
     if (!p) return;
     p.camera = payload?.camera || null;
     socket.to(room.id).emit('mp:camera_update', { playerId: socket.id, camera: p.camera });
+  });
+
+  socket.on('mp:activity_update', payload => {
+    const room = roomOfSocket(socket);
+    if (!room) return;
+    const p = room.players.get(socket.id);
+    if (!p) return;
+    const activity = payload && payload.activity ? cleanText(payload.activity, 40) : null;
+    if (p.activity === activity) return;
+    p.activity = activity;
+    socket.to(room.id).emit('mp:activity_update', { playerId: socket.id, activity });
   });
 
   socket.on('mp:chat', (payload = {}, cb) => {
