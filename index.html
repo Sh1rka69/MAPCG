@@ -1,16 +1,61 @@
+<!--
+  MMCG Web Engine — performance-optimized build
+  ---------------------------------------------------------------
+  What changed (all of it quality-preserving, PC & mobile):
+    LOADING
+      • Removed ~700 KB of unnecessary CDN JS (Tailwind Play CDN ~407 KB,
+        vConsole ~286 KB) — Tailwind utilities are now precompiled into a
+        static 13 KB stylesheet; vConsole loads on demand.
+      • jszip + localforage are deferred (only save/load/export need them).
+      • Removed Cloudflare challenge/beacon junk injected on save.
+      • Preconnect / dns-prefetch + modulepreload warm the three.js CDN
+        module graph (13 modules) during HTML parse.
+    FPS (runtime)
+      • applyRuntimePostFxQuality() no longer calls getElementById() 3x
+        every frame — cached after first access.
+      • Mobile: bloom mip chain runs at ¼ resolution (was ½) — visually
+        identical soft glow, ~4x less bloom fill-rate on phone GPUs.
+      • Environment-reflection cubemap captures are skipped while you drag
+        or move the camera, so they no longer cause periodic stutter;
+        captured quality is unchanged.
+      • theme-color meta matches the app background in mobile browser chrome.
+  ---------------------------------------------------------------
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0a0c">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230a0a0c'/%3E%3Crect x='3' y='3' width='10' height='10' fill='%23ff8a3d'/%3E%3C/svg%3E">
     <title>MMCG Web Engine</title>
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Warm up the ES-module CDN graph while the HTML parses. -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" crossorigin="anonymous">
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js" crossorigin="anonymous">
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/TransformControls.js" crossorigin="anonymous">
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/PointerLockControls.js" crossorigin="anonymous">
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/objects/Sky.js" crossorigin="anonymous">
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js" crossorigin="anonymous">
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/exporters/GLTFExporter.js" crossorigin="anonymous">
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/OBJLoader.js" crossorigin="anonymous">
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/utils/BufferGeometryUtils.js" crossorigin="anonymous">
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js" crossorigin="anonymous">
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/RenderPass.js" crossorigin="anonymous">
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js" crossorigin="anonymous">
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/ShaderPass.js" crossorigin="anonymous">
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <!-- Feature libs are DEFERRED: only save/load/export need them, -->
+    <!-- never first paint or the 3D viewport. -->
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
 
-    <script src="https://unpkg.com/vconsole@3.15.1/dist/vconsole.min.js"></script>
+    <!-- vConsole (debug console) is a dev tool and no longer loads on
+         startup; it is fetched on demand the first time you open it. -->
     <style>
         .hidden { display: none !important; }
 
@@ -1106,7 +1151,6 @@
         .td-row { display: flex; align-items: center; gap: 8px; }
         .td-grow { flex: 1; min-width: 0; }
 
-
         #btn-world-pause-toggle:hover { filter: brightness(1.35); }
         #btn-world-pause-toggle[aria-pressed="true"] { box-shadow: 0 0 0 1px rgba(255,138,61,0.35) inset; }
 
@@ -1262,10 +1306,18 @@
             }
         }
     </script>
+
+    <!-- ============================================================ -->
+    <!-- OPTIMIZED BUILD: Tailwind Play CDN (~400 KB JS + runtime JIT) -->
+    <!-- replaced by this precompiled, identical static stylesheet.   -->
+    <!-- Placed LAST in <head> to match the CDN’s cascade order.     -->
+    <!-- ============================================================ -->
+    <style>
+*,:after,:before{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/*! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com*/*,:after,:before{box-sizing:border-box;border:0 solid #e5e7eb}:after,:before{--tw-content:""}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;-o-tab-size:4;tab-size:4;font-family:ui-sans-serif,system-ui,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0}fieldset,legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::-moz-placeholder,textarea::-moz-placeholder{opacity:1;color:#9ca3af}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.pointer-events-none{pointer-events:none}.pointer-events-auto{pointer-events:auto}.visible{visibility:visible}.fixed{position:fixed}.absolute{position:absolute}.relative{position:relative}.inset-0{inset:0}.bottom-0{bottom:0}.bottom-1\.5{bottom:.375rem}.bottom-10{bottom:2.5rem}.bottom-2{bottom:.5rem}.bottom-4{bottom:1rem}.left-1\.5{left:.375rem}.left-1\/2{left:50%}.left-2{left:.5rem}.left-4{left:1rem}.right-0{right:0}.right-1\.5{right:.375rem}.right-2{right:.5rem}.right-4{right:1rem}.top-0{top:0}.top-1\.5{top:.375rem}.top-1\/2{top:50%}.top-2{top:.5rem}.top-4{top:1rem}.top-\[calc\(100\%\+6px\)\]{top:calc(100% + 6px)}.z-30{z-index:30}.z-40{z-index:40}.z-50{z-index:50}.z-\[100\]{z-index:100}.z-\[110\]{z-index:110}.z-\[120\]{z-index:120}.z-\[150\]{z-index:150}.z-\[60\]{z-index:60}.z-\[70\]{z-index:70}.col-span-2{grid-column:span 2/span 2}.mx-auto{margin-left:auto;margin-right:auto}.mb-1{margin-bottom:.25rem}.mb-2{margin-bottom:.5rem}.mb-3{margin-bottom:.75rem}.mb-4{margin-bottom:1rem}.mb-5{margin-bottom:1.25rem}.mb-8{margin-bottom:2rem}.ml-1{margin-left:.25rem}.ml-auto{margin-left:auto}.ml-px{margin-left:1px}.mr-1{margin-right:.25rem}.mr-2{margin-right:.5rem}.mt-0\.5{margin-top:.125rem}.mt-1{margin-top:.25rem}.mt-2{margin-top:.5rem}.mt-3{margin-top:.75rem}.mt-6{margin-top:1.5rem}.block{display:block}.flex{display:flex}.grid{display:grid}.hidden{display:none}.h-1\.5{height:.375rem}.h-10{height:2.5rem}.h-12{height:3rem}.h-3{height:.75rem}.h-7{height:1.75rem}.h-8{height:2rem}.h-9{height:2.25rem}.h-\[40px\]{height:40px}.h-full{height:100%}.h-px{height:1px}.max-h-\[88vh\]{max-height:88vh}.w-0{width:0}.w-1\.5{width:.375rem}.w-1\/2{width:50%}.w-10{width:2.5rem}.w-12{width:3rem}.w-3{width:.75rem}.w-32{width:8rem}.w-6{width:1.5rem}.w-7{width:1.75rem}.w-72{width:18rem}.w-8{width:2rem}.w-9{width:2.25rem}.w-96{width:24rem}.w-\[260px\]{width:260px}.w-\[330px\]{width:330px}.w-\[420px\]{width:420px}.w-\[440px\]{width:440px}.w-\[560px\]{width:560px}.w-\[600px\]{width:600px}.w-full{width:100%}.min-w-0{min-width:0}.max-w-\[140px\]{max-width:140px}.max-w-\[80vw\]{max-width:80vw}.max-w-\[900px\]{max-width:900px}.max-w-\[92vw\]{max-width:92vw}.max-w-\[94vw\]{max-width:94vw}.flex-1{flex:1 1 0%}.flex-shrink-0{flex-shrink:0}.-translate-x-1\/2{--tw-translate-x:-50%}.-translate-x-1\/2,.-translate-y-1\/2{transform:translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.-translate-y-1\/2{--tw-translate-y:-50%}.cursor-pointer{cursor:pointer}.select-none{-webkit-user-select:none;-moz-user-select:none;user-select:none}.grid-cols-1{grid-template-columns:repeat(1,minmax(0,1fr))}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-cols-\[20px_1fr_1fr_1fr\]{grid-template-columns:20px 1fr 1fr 1fr}.flex-row{flex-direction:row}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.items-start{align-items:flex-start}.items-center{align-items:center}.justify-end{justify-content:flex-end}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.gap-0\.5{gap:.125rem}.gap-1{gap:.25rem}.gap-1\.5{gap:.375rem}.gap-2{gap:.5rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}.gap-px{gap:1px}.self-center{align-self:center}.overflow-hidden{overflow:hidden}.overflow-y-auto{overflow-y:auto}.overflow-x-hidden{overflow-x:hidden}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:.5rem}.border{border-width:1px}.border-b{border-bottom-width:1px}.border-t{border-top-width:1px}.border-\[var\(--td-border\)\]{border-color:var(--td-border)}.border-\[var\(--td-border-strong\)\]{border-color:var(--td-border-strong)}.border-blue-400\/50{border-color:rgba(96,165,250,.5)}.border-blue-500{--tw-border-opacity:1;border-color:rgb(59 130 246/var(--tw-border-opacity,1))}.bg-\[\#0a0a0c\]{--tw-bg-opacity:1;background-color:rgb(10 10 12/var(--tw-bg-opacity,1))}.bg-\[\#ff8a3d\]{--tw-bg-opacity:1;background-color:rgb(255 138 61/var(--tw-bg-opacity,1))}.bg-\[var\(--td-bg-1\)\]{background-color:var(--td-bg-1)}.bg-amber-500\/90{background-color:rgba(245,158,11,.9)}.bg-blue-500\/15{background-color:rgba(59,130,246,.15)}.bg-blue-600\/30{background-color:rgba(37,99,235,.3)}.bg-blue-600\/90{background-color:rgba(37,99,235,.9)}.bg-blue-700\/90{background-color:rgba(29,78,216,.9)}.bg-gray-800{--tw-bg-opacity:1;background-color:rgb(31 41 55/var(--tw-bg-opacity,1))}.bg-green-600\/90{background-color:rgba(22,163,74,.9)}.bg-green-700\/90{background-color:rgba(21,128,61,.9)}.bg-purple-600\/90{background-color:rgba(147,51,234,.9)}.bg-transparent{background-color:transparent}.p-1\.5{padding:.375rem}.p-2{padding:.5rem}.p-3{padding:.75rem}.p-4{padding:1rem}.p-5{padding:1.25rem}.p-6{padding:1.5rem}.px-1\.5{padding-left:.375rem;padding-right:.375rem}.px-2{padding-left:.5rem;padding-right:.5rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-4{padding-left:1rem;padding-right:1rem}.px-5{padding-left:1.25rem;padding-right:1.25rem}.px-6{padding-left:1.5rem;padding-right:1.5rem}.px-7{padding-left:1.75rem;padding-right:1.75rem}.px-8{padding-left:2rem;padding-right:2rem}.py-0\.5{padding-top:.125rem;padding-bottom:.125rem}.py-1{padding-top:.25rem;padding-bottom:.25rem}.py-1\.5{padding-top:.375rem;padding-bottom:.375rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}.py-2\.5{padding-top:.625rem;padding-bottom:.625rem}.py-3{padding-top:.75rem;padding-bottom:.75rem}.py-4{padding-top:1rem;padding-bottom:1rem}.py-6{padding-top:1.5rem;padding-bottom:1.5rem}.pb-2{padding-bottom:.5rem}.pb-4{padding-bottom:1rem}.pb-5{padding-bottom:1.25rem}.pb-7{padding-bottom:1.75rem}.pl-2{padding-left:.5rem}.pl-7{padding-left:1.75rem}.pr-2{padding-right:.5rem}.pr-6{padding-right:1.5rem}.pt-4{padding-top:1rem}.pt-5{padding-top:1.25rem}.pt-6{padding-top:1.5rem}.text-center{text-align:center}.text-right{text-align:right}.text-2xl{font-size:1.5rem;line-height:2rem}.text-3xl{font-size:1.875rem;line-height:2.25rem}.text-\[10\.5px\]{font-size:10.5px}.text-\[10px\]{font-size:10px}.text-\[11px\]{font-size:11px}.text-\[9px\]{font-size:9px}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:.875rem;line-height:1.25rem}.text-xl{font-size:1.25rem;line-height:1.75rem}.text-xs{font-size:.75rem;line-height:1rem}.font-bold{font-weight:700}.font-semibold{font-weight:600}.uppercase{text-transform:uppercase}.leading-\[1\.4\]{line-height:1.4}.leading-none{line-height:1}.leading-relaxed{line-height:1.625}.leading-snug{line-height:1.375}.leading-tight{line-height:1.25}.tracking-\[0\.08em\]{letter-spacing:.08em}.tracking-\[0\.12em\]{letter-spacing:.12em}.tracking-\[0\.14em\]{letter-spacing:.14em}.tracking-\[0\.16em\]{letter-spacing:.16em}.tracking-\[0\.1em\]{letter-spacing:.1em}.tracking-\[0\.2em\]{letter-spacing:.2em}.tracking-\[0\.3em\]{letter-spacing:.3em}.tracking-wider{letter-spacing:.05em}.text-\[\#ff8a3d\]{--tw-text-opacity:1;color:rgb(255 138 61/var(--tw-text-opacity,1))}.text-\[var\(--td-text\)\]{color:var(--td-text)}.text-\[var\(--td-text-dim\)\]{color:var(--td-text-dim)}.text-blue-400{--tw-text-opacity:1;color:rgb(96 165 250/var(--tw-text-opacity,1))}.text-gray-500{--tw-text-opacity:1;color:rgb(107 114 128/var(--tw-text-opacity,1))}.text-gray-600{--tw-text-opacity:1;color:rgb(75 85 99/var(--tw-text-opacity,1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255/var(--tw-text-opacity,1))}.outline-none{outline:2px solid transparent;outline-offset:2px}.transition{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,-webkit-backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter,-webkit-backdrop-filter;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.transition-all{transition-property:all;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.transition-opacity{transition-property:opacity;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.duration-300{transition-duration:.3s}.duration-500{transition-duration:.5s}.hover\:text-white:hover{--tw-text-opacity:1;color:rgb(255 255 255/var(--tw-text-opacity,1))}@media (min-width:768px){.md\:max-w-\[240px\]{max-width:240px}.md\:p-8{padding:2rem}}@media (min-width:1024px){.lg\:flex{display:flex}}
+    </style>
 </head>
 <body onclick="audioEngine.init()">
 <div id="flash-overlay"></div>
-
 
     <div id="loading-screen" class="ui-scale-layer hidden fixed inset-0 z-[100] bg-[#0a0a0c] flex flex-col items-center justify-center transition-opacity duration-500 pointer-events-auto">
         <h2 class="text-3xl text-white mb-8 font-semibold tracking-[0.3em] uppercase text-center">Loading Engine</h2>
@@ -1276,7 +1328,6 @@
         <div id="loading-percent" class="text-[#ff8a3d] mt-2 text-2xl font-semibold mono">0%</div>
         <p id="loading-detail" class="text-gray-600 mt-2 text-[11px] tracking-[0.1em] text-center mono" style="min-height: 1.2em;"></p>
     </div>
-
 
     <div id="main-menu" class="ui-scale-layer menu-bg fixed inset-0 z-50 flex modal-enter">
 
@@ -1291,7 +1342,6 @@
                     <span class="text-xl font-semibold tracking-[0.2em] text-white leading-none uppercase">MapCG</span>
                 </div>
             </div>
-
 
             <div class="flex-1 py-3 flex flex-col gap-px overflow-y-auto custom-scrollbar">
                 <button onclick="uiManager.showNewProjectModal()" class="gbox-sidebar-btn">
@@ -1327,7 +1377,6 @@
                 </button>
             </div>
 
-
             <div class="py-2 border-t border-[var(--td-border)] flex flex-col gap-px flex-shrink-0">
                 <button onclick="(window.uiManager ? uiManager.openHelpGuideModal() : document.getElementById('help-guide-modal').classList.remove('hidden'))" class="gbox-sidebar-btn" style="font-size: 14px; padding: 10px 18px;">
                     <span class="ui-icon ui-icon-mask ui-icon-anim" data-icon="Question"  alt="" aria-hidden="true"></span>
@@ -1355,10 +1404,8 @@
             </div>
         </div>
 
-
         <div class="flex-1 p-6 md:p-8 overflow-y-auto overflow-x-hidden custom-scrollbar min-w-0" id="project-list-container"></div>
     </div>
-
 
     <div id="new-project-modal" class="ui-scale-layer hidden fixed inset-0 z-[60] flex items-center justify-center pointer-events-auto" style="background: rgba(0,0,0,0.8);">
         <div class="bg-[var(--td-bg-1)] border border-[var(--td-border-strong)] w-[440px] max-w-[92vw] modal-enter">
@@ -1385,7 +1432,6 @@
         </div>
     </div>
 
-
     <div id="editor-ui" class="w-full h-full" style="display: none; position: fixed; inset: 0;">
         <canvas id="glcanvas"></canvas>
         <div id="marquee-select-box" style="display:none; position:fixed; z-index:40; pointer-events:none; border:2px solid #ffd83d; background:rgba(255,216,61,0.15); box-shadow:0 0 0 1px rgba(0,0,0,0.35);"></div>
@@ -1411,14 +1457,11 @@
 
             <div id="fps-counter" class="hidden absolute top-2 left-2 z-50 px-2 py-1 text-xs font-semibold pointer-events-none select-none mono" style="background: rgba(0,0,0,0.6); border: 1px solid var(--td-border); color: var(--td-ok);">FPS: 0</div>
 
-
             <button onclick="engine.applyPixelRatio(0.2); const pr = document.getElementById('setting-pixel-ratio'); if (pr) pr.value = 0.2; const lbl = document.getElementById('pixel-ratio-val'); if (lbl) lbl.innerText = '0.20x';" class="absolute bottom-2 left-2 z-50 px-2 py-1 text-xs font-semibold pointer-events-auto select-none transition" style="background: rgba(0,0,0,0.6); border: 1px solid var(--td-border); color: var(--td-text-dim);" title="Set Pixel Scale to 0.20x">MIN</button>
-
 
             <div id="mobile-joystick" aria-hidden="true">
                 <div id="mobile-joystick-knob"></div>
             </div>
-
 
             <div class="ui-panel h-12 w-full flex items-center justify-between px-3 pointer-events-auto z-40 relative" style="border-bottom: 1px solid var(--td-border);">
                 <div class="flex gap-1 h-full items-center">
@@ -1450,7 +1493,6 @@
                             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M13 6l4 4-4 4M17 10H7a4 4 0 000 8"/></svg>
                         </button>
                     </div>
-
 
                     <button id="btn-world-pause-toggle" onclick="engine.toggleWorldPause()" title="Pause World (Freeze Time)" aria-label="Pause World" aria-pressed="false" class="w-8 h-8 flex items-center justify-center transition ml-1" style="background: transparent; border: 1px solid var(--td-border); color: var(--td-text-dim);" type="button">
 
@@ -1494,9 +1536,7 @@
                 </div>
             </div>
 
-
             <div class="flex-1 w-full relative pointer-events-none z-30">
-
 
                 <div class="absolute top-4 right-4 flex gap-2 pointer-events-auto">
                     <button onclick="engine.addSpawnPoint()" class="px-3 py-2 text-xs flex items-center gap-2 transition uppercase tracking-[0.1em]" style="background: rgba(94,196,110,0.12); border: 1px solid rgba(94,196,110,0.4); color: var(--td-ok);" onmouseover="this.style.background='rgba(94,196,110,0.2)'" onmouseout="this.style.background='rgba(94,196,110,0.12)'">
@@ -1540,7 +1580,6 @@
                     </div>
                 </div>
 
-
                 <div class="absolute bottom-4 left-4 pointer-events-auto flex flex-col gap-1 items-start">
                     <button onclick="engine.groupSelectedBlocks()" id="btn-group" class="hidden px-3 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition uppercase tracking-[0.1em] w-32" style="background: rgba(94,196,110,0.12); border: 1px solid rgba(94,196,110,0.4); color: var(--td-ok);" onmouseover="this.style.background='rgba(94,196,110,0.2)'" onmouseout="this.style.background='rgba(94,196,110,0.12)'">
                         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><rect x="3" y="3" width="14" height="14"/></svg>
@@ -1562,7 +1601,6 @@
                     </div>
                 </div>
 
-
                 <div id="right-sidebar" class="absolute right-0 top-0 bottom-0 w-[260px] pointer-events-auto overflow-y-auto py-3 px-2 custom-scrollbar hidden" style="background: var(--td-bg-panel); border-left: 1px solid var(--td-border);">
 
                     <div class="flex flex-col gap-3">
@@ -1583,7 +1621,6 @@
                                 </button>
                             </div>
 
-
                             <div class="grid grid-cols-[20px_1fr_1fr_1fr] gap-1 items-center text-sm mono">
                                 <span style="color: var(--td-text-muted); text-align: center; font-size: 10px;">P</span>
                                 <input type="number" id="inp-pos-x" step="0.5" class="td-input text-center py-1.5" style="color: #ff7a7a;" value="0.000">
@@ -1601,7 +1638,6 @@
                                 <input type="number" id="inp-sca-z" step="0.5" class="td-input text-center py-1.5" value="1.000">
                             </div>
                         </div>
-
 
                         <div id="material-panel" class="p-3 flex flex-col gap-2 text-sm transition" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
                             <label data-i18n="cubeMaterial" class="td-label">Cube Material (Tag)</label>
@@ -1687,7 +1723,6 @@
                             </div>
                         </div>
 
-
                         <div id="light-panel" class="hidden p-3 flex flex-col gap-2 text-sm transition" style="background: var(--td-bg-1); border: 1px solid rgba(255,184,74,0.4);">
                             <div class="flex items-center justify-between pb-2" style="border-bottom: 1px solid rgba(255,184,74,0.2);">
                                 <h3 class="font-semibold uppercase tracking-[0.12em] flex items-center gap-2" style="color: var(--td-warn); font-size: 11px;">
@@ -1757,7 +1792,6 @@
                 </div>
             </div>
 
-
             <div id="bottom-object-bar" class="ui-panel h-12 w-full flex pointer-events-auto z-40 relative hidden" style="border-top: 1px solid var(--td-border);">
                 <button onclick="engine.deselect()" class="btn-bottom flex-1 flex items-center justify-center gap-2 text-xs uppercase tracking-[0.1em]" style="color: var(--td-text-dim);" onmouseover="this.style.background='rgba(255,255,255,0.04)'; this.style.color='white'" onmouseout="this.style.background='transparent'; this.style.color='var(--td-text-dim)'">
                     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><path d="M5 5l10 10M15 5L5 15"/></svg>
@@ -1777,7 +1811,6 @@
                 </button>
             </div>
         </div>
-
 
         <div id="export-modal" class="ui-scale-layer hidden fixed inset-0 z-[60] flex items-center justify-center pointer-events-auto" style="background: rgba(0,0,0,0.75);">
             <div class="w-[600px] max-w-[94vw] flex flex-col relative modal-enter" style="background: var(--td-bg-1); border: 1px solid var(--td-border-strong);">
@@ -1898,7 +1931,6 @@
             </div>
         </div>
 
-
         <div id="bake-progress-modal" class="ui-scale-layer hidden fixed inset-0 z-[70] flex items-center justify-center pointer-events-auto" style="background: rgba(0,0,0,0.8);">
             <div class="w-[420px] flex flex-col relative modal-enter p-6 text-center" style="background: var(--td-bg-1); border: 1px solid var(--td-border-strong);">
                 <div class="w-10 h-10 mx-auto mb-3 flex items-center justify-center" style="background: var(--td-accent-dim); border: 1px solid rgba(255,138,61,0.4);">
@@ -1911,7 +1943,6 @@
                 </div>
             </div>
         </div>
-
 
         <div id="exit-dialog-modal" class="ui-scale-layer hidden fixed inset-0 z-[70] flex items-center justify-center pointer-events-auto" style="background: rgba(0,0,0,0.8);">
             <div class="w-[420px] flex flex-col relative modal-enter p-6 text-center" style="background: var(--td-bg-1); border: 1px solid var(--td-warn);">
@@ -1927,7 +1958,6 @@
             </div>
         </div>
 
-
         <div id="help-guide-modal" class="ui-scale-layer hidden fixed inset-0 z-[110] flex flex-col pointer-events-auto" style="background: var(--td-bg-0);">
 
             <canvas id="help-guide-bg-canvas" style="position:absolute; inset:0; width:100%; height:100%; z-index:0; pointer-events:none; display:block;"></canvas>
@@ -1939,7 +1969,6 @@
                     </h2>
                     <button onclick="(window.uiManager ? uiManager.closeHelpGuideModal() : document.getElementById('help-guide-modal').classList.add('hidden'))" class="w-7 h-7 flex items-center justify-center text-lg transition" style="color: var(--td-text-dim);" onmouseover="this.style.color='var(--td-danger)'" onmouseout="this.style.color='var(--td-text-dim)'"><span class="ui-icon ui-icon-mask" data-icon="Close"  alt="" style="width:13px;height:13px;object-fit:contain;"></span></button>
                 </div>
-
 
                 <div class="flex flex-wrap gap-1 px-5 py-3 flex-shrink-0" style="border-bottom: 1px solid var(--td-border); background: var(--td-bg-0);">
                     <span class="text-[10px] uppercase tracking-[0.12em] self-center mr-1" style="color: var(--td-text-muted);">Sections:</span>
@@ -1958,7 +1987,6 @@
                 <div class="flex-1 overflow-y-auto custom-scrollbar">
                 <div class="flex flex-col gap-3 p-5 text-sm max-w-[900px] mx-auto w-full">
 
-
                     <div id="guide-section-about" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                         <div class="flex items-center gap-2 mb-2">
                             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><rect x="3" y="3" width="14" height="14" rx="1"/><path d="M7 8h6M7 11h4"/></svg>
@@ -1971,7 +1999,6 @@
                         </p>
                     </div>
 
-
                     <div class="p-4 flex items-center gap-3" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                         <div class="w-9 h-9 flex items-center justify-center flex-shrink-0" style="border: 1px solid var(--td-accent);">
                             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18" style="color: var(--td-accent);"><circle cx="10" cy="7" r="3.2"/><path d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
@@ -1981,7 +2008,6 @@
                             <div class="font-semibold" style="color: var(--td-text);">Sh1rka</div>
                         </div>
                     </div>
-
 
                     <div id="guide-section-basics" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                         <div class="flex items-center gap-2 mb-3">
@@ -2004,7 +2030,6 @@
                             </div>
                         </div>
                     </div>
-
 
                     <div id="guide-section-tools" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                         <div class="flex items-center gap-2 mb-3">
@@ -2035,7 +2060,6 @@
                         </div>
                     </div>
 
-
                     <div id="guide-section-shapes" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                         <div class="flex items-center gap-2 mb-3">
                             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><circle cx="7" cy="7" r="3"/><path d="M14 5l4 8h-8z"/></svg>
@@ -2056,7 +2080,6 @@
                             </div>
                         </div>
                     </div>
-
 
                     <div id="guide-section-materials" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                         <div class="flex items-center gap-2 mb-3">
@@ -2083,7 +2106,6 @@
                         </div>
                     </div>
 
-
                     <div id="guide-section-settings" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                         <div class="flex items-center gap-2 mb-3">
                             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><circle cx="10" cy="10" r="3"/><path d="M10 2v2M10 16v2M18 10h-2M4 10H2M15.5 4.5l-1.4 1.4M5.9 14.1l-1.4 1.4M15.5 15.5l-1.4-1.4M5.9 5.9L4.5 4.5"/></svg>
@@ -2109,7 +2131,6 @@
                         </div>
                     </div>
 
-
                     <div id="guide-section-collection" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                         <div class="flex items-center gap-2 mb-3">
                             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg>
@@ -2125,7 +2146,6 @@
                             </div>
                         </div>
                     </div>
-
 
                     <div id="guide-section-io" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                         <div class="flex items-center gap-2 mb-3">
@@ -2152,7 +2172,6 @@
                         </div>
                     </div>
 
-
                     <div id="guide-section-keys" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                         <div class="flex items-center gap-2 mb-3">
                             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-accent); flex-shrink:0;"><rect x="2" y="5" width="16" height="10" rx="1"/><path d="M5 8h.01M8 8h.01M11 8h.01M14 8h.01M5 11h8"/></svg>
@@ -2169,7 +2188,6 @@
                             <div class="flex items-center justify-between p-1.5" style="background: var(--td-bg-1);"><span class="mono text-xs" style="color: var(--td-accent-bright);">Delete</span><span class="text-xs" style="color: var(--td-text-dim);">Delete object</span></div>
                         </div>
                     </div>
-
 
                     <div id="guide-section-tips" class="p-4 mb-4" style="background: rgba(255,138,61,0.06); border: 1px solid rgba(255,138,61,0.25);">
                         <div class="flex items-center gap-2 mb-3">
@@ -2189,7 +2207,6 @@
             </div>
         </div>
 
-
         <div id="settings-modal" class="ui-scale-layer hidden fixed inset-0 z-[60] flex justify-center items-center pointer-events-auto" style="background: rgba(0,0,0,0.75);">
             <div class="w-[560px] max-w-[94vw] max-h-[88vh] overflow-y-auto custom-scrollbar modal-enter" style="background: var(--td-bg-1); border: 1px solid var(--td-border-strong);">
                 <div class="flex justify-between items-center px-5 py-3" style="border-bottom: 1px solid var(--td-border);">
@@ -2199,7 +2216,6 @@
                     </h2>
                     <button onclick="document.getElementById('settings-modal').classList.add('hidden')" class="w-7 h-7 flex items-center justify-center text-lg transition" style="color: var(--td-text-dim);" onmouseover="this.style.color='var(--td-danger)'" onmouseout="this.style.color='var(--td-text-dim)'"><span class="ui-icon ui-icon-mask" data-icon="Close"  alt="" style="width:13px;height:13px;object-fit:contain;"></span></button>
                 </div>
-
 
                 <div class="flex flex-wrap gap-1 px-5 py-3" style="border-bottom: 1px solid var(--td-border); background: var(--td-bg-0);">
                     <span class="text-[10px] uppercase tracking-[0.12em] self-center mr-2" style="color: var(--td-text-muted);">Jump to:</span>
@@ -2278,7 +2294,6 @@
                         </div>
                     </div>
 
-
                     <div id="settings-section-interface" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                         <h3 data-i18n="interfaceLabel" class="td-label td-accent mb-3" style="font-size: 11px;">Interface</h3>
                         <label data-i18n="uiScaleLabel" class="td-label block mb-1">UI Scale</label>
@@ -2347,7 +2362,6 @@
                             </div>
                         </div>
                     </div>
-
 
                     <div id="settings-section-graphics" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                         <h3 data-i18n="graphicsLabel" class="td-label td-accent mb-3" style="font-size: 11px;">Graphics (Optimization)</h3>
@@ -2428,7 +2442,6 @@
                                 <p class="text-[10px] leading-tight mt-1" style="color: var(--td-text-muted);">Captures environment around camera and applies to all cubes. Interval controls how often (1–120s).</p>
                             </div>
                         </div>
-
 
                         <label class="flex items-center gap-2 mb-2 cursor-pointer">
                             <input type="checkbox" id="setting-dof" onchange="engine.updateGraphics(); window.historyManager.takeSnapshot();">
@@ -2515,7 +2528,6 @@
                             <span class="text-xs" style="color: var(--td-text-dim);" data-i18n="pixelSmoothing">Pixel Smoothing</span>
                         </label>
                     </div>
-
 
                     <div id="settings-section-fog" class="p-4" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                         <h3 data-i18n="fogHeader" class="td-label td-accent mb-3" style="font-size: 11px;">Fog</h3>
@@ -6415,6 +6427,18 @@ const engine = {
         this.ssaoPass.enabled = false;
         this.composer.addPass(this.ssaoPass);
         this.bloomPass = new UnrealBloomPass(new THREE.Vector2(_cw, _ch), .65, .22, .92);
+        // PERF (mobile): UnrealBloomPass already renders its internal mip
+        // chain at half the composer size; on phones we halve once more
+        // (¼ total). Bloom is a wide soft glow — on voxel scenes the result
+        // is visually identical, while fill-rate drops ~4x on phone GPUs.
+        // Desktop keeps the standard chain for maximum fidelity.
+        if (this.isMobile) {
+            const _origBloomSetSize = this.bloomPass.setSize.bind(this.bloomPass);
+            this.bloomPass.setSize = (w, h) => _origBloomSetSize(
+                Math.max(4, Math.floor(w / 2)),
+                Math.max(4, Math.floor(h / 2))
+            );
+        }
         this.bloomPass.enabled = false;
         this.composer.addPass(this.bloomPass);
         // Reflections (Heavy) — the old screen-space ray-traced reflection
@@ -7003,9 +7027,20 @@ void main(){
         this._runtimeDisableDOF = false;
     },
     applyRuntimePostFxQuality: function() {
-        const ssaoWanted = document.getElementById("setting-ssao")?.checked ?? false;
-        const dofWanted = document.getElementById("setting-dof")?.checked ?? false;
-        const bloomWanted = document.getElementById("setting-bloom")?.checked ?? false;
+        // PERF: this runs every frame — cache the 3 setting elements after
+        // first access instead of getElementById() each tick. The nodes are
+        // static; their .checked state is read live, so behaviour is identical.
+        if (this._runtimePostFxDirty || !this._postFxEls) {
+            this._postFxEls = {
+                ssao: document.getElementById("setting-ssao"),
+                dof: document.getElementById("setting-dof"),
+                bloom: document.getElementById("setting-bloom")
+            };
+        }
+        const _fxEls = this._postFxEls;
+        const ssaoWanted = _fxEls.ssao?.checked ?? false;
+        const dofWanted = _fxEls.dof?.checked ?? false;
+        const bloomWanted = _fxEls.bloom?.checked ?? false;
         if (this.ssaoPass && this.ssaoPass.enabled !== ssaoWanted) this.ssaoPass.enabled = ssaoWanted;
         if (this.dofPass && this.dofPass.enabled !== dofWanted) this.dofPass.enabled = dofWanted;
         if (this.bloomPass && this.bloomPass.enabled !== bloomWanted) this.bloomPass.enabled = bloomWanted;
@@ -7505,9 +7540,16 @@ void main(){
         this._stopEnvReflectionTimer();
         const seconds = Math.min(30, Math.max(0.02, this._envReflectionInterval || 30));
         this._envReflectionTimer = setInterval(() => {
-            if (this._envReflectionEnabled) {
-                this._captureEnvReflection();
-            }
+            if (!this._envReflectionEnabled) return;
+            // PERF: skip the 6-face cubemap capture while the user is
+            // actively interacting — it would fight the main render for the
+            // GPU and stutter. Next tick retries, so reflections lag by at
+            // most one interval; the captured quality is identical.
+            const _busy = this.isTransformDragging ||
+                (this.transformControl && this.transformControl.dragging) ||
+                (typeof this._cameraMovedThisFrame === "function" && this._cameraMovedThisFrame());
+            if (_busy) return;
+            this._captureEnvReflection();
         }, seconds * 1000);
     },
 
@@ -12220,7 +12262,6 @@ void main(){
     }
 };
 
-
 window.uiManager = {
     mergeMode: "texture",
     exportType: "zip",
@@ -12487,7 +12528,16 @@ window.uiManager = {
     _vconsole: null,
     toggleConsole: function() {
         if (typeof window.VConsole === "undefined") {
-            alert("Debug console library (vConsole) is not loaded.\nCheck your internet connection and reload the page.");
+            // vConsole is a dev tool: it is NOT loaded on startup anymore.
+            // Fetch it on demand the first time the console is opened, so
+            // ~90 KB (gzipped) stays out of the critical path of every load.
+            if (this._vconsoleLoading) return;
+            this._vconsoleLoading = true;
+            const _s = document.createElement("script");
+            _s.src = "https://unpkg.com/vconsole@3.15.1/dist/vconsole.min.js";
+            _s.onload = () => { this._vconsoleLoading = false; this.toggleConsole(); };
+            _s.onerror = () => { this._vconsoleLoading = false; alert("Failed to load vConsole. Check your internet connection and try again."); };
+            document.head.appendChild(_s);
             return;
         }
         if (!this._vconsole) {
@@ -16245,14 +16295,12 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
         <button onclick="document.getElementById('tex-load-btn').style.display='none'" title="Close" style="background:transparent;color:#8a8a90;border:none;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;margin-left:4px;padding:0;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#94a3b8'"><span class="ui-icon ui-icon-mask" data-icon="Close"  alt="" style="width:13px;height:13px;object-fit:contain;"></span></button>
     </div>
 
-
     <div id="music-load-btn" style="display:none;position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;background:#18181c;border:1px solid rgba(96,165,250,0.4);padding:12px 20px;gap:10px;align-items:center;white-space:nowrap;pointer-events:auto;">
         <span id="music-status-text" style="color:#e8e8e8;font-weight:600;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;">&#127925; Select Music.zip</span>
         <button onclick="document.getElementById('music-zip-input').click()" style="background:#60a5fa;color:#000;border:none;padding:6px 14px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;margin-left:6px;display:flex;align-items:center;gap:6px;"><span class="ui-icon ui-icon-mask" data-icon="FileFolder"  alt="" style="width:12px;height:12px;object-fit:contain;"></span>Load</button>
         <input type="file" id="music-zip-input" accept=".zip" style="display:none" onchange="handleManualMusicZip(event)">
         <button onclick="document.getElementById('music-load-btn').style.display='none'" title="Close" style="background:transparent;color:#8a8a90;border:none;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;margin-left:4px;padding:0;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#94a3b8'"><span class="ui-icon ui-icon-mask" data-icon="Close"  alt="" style="width:13px;height:13px;object-fit:contain;"></span></button>
     </div>
-
 
 <script>
 /* =====================================================
@@ -17821,8 +17869,5 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1a8b7e4184730c9',t:'MTc4Mzk1MDIyNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1c97df0cce6dbdb',t:'MTc4NDI5Mzg4MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1da1f66af61e436',t:'MTc4NDQ2ODI2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1db77f3b9dbe3f8',t:'MTc4NDQ4MjM3OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1eaf0a80fefc9d4',t:'MTc4NDY0NDYwOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f"}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a23525862f3eca25',t:'MTc4NTQyMjcyMA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2361b91e965d38e',t:'MTc4NTQzMjc5OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
