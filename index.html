@@ -15782,8 +15782,18 @@ window.multiplayerClient = {
     },
 
     tick: function() {
-        const chatBtn = document.getElementById("mp-chat-floating");
-        if (chatBtn) chatBtn.classList.toggle("show", !!this.room);
+        // Cache chat button and only update DOM when room state actually changes
+        if (!this._chatBtnCached) {
+            this._chatBtnCached = document.getElementById("mp-chat-floating");
+            this._chatBtnLastRoomState = null;
+        }
+        if (this._chatBtnCached) {
+            const roomExists = !!this.room;
+            if (roomExists !== this._chatBtnLastRoomState) {
+                this._chatBtnCached.classList.toggle("show", roomExists);
+                this._chatBtnLastRoomState = roomExists;
+            }
+        }
         if (this.room && this.socket?.connected) {
             const t = performance.now();
             if (t - this.lastCamSendAt > 1000 / 15) {
@@ -15938,8 +15948,17 @@ window.multiplayerClient = {
     renderPlayers: function() {
         const box = document.getElementById("mp-player-list");
         if (!box) return;
-        if (!this.players.length) { box.innerHTML = '<div class="mp-muted">No players.</div>'; return; }
-        box.innerHTML = this.players.map(p => `<div class="mp-player"><b style="color:${this.escape(p.color || '#fff')}">${this.escape(p.nickname)}</b><span class="mp-muted"> — ${p.role === 'admin' ? 'ADMIN' : 'guest'} · ping ${Math.round(p.ping || 0)}ms</span>${this.self?.role === 'admin' && p.id !== this.self?.id ? `<button class="mp-btn red" style="float:right;padding:4px 6px" onclick="multiplayerClient.kick('${p.id}')">Kick</button>` : ""}</div>`).join("");
+        if (!this.players.length) { 
+            if (box.innerHTML !== '<div class="mp-muted">No players.</div>') {
+                box.innerHTML = '<div class="mp-muted">No players.</div>';
+            }
+            return;
+        }
+        // Generate new HTML and only update DOM if it actually changed
+        const newHtml = this.players.map(p => `<div class="mp-player"><b style="color:${this.escape(p.color || '#fff')}">${this.escape(p.nickname)}</b><span class="mp-muted"> — ${p.role === 'admin' ? 'ADMIN' : 'guest'} · ping ${Math.round(p.ping || 0)}ms</span>${this.self?.role === 'admin' && p.id !== this.self?.id ? `<button class="mp-btn red" style="float:right;padding:4px 6px" onclick="multiplayerClient.kick('${p.id}')">Kick</button>` : ""}</div>`).join("");
+        if (box.innerHTML !== newHtml) {
+            box.innerHTML = newHtml;
+        }
     },
 
     renderCurrentRoom: function() {
