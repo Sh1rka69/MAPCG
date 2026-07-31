@@ -15824,13 +15824,20 @@ window.multiplayerClient = {
     detectCurrentActivity: function() {
         let best = null;
         let bestPriority = -1;
+        const debugRows = [];
         for (const id in this.ACTIVITY_REGISTRY) {
             const entry = this.ACTIVITY_REGISTRY[id];
             const el = document.getElementById(id);
-            if (this._isActivityElementVisible(el) && entry.priority > bestPriority) {
+            const visible = this._isActivityElementVisible(el);
+            debugRows.push(id + ":" + (el ? (visible ? "VISIBLE" : "hidden") : "MISSING"));
+            if (visible && entry.priority > bestPriority) {
                 best = id;
                 bestPriority = entry.priority;
             }
+        }
+        if (this._lastDebugRows !== debugRows.join(",")) {
+            this._lastDebugRows = debugRows.join(",");
+            console.log("[MAPCG] detectCurrentActivity scan:", debugRows.join(" | "), "=> best:", best);
         }
         return best;
     },
