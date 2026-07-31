@@ -363,8 +363,14 @@ io.on('connection', socket => {
     const room = roomOfSocket(socket);
     if (room && room.players.has(socket.id)) {
       const rtt = Math.max(0, Math.min(9999, Number(payload.ping || 0)));
-      room.players.get(socket.id).ping = rtt;
-      emitPlayers(room);
+      const player = room.players.get(socket.id);
+      const oldPing = player.ping;
+      player.ping = rtt;
+      // Only broadcast player list if ping changed significantly (>50ms difference)
+      // This prevents constant DOM re-renders every 3 seconds from minor ping fluctuations
+      if (Math.abs(rtt - oldPing) > 50) {
+        emitPlayers(room);
+      }
     }
   });
 
