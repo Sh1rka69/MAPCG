@@ -1,6 +1,3 @@
-{
-  "version": 4,
-  "cubes": [
     {"name":"MapCube","tag":"Metal","tileMode":0,"visible":true,"collisions":true,"physics":false,"materialName":"Metal","position":{"x":0.0,"y":0.367000013589859,"z":0.0},"rotation":{"x":0.0,"y":0.0,"z":0.0},"scale":{"x":2.200000047683716,"y":0.26899999380111697,"z":5.5}},
     {"name":"MapCube","tag":"Metal","tileMode":1,"visible":true,"collisions":true,"physics":false,"materialName":"Metal","position":{"x":0.0020000000949949028,"y":1.031000018119812,"z":2.615000009536743},"rotation":{"x":0.0,"y":180.0,"z":0.0},"scale":{"x":2.200000047683716,"y":1.062000036239624,"z":0.26899999380111697}},
     {"name":"MapCube","tag":"Metal","tileMode":1,"visible":true,"collisions":true,"physics":false,"materialName":"Metal","position":{"x":0.0,"y":1.8760000467300416,"z":2.4519999027252199},"rotation":{"x":25.589000701904298,"y":180.0,"z":1.128462286722337e-13},"scale":{"x":2.200000047683716,"y":0.8309999704360962,"z":0.26899999380111697}},
@@ -25,6 +22,4 @@
     {"name":"MapCube","tag":"Metal","tileMode":1,"visible":true,"collisions":true,"physics":false,"materialName":"RoughMetal","position":{"x":0.0,"y":1.5540000200271607,"z":-2.203000068664551},"rotation":{"x":300.0,"y":0.0,"z":0.0},"scale":{"x":0.5,"y":0.4169999957084656,"z":1.149999976158142}},
     {"name":"MapCube","tag":"Metal","tileMode":1,"visible":true,"collisions":true,"physics":false,"materialName":"Glass","position":{"x":0.0020000000949949028,"y":1.8420000076293946,"z":0.0},"rotation":{"x":0.0,"y":0.0,"z":0.0},"scale":{"x":0.10000000149011612,"y":1.0789999961853028,"z":4.0}},
     {"name":"MapCube","tag":"Metal","tileMode":1,"visible":true,"collisions":false,"physics":false,"materialName":"Glass","position":{"x":0.0020000000949949028,"y":1.8550000190734864,"z":0.906000018119812},"rotation":{"x":42.939002990722659,"y":0.0,"z":0.0},"scale":{"x":0.0020000000949949028,"y":0.5559999942779541,"z":2.1459999084472658}},
-    {"name":"MapCube","tag":"Metal","tileMode":1,"visible":true,"collisions":false,"physics":false,"materialName":"Glass","position":{"x":0.0020000000949949028,"y":1.6119999885559083,"z":-1.1150000095367432},"rotation":{"x":42.939002990722659,"y":0.0,"z":0.0},"scale":{"x":0.0020000000949949028,"y":0.5559999942779541,"z":1.5260000228881837}}
-  ]
-}
+    {"name":"MapCube","tag":"Metal","tileMode":1,"visible":true,"collisions":false,"physics":false,"materialName":"Glass","position":{"x":0.0020000000949949028,"y":1.6119999885559083,"z":-1.1150000095367432},"rotation":{"x":42.939002990722659,"y":0.0,"z":0.0},"scale":{"x":0.0020000000949949028,"y":0.5559999942779541,"z":1.5260000228881837}},
