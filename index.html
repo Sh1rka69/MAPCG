@@ -14831,9 +14831,9 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         const lbl = document.getElementById("ai-detail-label"); if (lbl) lbl.textContent = this._detailConfig().label;
     },
     _detailConfig: function() {
-        if (this.prefs.detail === "economic")  return { label: "Economic",  mult: 0.6, maxTokens: 14000, chunk: 22 };
-        if (this.prefs.detail === "detailed")  return { label: "Detailed",  mult: 1.5, maxTokens: 32000, chunk: 30 };
-        return { label: "Balanced", mult: 1, maxTokens: 24000, chunk: 26 };
+        if (this.prefs.detail === "economic")  return { label: "Economic",  mult: 0.6, maxTokens: 14000, chunk: 55 };
+        if (this.prefs.detail === "detailed")  return { label: "Detailed",  mult: 1.5, maxTokens: 32000, chunk: 70 };
+        return { label: "Balanced", mult: 1, maxTokens: 24000, chunk: 60 };
     },
     setDetail: function(v) { this.prefs.detail = v; this._savePrefs(); this._syncAgentControls(); },
     toggleAgentPanel: function() {
@@ -14894,7 +14894,9 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
     /* ---------- Network call with retry/backoff ---------- */
     _requestGeneration: async function(messages, maxTokens, temperature) {
         const TRANSIENT = [429, 502, 503, 504];
-        const MAX_NET = 5;
+        // Fast fail: only 3 quick retries with a short backoff, then surface a clear
+        // error instead of silently hanging for ~100s when the provider is overloaded.
+        const MAX_NET = 3;
         let response = null, lastNetError = null, serverRetryAfterSec = null;
         for (let a = 1; a <= MAX_NET; a++) {
             try {
@@ -14907,11 +14909,11 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
             } catch (netErr) { lastNetError = netErr; response = null; }
             serverRetryAfterSec = null;
             if (response && TRANSIENT.includes(response.status)) {
-                try { const c = response.clone(); const j = await c.json(); if (j?._debug?.retryAfterSec) serverRetryAfterSec = j._debug.retryAfterSec; } catch (e) {}
+                try { const c = response.clone(); const j = await c.json(); if (j?._debug?.retryAfterSec) serverRetryAfterSec = Math.min(j._debug.retryAfterSec, 8); } catch (e) {}
             }
             const isTransient = !!lastNetError || (response && TRANSIENT.includes(response.status));
             if (isTransient && a < MAX_NET) {
-                const waitSec = serverRetryAfterSec || Math.min(6 * a, 20);
+                const waitSec = serverRetryAfterSec || Math.min(2 + 2 * a, 8);
                 const reason = lastNetError ? "network error" : "server busy (" + response.status + ")";
                 this._log("Server busy (" + reason + ") — retry " + a + "/" + (MAX_NET - 1) + " in " + waitSec + "s...", "warn");
                 this._setStatus('<span class="ai-spinner"></span> Server busy (' + reason + ') — retrying in ' + waitSec + 's...', "");
@@ -15146,7 +15148,10 @@ Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}
                 throw new Error("⚠️ AI Builder не работает с GitHub Pages!\n\nОткрой редактор через Vercel:\n👉 https://mapcg.vercel.app\n\nИли укажи свой домен Vercel в настройках ENDPOINT.");
             }
 
-            const mode = budget.max <= 45 ? "single" : "chunked";
+            // Chunking only for genuinely huge builds (max > 160 cubes). For normal
+            // builds (door, barrel, house — budget max ~86–113) a SINGLE request is
+            // enough and is dramatically faster + far less exposed to 502s.
+            const mode = budget.max > 160 ? "chunked" : "single";
             this._setStage("generate", mode === "chunked" ? "Generating in chunks" : "Generating");
             this._log("Generation mode: " + mode + ".", "ok");
 
@@ -18215,5 +18220,6 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 </script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f"}' crossorigin="anonymous"></script>
 </body>
 </html>
