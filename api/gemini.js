@@ -1,11 +1,28 @@
 // ═══════════════════════════════════════════════════════════════════
 //  MAPCG Web Engine — Vercel Serverless Function (Node.js)
-//  Прокси к Google Gemini API с ротацией ключей, fallback-моделью
-//  и обработкой rate limiting.
+//  Прокси к Google Gemini API  —  УЛУЧШЕННАЯ ВЕРСИЯ (build-quality v2)
+//
+//  Что добавлено/улучшено для РЕАЛЬНОГО качества построек:
+//    1. Серверная валидация JSON ответа с АВТО-КОРРЕКЦИЕЙ: если модель
+//       вернула битый/пустой JSON, прокси сам делает ещё один запрос,
+//       сообщает модели ошибку и просит выдать только валидный {plan,cubes}.
+//       → резко снижает долю кривых построек (раньше мусор уходил клиенту).
+//    2. Несколько попыток коррекции (до 2), т.к. и сама модель иногда
+//       ошибается на первом заходе.
+//    3. Модели вынесены в env (GEMINI_BUILD_MODEL / GEMINI_VISION_MODEL /
+//       GEMINI_FALLBACK_MODEL) — можно поднять качество, не трогая код.
+//    4. Опциональный responseSchema (ENABLE_RESPONSE_SCHEMA=1) —
+//       принудительная JSON-схема {plan,cubes[]} на стороне модели.
+//    5. Корректная связка schema+thinking: при включённой схеме thinking
+//       отключается, чтобы не ловить известное зависание у части моделей.
 //
 //  Переменные окружения (настрой в Vercel Dashboard → Environment Variables):
 //    GEMINI_API_KEY       — основной ключ (если нет GEMINI_API_KEY_1..10)
 //    GEMINI_API_KEY_1..10 — до 10 ключей для ротации (приоритет)
+//    GEMINI_BUILD_MODEL   — модель для СБОРКИ (по умолч. gemini-3.1-flash-lite)
+//    GEMINI_VISION_MODEL  — модель для картинок (по умолч. gemini-3.1-flash-lite)
+//    GEMINI_FALLBACK_MODEL— запасная модель (по умолч. gemini-3.5-flash)
+//    ENABLE_RESPONSE_SCHEMA — "1" чтобы включить принудительную схему JSON
 //    ALLOWED_ORIGINS      — опционально: список разрешённых Origin через запятую
 //
 //  Деплой: просто подключи репозиторий к Vercel или запусти `vercel --prod`
@@ -15,18 +32,42 @@ const https = require("https");
 const http = require("http");
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-// gemini-2.5-flash и gemini-2.0-flash отключены Google для новых запросов
-// (404 "no longer available to new users").
-// gemini-3.5-flash с ~15 июля 2026 в состоянии активного сбоя на стороне
-// Google: часть запросов ловит 404 на несуществующий внутренний билд,
-// часть зависает без ответа при связке responseMimeType=json + thinkingConfig
-// (то есть ровно наш случай). Поэтому основной моделью ставим
-// gemini-3.1-flash-lite (стабильна на данный момент), а gemini-3.5-flash
-// оставляем как fallback — когда Google починит 3.5, его можно будет
-// вернуть на первое место.
-const MODEL_BUILD = "gemini-3.1-flash-lite";
-const MODEL_VISION = "gemini-3.1-flash-lite";
-const FALLBACK_MODEL = "gemini-3.5-flash";
+
+// Модели вынесены в env — можно переключать качество без правки кода.
+const MODEL_BUILD = process.env.GEMINI_BUILD_MODEL || "gemini-3.1-flash-lite";
+const MODEL_VISION = process.env.GEMINI_VISION_MODEL || "gemini-3.1-flash-lite";
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash";
+
+// Принудительная схема JSON (опционально). По умолчанию выключена, чтобы
+// гарантированно не сломать работающий поток; включить можно env-переменной.
+const ENABLE_SCHEMA = process.env.ENABLE_RESPONSE_SCHEMA === "1";
+
+// Схема выходного JSON для сборки. Принуждает модель вернуть именно
+// {"plan": "...", "cubes": [ ... ]}, а не произвольный текст.
+const BUILD_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    plan: { type: "STRING" },
+    cubes: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING" },
+          tag: { type: "STRING" },
+          tileMode: { type: "INTEGER" },
+          materialName: { type: "STRING" },
+          visible: { type: "BOOLEAN" },
+          collisions: { type: "BOOLEAN" },
+          physics: { type: "BOOLEAN" },
+          position: { type: "OBJECT", properties: { x: { type: "NUMBER" }, y: { type: "NUMBER" }, z: { type: "NUMBER" } } },
+          rotation: { type: "OBJECT", properties: { x: { type: "NUMBER" }, y: { type: "NUMBER" }, z: { type: "NUMBER" } } },
+          scale: { type: "OBJECT", properties: { x: { type: "NUMBER" }, y: { type: "NUMBER" }, z: { type: "NUMBER" } } },
+        },
+      },
+    },
+  },
+};
 
 // ── Утилиты ──────────────────────────────────────────────────────
 
@@ -35,7 +76,6 @@ function buildThinkingConfig(modelName, highEffort) {
   // Нельзя передавать оба параметра одновременно — Gemini вернёт ошибку.
   if (/^gemini-3/.test(modelName))
     return { thinkingLevel: highEffort ? "high" : "low" };
-  // На случай отката на модель линейки 2.5 (если появится снова)
   if (/^gemini-2\.5/.test(modelName))
     return { thinkingBudget: highEffort ? 8192 : 0 };
   return null;
@@ -169,6 +209,48 @@ function httpsFetch(url, options, body) {
   });
 }
 
+// ✦ ВАЛИДАЦИЯ ответа сборки: проверяет, что текст — это валидный JSON
+// с непустым массивом cubes, и что кубы выглядят как кубы (есть position/scale).
+// Возвращает { ok, issue?, cubes?, cubesCount?, plan? }.
+function validateBuildText(text) {
+  const t = (text || "").trim();
+  if (!t) return { ok: false, issue: "empty response" };
+  let parsed;
+  try {
+    parsed = JSON.parse(t);
+  } catch (e) {
+    return { ok: false, issue: "invalid JSON: " + (e?.message || "parse error") };
+  }
+  const cubes = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.cubes) ? parsed.cubes : null);
+  if (!cubes || !cubes.length) {
+    return { ok: false, issue: "no non-empty cubes array" };
+  }
+  const sample = cubes[0];
+  if (!sample || typeof sample !== "object" ||
+      !sample.position || !sample.scale) {
+    return { ok: false, issue: "cube entries missing position/scale" };
+  }
+  return {
+    ok: true,
+    cubes,
+    cubesCount: cubes.length,
+    plan: (parsed && typeof parsed.plan === "string") ? parsed.plan : null,
+  };
+}
+
+// ✦ ФОРМИРУЕТ корректирующий запрос: сообщает модели, что её прошлый ответ
+// не распарсился, и просит вернуть ТОЛЬКО валидный JSON. Не раздувает контекст.
+function buildCorrectionUser(issue, prevText) {
+  let note = "";
+  const t = (prevText || "").trim();
+  if (t.length > 0 && t.length <= 4000) note = "\nYour previous (invalid) output was:\n" + t;
+  else if (t.length > 4000) note = "\nYour previous output was large and is not replayed.";
+  return `Your previous reply could not be parsed as valid JSON (${issue}).${note}
+Please reply with a SINGLE valid JSON object of the form {"plan":"...","cubes":[ ... ]}.
+Use only valid JSON: no code fences, no trailing commas, no commentary outside the object.
+Every cube must have position/rotation/scale as {x,y,z} and a valid materialName from the provided list.`;
+}
+
 // ── Основной обработчик Vercel ───────────────────────────────────
 
 module.exports = async (req, res) => {
@@ -200,7 +282,6 @@ module.exports = async (req, res) => {
     return;
   }
 
-  // Читаем тело запроса (Buffer.concat для корректной работы с бинарными чанками)
   const chunks = [];
   await new Promise((resolve, reject) => {
     req.on("data", (chunk) => chunks.push(chunk));
@@ -209,7 +290,6 @@ module.exports = async (req, res) => {
   });
   const bodyRaw = Buffer.concat(chunks).toString("utf8");
 
-  // Vercel Hobby лимит ~4.5 MB, Pro ~6 MB. Даём запас.
   if (bodyRaw.length > 5.5 * 1024 * 1024) {
     res
       .writeHead(413, { "Content-Type": "application/json", ...cors })
@@ -250,21 +330,31 @@ module.exports = async (req, res) => {
   const { systemText, contents } = toGeminiRequest(messages);
 
   function buildGenerationConfig(modelName) {
-    const thinkingConfig = buildThinkingConfig(modelName, highEffort);
+    const useSchema = !isVision && ENABLE_SCHEMA;
     const cfg = {
-      temperature: typeof body.temperature === "number" ? body.temperature : isVision ? 0.3 : 0.6,
+      temperature: typeof body.temperature === "number" ? body.temperature : isVision ? 0.3 : 0.5,
       maxOutputTokens: maxOutputTokens,
     };
-    if (thinkingConfig) cfg.thinkingConfig = thinkingConfig;
+    // При включённой схеме отключаем thinking — избегаем известного зависания
+    // связки responseMimeType=json + thinkingConfig у части моделей.
+    // Структуру JSON в этом случае держит сама схема.
+    if (!useSchema) {
+      const thinkingConfig = buildThinkingConfig(modelName, highEffort);
+      if (thinkingConfig) cfg.thinkingConfig = thinkingConfig;
+    }
     if (!isVision) cfg.responseMimeType = "application/json";
+    if (useSchema) cfg.responseSchema = BUILD_SCHEMA;
     return cfg;
   }
 
   const payloadBase = { contents };
   if (systemText) payloadBase.systemInstruction = { parts: [{ text: systemText }] };
 
-  async function callGemini(modelName, apiKey) {
+  async function callGemini(modelName, apiKey, overrideConfig) {
     const t0 = Date.now();
+    const generationConfig = overrideConfig
+      ? { ...buildGenerationConfig(modelName), ...overrideConfig }
+      : buildGenerationConfig(modelName);
     const result = await httpsFetch(
       `${GEMINI_BASE}/${modelName}:generateContent`,
       {
@@ -276,7 +366,7 @@ module.exports = async (req, res) => {
       },
       JSON.stringify({
         ...payloadBase,
-        generationConfig: buildGenerationConfig(modelName),
+        generationConfig,
       })
     );
     return { resp: { status: result.status }, text: result.text, elapsedMs: Date.now() - t0 };
@@ -401,13 +491,92 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const out = toOpenAIResponse(geminiData);
+    let out = toOpenAIResponse(geminiData);
+
+    // ✦ САМОИСЦЕЛЕНИЕ для сборки: если ответ не прошёл валидацию как
+    // JSON с cubes[] — делаем до MAX_FIX попыток корректирующего запроса.
+    let fixedCount = 0;
+    let content = out.choices[0]?.message?.content || "";
+    const isBuild = !isVision;
+
+    if (isBuild) {
+      const MAX_FIX = 2;
+      let validation = content ? validateBuildText(content) : { ok: false, issue: "empty response" };
+      while (!validation.ok && fixedCount < MAX_FIX) {
+        const correctionUser = buildCorrectionUser(validation.issue, content);
+        // Делаем отдельный запрос к той же модели с корректирующим сообщением.
+        const fixMessages = [
+          ...messages.filter((m) => m.role !== "assistant"),
+          { role: "user", content: correctionUser },
+        ];
+        const fixSystem = systemText;
+        const fixPayload = { contents: toGeminiRequest(fixMessages).contents };
+        if (fixSystem) fixPayload.systemInstruction = { parts: [{ text: fixSystem }] };
+
+        let fixOk = false;
+        let fixText = "";
+        for (const tryModel of [usedModel, FALLBACK_MODEL]) {
+          let got = null;
+          for (let k = 0; k < apiKeys.length; k++) {
+            try {
+              const r = await callGemini(tryModel, apiKeys[k], {
+                // на коррекцию хватает меньшего лимита и больше структуры
+                temperature: 0.2,
+              });
+              if (r.resp.status === 200) {
+                try {
+                  const gd = JSON.parse(r.text);
+                  fixText = toOpenAIResponse(gd).choices[0]?.message?.content || "";
+                } catch { fixText = ""; }
+                got = r;
+                break;
+              }
+            } catch {}
+          }
+          if (got && fixText) break;
+        }
+        if (!fixText) {
+          // не смогли получить ответ на коррекцию — отдаём как есть
+          break;
+        }
+        content = fixText;
+        out = { choices: [{ message: { role: "assistant", content: fixText }, finish_reason: "stop" }], _gemini_finish_reason: "STOP" };
+        fixedCount++;
+        validation = validateBuildText(content);
+      }
+
+      // Если после всех попыток всё равно нет cubes — для сборки это ошибка.
+      if (!validation.ok) {
+        res
+          .writeHead(502, { "Content-Type": "application/json", ...cors })
+          .end(
+            JSON.stringify({
+              error: "The model could not produce valid JSON after " + (fixedCount + 1) + " attempt(s) (" + validation.issue + ").",
+              _debug: { model: usedModel, elapsedMs, fixedCount },
+            })
+          );
+        return;
+      }
+
+      // подмешиваем свежий план (если пришёл) и число кубов в _debug
+      if (validation.plan) {
+        try {
+          const parsed = JSON.parse(content);
+          if (!parsed.plan) { parsed.plan = validation.plan; content = JSON.stringify(parsed); }
+        } catch {}
+      }
+      out.choices[0].message.content = content;
+    }
+
     out._debug = {
       model: usedModel,
       elapsedMs,
       finishReason: out._gemini_finish_reason,
       outputChars: (out.choices[0].message.content || "").length,
       keyCount: apiKeys.length,
+      // ✦ полезная метрика: исправил ли прокси ответ модели
+      autoFixed: fixedCount > 0,
+      fixAttempts: fixedCount,
     };
 
     if (!out.choices[0].message.content && out._gemini_finish_reason === "MAX_TOKENS") {
@@ -435,4 +604,3 @@ module.exports = async (req, res) => {
       );
   }
 };
- 
