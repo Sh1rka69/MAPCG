@@ -14533,10 +14533,93 @@ Write in English, concisely, by points, without introduction or conclusion — o
         return content.trim();
     },
 
-    _buildSystemPrompt: function(referenceItems, availableTextures) {
+    /** Estimate a sensible cube budget from the prompt text so the model
+     *  spends its token/vertex allowance wisely instead of overshooting and
+     *  getting its whole answer truncated (the #1 cause of broken builds). */
+    _estimateCubeBudget: function(promptText) {
+        const t = " " + String(promptText || "").toLowerCase() + " ";
+        const heavy = ["house","building","bunker","castle","tower","bridge","fortress",
+            "mansion","cathedral","temple","city","compound","palace","mountain","pyramid",
+            "stadium","station","airport","ship","tank","truck","drone","robot","train",
+            "plane","statue","factory","warehouse","wall","gate",
+            "car","vehicle","spaceship","mech","mecha","aircraft"];
+        const mid = ["door","gate","fence","table","crate","bench","lamp","window","car",
+            "barrel","container","computer","machine","cannon","turret","clock","fountain",
+            "sculpture","stair","shelf","cabinet","radar","gun","vehicle","boat"];
+        const light = ["box","crate","barrel","chair","sign","coin","book","sword","rock",
+            "stone","cup","candle","flag","small","simple","tiny","hammer","tool"];
+        let score = 0;
+        for (const w of heavy) if (t.includes(w)) score += 3;
+        for (const w of mid)   if (t.includes(w)) score += 1;
+        for (const w of light) if (t.includes(w)) score -= 1;
+        const clamped = Math.max(0, Math.min(16, score));
+        const LOW = 30, HIGH = 210;
+        const budget = Math.round(LOW + (HIGH - LOW) * (clamped / 16));
+        const HARD_CAP = 240;                 // absolute ceiling — never exceed
+        return {
+            budget,
+            min: Math.round(budget * 0.75),
+            max: Math.round(budget * 1.15),
+            hardCap: HARD_CAP
+        };
+    },
+
+    /** Client-side safety net that runs right before the build. It makes sure the
+     *  model's output can't come out visually broken no matter what it did:
+     *   • clamps absurd positions / scales / rotations,
+     *   • lifts the whole build so it rests on the floor (Y>=0),
+     *   • if the model overshot its budget, drops the least-important (smallest)
+     *     cubes first so the main form and large parts survive.
+     *  Returns a new array; never throws. */
+    _normalizeCubesForBuild: function(cubes, budgetInfo) {
+        if (!Array.isArray(cubes) || !cubes.length) return cubes;
+        const hardCap = (budgetInfo && budgetInfo.hardCap) || 240;
+        let out = cubes.slice();
+        const MAX_ABS = 40;          // anything further than 40 m from center is a mistake
+        const MAX_SCALE = 12;        // any single axis larger than 12 m is a mistake
+
+        let clamped = false;
+        for (const c of out) {
+            const p = c.position, s = c.scale, r = c.rotation;
+            for (const ax of ["x", "y", "z"]) {
+                if (!Number.isFinite(p[ax]) || Math.abs(p[ax]) > MAX_ABS) {
+                    p[ax] = Math.max(-MAX_ABS, Math.min(MAX_ABS, p[ax] || 0)); clamped = true;
+                }
+                if (!Number.isFinite(s[ax]) || s[ax] <= 0 || s[ax] > MAX_SCALE) {
+                    s[ax] = Math.max(0.01, Math.min(MAX_SCALE, s[ax] || 1)); clamped = true;
+                }
+                if (!Number.isFinite(r[ax])) { r[ax] = 0; clamped = true; }
+            }
+        }
+        if (clamped) this._log("Sanitized a few out-of-range positions/scales.", "warn");
+
+        // Rest the build on the floor: if the lowest point is clearly below Y=0,
+        // shift the whole object up so it doesn't look sunk into the ground.
+        let minY = Infinity;
+        for (const c of out) { const h = c.position.y - c.scale.y / 2; if (h < minY) minY = h; }
+        if (Number.isFinite(minY) && minY < -0.5) {
+            const lift = -minY;
+            for (const c of out) c.position.y += lift;
+            this._log("Lifted build by " + lift.toFixed(2) + " m so it sits on the floor.", "warn");
+        }
+
+        // Enforce the hard cube cap: if the model overshot, remove the smallest
+        // (least visible / likely decorative) cubes first, keeping the big parts.
+        if (out.length > hardCap) {
+            const excess = out.length - hardCap;
+            const vol = c => (c.scale.x * c.scale.y * c.scale.z);
+            out.sort((a, b) => vol(b) - vol(a));   // largest first
+            out = out.slice(0, hardCap);
+            this._log("Model over-budget by " + excess + " cube(s) — kept the " + out.length + " largest cubes.", "warn");
+        }
+        return out;
+    },
+
+    _buildSystemPrompt: function(referenceItems, availableTextures, cubeBudget) {
         const tagList = "Concrete, Grass, Dirt, Sand, Metal, Snow, Wood, Carpet, Water";
         const texSample = availableTextures.slice(0, 60).join(", ");
         const MAX_CUBES_PER_REF = 30;
+        const budget = cubeBudget || this._estimateCubeBudget("");
         const refBlock = referenceItems.map(item => {
             const trimmedCubes = item.cubes.slice(0, MAX_CUBES_PER_REF);
             const cubesJson = JSON.stringify(trimmedCubes.map(c => ({
@@ -14550,6 +14633,13 @@ Write in English, concisely, by points, without introduction or conclusion — o
         }).join("\n\n");
 
         return `You are an expert architect inside the GoreBox (MAPCG) map editor. Your task: from a text description, generate a 3D object/building as an array of cubes (JSON) that the engine will assemble in the scene.
+
+STRICT CUBE BUDGET (MANDATORY — the single most important rule):
+This build is allocated a HARD budget of ${budget.budget} cubes (allowed range ${budget.min}–${budget.max}).
+- Aim for roughly ${budget.budget} cubes; stay inside ${budget.min}–${budget.max}.
+- NEVER exceed ${budget.max} cubes. Going over budget is what causes your whole JSON answer to be cut off by the token limit and come out BROKEN — an over-budget build is much worse than a slightly simpler one. If you are running close to the limit, simplify small details rather than risk truncation.
+- Spend the budget wisely: every cube must earn its place. Do NOT waste cubes on many overlapping or sloppy blocks; prefer fewer, well-placed, correctly-proportioned cubes. At the same time do NOT collapse the object into 1–2 giant cubes — a good build is made of multiple properly-sized parts (see the target ranges below).
+- When the budget starts running out, spend the remainder on the most visible details (frame, edges, hinges, seams, accents) rather than adding random clutter.
 
 CUBE FORMAT (strict):
 {
@@ -14633,6 +14723,25 @@ Below — REAL examples of quality objects from this same project (handmade by t
 
 ${refBlock || "(no relevant examples found — rely on the rules above only)"}
 
+3D DEPTH RULE (avoid flat paper-cutout plates):
+A structure must read as a SOLID object with real thickness in all three dimensions, not a flat 2D picture hung in the air. Anything described as a door / gate / hatch / wall / panel / lid must be given depth: build a front face AND visible side/thickness, plus an outer frame. If a requested object is a door, do not output just a thin flat slab — that is a FAIL.
+
+DOOR / GATE / HATCH / BUNKER-DOOR RECIPE (use for ANY request mentioning a door, gate, hatch, portal, entrance — adapt parts to size):
+A convincing heavy door is built from ALL of these, ordered by importance:
+1. FRAME / CASING — a thick rectangular border (left + right + top + bottom rails) of heavier material (RoughMetal or Concrete), wider than the panel, with real depth. This is the outer casing the door sits in.
+2. MAIN PANEL — the door slab itself, slightly inset from the frame, with genuine thickness (for a door facing the Z axis, scale.x ≈ 0.35–0.6; facing X, scale.z ≈ 0.35–0.6). Material Metal / RoughMetal.
+3. REINFORCEMENT — 2–4 internal raised ribs or an X-brace pattern on the panel face (thin strips, slightly proud of the surface). Heavy/engineered doors are ribbed, not blank.
+4. VAULTED / ARCHED TOP — very characteristic of bunkers: if the request says "bunker", "arch" or "vault", give the top an arched opening using the cylinder-ring technique (N=8): take several adjacent segments of the arc and set them along the top so the opening curves. Skip the arch only if the request explicitly wants a flat/rectangular door.
+5. HINGES — 2–3 small thick blocks on one vertical edge, sticking out from the frame.
+6. HANDLE / WHEEL / LOCK — one clearly visible control near the free edge or center: a round hand-wheel (a few stacked small cubes + a short axle stub) or a lever + lock box. A door with no handle looks unfinished.
+7. RIVETS / BOLTS / SEAMS — several small accent cubes (tiny scale) along the frame and panel edges — this is what makes it look machined instead of a smooth placeholder.
+Suggested distribution of cubes for a door: frame ~30%, panel ~35%, reinforcement ~15%, hinges+handle ~12%, rivets/details ~8%. Budget ≈ 45–90 cubes for a door/gate.
+
+FOOTPRINT, GROUND & SCALE SANITY:
+- Keep the whole object within a sensible bounding box (roughly ≤10×10×10 m for a medium build; larger only for genuinely big structures). Do not scatter cubes far from the build center.
+- Unless the request is explicitly for a floating/flying thing, rest the bottom of the build at/near Y=0 (the floor). Do not float the object in mid-air.
+- Avoid absurd scales and proportions (a door should not be 20 m tall unless asked). Stay realistic relative to a ~1 m cube.
+
 MANDATORY WORKFLOW (this is critical for result quality):
 Before writing cube coordinates, you must FIRST mentally design the object and write this plan into the text field "plan". The plan must be BRIEF (3-6 short sentences, no fluff) and list by points:
 1. What physical parts the object consists of (e.g. for a drone: central body, 4 cross arms, 4 propellers at arm ends, camera/sensor below, landing legs).
@@ -14694,7 +14803,9 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                 this._log("No suitable references found in collection — working from text rules only.", "warn");
             }
             const availableTextures = this._getAvailableTextureNames();
-            const systemPrompt = this._buildSystemPrompt(refs, availableTextures);
+            const cubeBudget = this._estimateCubeBudget(promptText);
+            this._log("Cube budget estimated for \"" + promptText + "\": ~" + cubeBudget.budget + " (hard max " + cubeBudget.max + ").", "ok");
+            const systemPrompt = this._buildSystemPrompt(refs, availableTextures, cubeBudget);
 
             if (!this.ENDPOINT || this.ENDPOINT === '') {
                 this._log("ENDPOINT not set.", "error");
@@ -14702,8 +14813,8 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
             }
 
             const userContent = imageDescription
-                ? `Build: ${promptText}.\n\nDetailed description of the attached reference image${this._images.length > 1 ? "s" : ""} (rely on it as precisely as possible — shape, parts, proportions, materials, element arrangement must match this description as closely as possible):\n${imageDescription}\n\nAnswer strictly as a JSON object {"plan": "...", "cubes": [...]}. Write the plan briefly (3-6 short sentences) — the main response budget must go into the full array of cubes covering ALL parts of the plan, not a single plan part should remain without cubes.`
-                : `Build: ${promptText}. Answer strictly as a JSON object {"plan": "...", "cubes": [...]}. Write the plan briefly (3-6 short sentences) — the main response budget must go into the full array of cubes covering ALL parts of the plan, not a single plan part should remain without cubes.`;
+                ? `Build: ${promptText}.\n\nDetailed description of the attached reference image${this._images.length > 1 ? "s" : ""} (rely on it as precisely as possible — shape, parts, proportions, materials, element arrangement must match this description as closely as possible):\n${imageDescription}\n\nAnswer strictly as a JSON object {"plan": "...", "cubes": [...]}. Write the plan briefly (3-6 short sentences) — the main response budget must go into the full array of cubes covering ALL parts of the plan, not a single plan part should remain without cubes.\n\nCube budget for this build: ~${cubeBudget.budget} cubes (stay within ${cubeBudget.min}–${cubeBudget.max}, NEVER more than ${cubeBudget.max}).`
+                : `Build: ${promptText}. Answer strictly as a JSON object {"plan": "...", "cubes": [...]}. Write the plan briefly (3-6 short sentences) — the main response budget must go into the full array of cubes covering ALL parts of the plan, not a single plan part should remain without cubes.\n\nCube budget for this build: ~${cubeBudget.budget} cubes (stay within ${cubeBudget.min}–${cubeBudget.max}, NEVER more than ${cubeBudget.max}).`;
 
             // Up to two attempts: if first attempt returns valid but truncated by MAX_TOKENS
             // JSON (common situation on very large builds), try one more time
@@ -14888,6 +14999,10 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                 }
             }));
             if (!cubes.length) throw new Error("No valid cubes left after check");
+            // Client-side safety net: clamp wild values, sit the build on the floor,
+            // and if the model overshot its budget, trim the least-important cubes so
+            // the build never comes out broken or unmanageable.
+            cubes = this._normalizeCubesForBuild(cubes, cubeBudget);
             this._log("Ready to build: " + cubes.length + " cubes passed check.", "ok");
 
             this._setStatus(`Building: 0 / ${cubes.length} cubes...`, "");
@@ -16280,6 +16395,7 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
                         <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Wooden fence'">Fence</span>
                         <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Wooden watchtower'">Tower</span>
                         <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Stone stairs with railings'">Stairs</span>
+                        <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Heavy bunker door with arch, frame, wheel handle and rivets'">Bunker door</span>
                     </div>
                     <div class="ai-progress-wrap" id="ai-progress-wrap"><div class="ai-progress-bar" id="ai-progress-bar"></div></div>
                     <div class="ai-status-line" id="ai-status-line"></div>
