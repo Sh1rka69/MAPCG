@@ -798,6 +798,82 @@
             transition: all 0.12s;
         }
         .ai-cancel-btn:hover { border-color: var(--td-danger, #ff6b6b); color: var(--td-danger, #ff6b6b); }
+
+        /* ===== AI Agent 2.0: stage stepper ===== */
+        .ai-stepper {
+            display: none; gap: 0; padding: 10px 0 2px;
+            border-bottom: 1px solid var(--td-border);
+        }
+        .ai-stepper.show { display: flex; }
+        .ai-step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; position: relative; }
+        .ai-step-dot {
+            width: 20px; height: 20px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; font-weight: 700;
+            border: 1px solid var(--td-border-strong);
+            color: var(--td-text-muted); background: var(--td-bg-2);
+            transition: all .18s ease;
+        }
+        .ai-step-label { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--td-text-muted); transition: color .18s; }
+        .ai-step:not(:last-child)::after {
+            content: ''; position: absolute; top: 10px; right: -50%; width: 100%;
+            height: 1px; background: var(--td-border); z-index: -1; transition: background .18s;
+        }
+        .ai-step-active .ai-step-dot { background: #7c5cff; border-color: #b79dff; color: #fff; box-shadow: 0 0 10px rgba(124,92,255,.5); }
+        .ai-step-active .ai-step-label { color: #cbb8ff; }
+        .ai-step-done .ai-step-dot { background: rgba(94,196,110,.18); border-color: var(--td-ok); color: var(--td-ok); }
+        .ai-step-done .ai-step-label { color: var(--td-ok); }
+
+        /* ===== AI Agent 2.0: agent settings panel ===== */
+        .ai-agent-panel { border: 1px solid var(--td-border); background: var(--td-bg-1); font-size: 11px; }
+        .ai-agent-head {
+            display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+            cursor: pointer; user-select: none; letter-spacing: .04em;
+        }
+        .ai-agent-title { font-weight: 700; color: #cbb8ff; letter-spacing: .06em; text-transform: uppercase; font-size: 10px; }
+        .ai-agent-sub { margin-left: auto; color: var(--td-text-dim); font-size: 10px; }
+        .ai-agent-toggle { color: var(--td-text-dim); transition: transform .15s; }
+        .ai-agent-panel.collapsed .ai-agent-toggle { transform: rotate(-90deg); }
+        .ai-agent-panel.collapsed .ai-agent-body { display: none; }
+        .ai-agent-body { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 9px; }
+        .ai-agent-row { display: flex; align-items: center; gap: 10px; }
+        .ai-agent-rowlabel { width: 44px; flex-shrink: 0; color: var(--td-text-dim); font-size: 10px; letter-spacing: .06em; }
+        .ai-chiprow { display: flex; gap: 5px; flex: 1; }
+        .ai-chip {
+            flex: 1; padding: 5px 4px; font-size: 10px; font-weight: 600;
+            letter-spacing: .05em; text-transform: uppercase; cursor: pointer;
+            border: 1px solid var(--td-border); background: var(--td-bg-2); color: var(--td-text-dim);
+            transition: all .12s;
+        }
+        .ai-chip:hover { border-color: var(--td-border-strong); color: #fff; }
+        .ai-chip-active { background: rgba(124,92,255,.16); border-color: #b79dff; color: #cbb8ff; }
+        .ai-switch-row {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            padding: 6px 8px; background: var(--td-bg-2); border: 1px solid var(--td-border);
+            color: var(--td-text-dim); cursor: pointer;
+        }
+        .ai-switch-row input[type=checkbox] { width: 30px; height: 16px; appearance: none; -webkit-appearance: none; position: relative; background: var(--td-bg-3); border: 1px solid var(--td-border-strong); border-radius: 10px; cursor: pointer; transition: all .15s; }
+        .ai-switch-row input[type=checkbox]::after { content: ''; position: absolute; top: 1px; left: 1px; width: 12px; height: 12px; border-radius: 50%; background: var(--td-text-dim); transition: all .15s; }
+        .ai-switch-row input[type=checkbox]:checked { background: rgba(124,92,255,.3); border-color: #b79dff; }
+        .ai-switch-row input[type=checkbox]:checked::after { left: 15px; background: #b79dff; }
+
+        /* ===== AI Agent 2.0: quality report ===== */
+        .ai-report-wrap { border: 1px solid var(--td-border); background: var(--td-bg-1); font-size: 11px; }
+        .ai-report-head {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 7px 10px; border-bottom: 1px solid var(--td-border);
+            color: var(--td-text); letter-spacing: .04em; font-weight: 600; font-size: 10.5px;
+        }
+        .ai-report-status { font-size: 9px; font-weight: 700; letter-spacing: .16em; padding: 2px 7px; text-transform: uppercase; }
+        .ai-report-status.ok { color: var(--td-ok); border: 1px solid rgba(94,196,110,.4); background: rgba(94,196,110,.1); }
+        .ai-report-status.warn { color: var(--td-warn); border: 1px solid rgba(255,184,74,.4); background: rgba(255,184,74,.1); }
+        .ai-report-body { padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+        .ai-report-row { display: flex; gap: 6px; }
+        .ai-report-label { color: var(--td-text-muted); }
+        .ai-report-val { color: var(--td-text); }
+        .ai-report-row.ai-report-warn { width: 100%; color: var(--td-warn); }
+        .ai-report-row.ai-report-warn .ai-report-label { color: var(--td-warn); }
+
         .collection-btn-select, .collection-btn-spawn {
             flex: 1; padding: 10px 14px; font-size: 12px; font-weight: 600;
             letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer;
@@ -14571,7 +14647,7 @@ Write in English, concisely, by points, without introduction or conclusion — o
      *   • if the model overshot its budget, drops the least-important (smallest)
      *     cubes first so the main form and large parts survive.
      *  Returns a new array; never throws. */
-    _normalizeCubesForBuild: function(cubes, budgetInfo) {
+    _normalizeCubesForBuild: function(cubes, budgetInfo, groundSnap = true) {
         if (!Array.isArray(cubes) || !cubes.length) return cubes;
         const hardCap = (budgetInfo && budgetInfo.hardCap) || 240;
         let out = cubes.slice();
@@ -14595,9 +14671,10 @@ Write in English, concisely, by points, without introduction or conclusion — o
 
         // Rest the build on the floor: if the lowest point is clearly below Y=0,
         // shift the whole object up so it doesn't look sunk into the ground.
+        // (Only when ground-snap is enabled in the agent settings.)
         let minY = Infinity;
         for (const c of out) { const h = c.position.y - c.scale.y / 2; if (h < minY) minY = h; }
-        if (Number.isFinite(minY) && minY < -0.5) {
+        if (groundSnap && Number.isFinite(minY) && minY < -0.5) {
             const lift = -minY;
             for (const c of out) c.position.y += lift;
             this._log("Lifted build by " + lift.toFixed(2) + " m so it sits on the floor.", "warn");
@@ -14754,21 +14831,302 @@ The plan must be short, because the main response budget is needed for cubes. CR
 ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text", "cubes": [ ... ]}, where "plan" is a short reasoning string per points above, and "cubes" is the array of cubes in the format described above, built strictly according to this plan and covering ALL its parts. No explanations outside these two fields, no markdown formatting. The first character must be { and the last — }.`;
     },
 
+    _cancelRequested: false,
+
+    /* ---------- Agent prefs (persisted) ---------- */
+    prefs: { detail: "balanced", groundSnap: true, useReferenceStyle: true },
+    _loadPrefs: function() {
+        let saved = null;
+        try { saved = JSON.parse(localStorage.getItem("mapcg_ai_agent") || "null"); } catch (e) {}
+        this.prefs = Object.assign({ detail: "balanced", groundSnap: true, useReferenceStyle: true }, saved || {});
+        this._syncAgentControls();
+    },
+    _savePrefs: function() {
+        try { localStorage.setItem("mapcg_ai_agent", JSON.stringify(this.prefs)); } catch (e) {}
+    },
+    _syncAgentControls: function() {
+        document.querySelectorAll("[data-ai-detail]").forEach(el => {
+            el.classList.toggle("ai-chip-active", el.getAttribute("data-ai-detail") === this.prefs.detail);
+        });
+        const g = document.getElementById("ai-toggle-ground"); if (g) g.checked = !!this.prefs.groundSnap;
+        const r = document.getElementById("ai-toggle-ref"); if (r) r.checked = !!this.prefs.useReferenceStyle;
+        const lbl = document.getElementById("ai-detail-label"); if (lbl) lbl.textContent = this._detailConfig().label;
+    },
+    _detailConfig: function() {
+        if (this.prefs.detail === "economic")  return { label: "Economic",  mult: 0.6, maxTokens: 14000, chunk: 22 };
+        if (this.prefs.detail === "detailed")  return { label: "Detailed",  mult: 1.5, maxTokens: 32000, chunk: 30 };
+        return { label: "Balanced", mult: 1, maxTokens: 24000, chunk: 26 };
+    },
+    setDetail: function(v) { this.prefs.detail = v; this._savePrefs(); this._syncAgentControls(); },
+    toggleGround: function(on) { this.prefs.groundSnap = !!on; this._savePrefs(); },
+    toggleRef: function(on) { this.prefs.useReferenceStyle = !!on; this._savePrefs(); },
+    toggleAgentPanel: function() {
+        const p = document.getElementById("ai-agent-panel");
+        if (p) p.classList.toggle("collapsed");
+    },
+
+    /* ---------- Stage state machine + UI ---------- */
+    _STAGES: ["plan", "generate", "verify", "build"],
+    _setStage: function(stage, label) {
+        this._stage = stage;
+        const order = this._STAGES.indexOf(stage);
+        document.querySelectorAll("[data-ai-stage]").forEach(el => {
+            const o = this._STAGES.indexOf(el.getAttribute("data-ai-stage"));
+            el.classList.toggle("ai-step-active", o === order);
+            el.classList.toggle("ai-step-done", o !== -1 && o < order);
+        });
+        const stepper = document.getElementById("ai-stepper");
+        if (stepper) stepper.classList.add("show");
+        this._setStatus('<span class="ai-spinner"></span> ' + label + '...', "");
+    },
+    _hideStepper: function() {
+        const stepper = document.getElementById("ai-stepper");
+        if (stepper) stepper.classList.remove("show");
+        document.querySelectorAll("[data-ai-stage]").forEach(el => el.classList.remove("ai-step-active", "ai-step-done"));
+    },
+
+    /* ---------- Quality report UI ---------- */
+    _resetReport: function() {
+        const wrap = document.getElementById("ai-report-wrap");
+        if (wrap) wrap.style.display = "none";
+    },
+    _renderReport: function(report) {
+        const wrap = document.getElementById("ai-report-wrap");
+        const body = document.getElementById("ai-report-body");
+        if (!wrap || !body) return;
+        body.innerHTML = "";
+        const add = (label, val, warn) => {
+            const row = document.createElement("div");
+            row.className = "ai-report-row" + (warn ? " ai-report-warn" : "");
+            const l = document.createElement("span"); l.className = "ai-report-label"; l.textContent = label;
+            const v = document.createElement("span"); v.className = "ai-report-val"; v.textContent = val;
+            row.appendChild(l); row.appendChild(v); body.appendChild(row);
+        };
+        add("Cubes", String(report.count));
+        add("Size", Math.round(report.dims.w) + " × " + Math.round(report.dims.h) + " × " + Math.round(report.dims.d) + " m");
+        add("Materials", String(report.materials));
+        add("Rotated parts", String(report.rotated));
+        if (report.issues.length) add("Quality", report.issues.join(" · "), true);
+        wrap.style.display = "block";
+        const badge = document.getElementById("ai-report-status");
+        if (badge) {
+            badge.textContent = report.passed ? "PASS" : "REVIEW";
+            badge.className = "ai-report-status " + (report.passed ? "ok" : "warn");
+        }
+    },
+
+    /* ---------- Network call with retry/backoff ---------- */
+    _requestGeneration: async function(messages, maxTokens, temperature) {
+        const TRANSIENT = [429, 502, 503, 504];
+        const MAX_NET = 5;
+        let response = null, lastNetError = null, serverRetryAfterSec = null;
+        for (let a = 1; a <= MAX_NET; a++) {
+            try {
+                response = await fetch(this.ENDPOINT, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ messages, temperature: (temperature == null ? 0.5 : temperature), max_tokens: maxTokens || 24000 })
+                });
+                lastNetError = null;
+            } catch (netErr) { lastNetError = netErr; response = null; }
+            serverRetryAfterSec = null;
+            if (response && TRANSIENT.includes(response.status)) {
+                try { const c = response.clone(); const j = await c.json(); if (j?._debug?.retryAfterSec) serverRetryAfterSec = j._debug.retryAfterSec; } catch (e) {}
+            }
+            const isTransient = !!lastNetError || (response && TRANSIENT.includes(response.status));
+            if (isTransient && a < MAX_NET) {
+                const waitSec = serverRetryAfterSec || Math.min(6 * a, 20);
+                const reason = lastNetError ? "network error" : "server busy (" + response.status + ")";
+                this._log("Server busy (" + reason + ") — retry " + a + "/" + (MAX_NET - 1) + " in " + waitSec + "s...", "warn");
+                this._setStatus('<span class="ai-spinner"></span> Server busy (' + reason + ') — retrying in ' + waitSec + 's...', "");
+                if (window.aiGenToast) aiGenToast.update("running", "Server busy (" + reason + ") — retrying…");
+                await new Promise(r => setTimeout(r, waitSec * 1000));
+                continue;
+            }
+            break;
+        }
+        if (lastNetError) {
+            const m = "Network error: " + (lastNetError?.message || String(lastNetError));
+            throw new Error(m + ". Check your internet connection and try again.");
+        }
+        if (!response.ok) {
+            let msg = "Server returned error (" + response.status + ")";
+            let has = false;
+            try { const j = await response.json(); if (j?.error) { msg = typeof j.error === "string" ? j.error : (j.error.message || msg); has = true; } } catch (e) {}
+            if (!has) {
+                if (response.status === 429) msg = "Rate limit reached — wait about a minute and try again.";
+                else if (response.status >= 500) msg += " — the AI provider is temporarily overloaded. Wait a minute and press Build again.";
+            }
+            throw new Error(msg);
+        }
+        const data = await response.json();
+        const content = data?.choices?.[0]?.message?.content;
+        const debug = data?._debug;
+        return { content, debug };
+    },
+
+    /* ---------- Parse + repair one chunk/response ---------- */
+    _parseCubesFromRaw: function(raw) {
+        raw = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+        let parsed = null, wasTruncated = false;
+        try { parsed = JSON.parse(raw); }
+        catch (e) {
+            this._log("JSON truncated (" + (e?.message || "parse error") + ") — recovering partial chunk...", "warn");
+            const repaired = this._repairTruncatedCubesJson(raw);
+            if (repaired) { parsed = repaired; wasTruncated = true; this._log("Recovered " + (repaired.cubes?.length || 0) + " cubes from truncated chunk.", "warn"); }
+        }
+        const cubes = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.cubes) ? parsed.cubes : null);
+        let planText = (parsed && typeof parsed.plan === "string") ? parsed.plan : null;
+        const done = !!(parsed && parsed.done);
+        return { cubes: cubes || [], planText, wasTruncated, done };
+    },
+
+    _sanitizeCubes: function(arr) {
+        if (!Array.isArray(arr)) return [];
+        return arr.filter(c => c && typeof c === "object").map(c => ({
+            name: "MapCube",
+            tag: typeof c.tag === "string" ? c.tag : "Concrete",
+            tileMode: typeof c.tileMode === "number" ? c.tileMode : 2,
+            materialName: typeof c.materialName === "string" ? c.materialName : "grid",
+            visible: c.visible !== false,
+            collisions: c.collisions !== false,
+            physics: !!c.physics,
+            position: { x: (+c.position?.x) || 0, y: (+c.position?.y) || 0, z: (+c.position?.z) || 0 },
+            rotation: { x: (+c.rotation?.x) || 0, y: (+c.rotation?.y) || 0, z: (+c.rotation?.z) || 0 },
+            scale: { x: (+c.scale?.x) > 0 ? +c.scale.x : 1, y: (+c.scale?.y) > 0 ? +c.scale.y : 1, z: (+c.scale?.z) > 0 ? +c.scale.z : 1 }
+        }));
+    },
+    _dedupCubes: function(arr) {
+        const seen = new Map(); const out = [];
+        for (const c of arr) {
+            const key = [Math.round(c.position.x * 4) / 4, Math.round(c.position.y * 4) / 4, Math.round(c.position.z * 4) / 4,
+                Math.round(c.scale.x * 10) / 10, Math.round(c.scale.y * 10) / 10, Math.round(c.scale.z * 10) / 10,
+                Math.round(c.rotation.y / 5) * 5].join("|");
+            if (seen.has(key)) continue;
+            seen.set(key, true); out.push(c);
+        }
+        if (out.length < arr.length) this._log("Removed " + (arr.length - out.length) + " duplicate cube(s) across chunks.", "warn");
+        return out;
+    },
+    _verifyCubes: function(cubes, planText, budget) {
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        let rotated = 0;
+        for (const c of cubes) {
+            const hx = c.scale.x / 2, hy = c.scale.y / 2, hz = c.scale.z / 2;
+            minX = Math.min(minX, c.position.x - hx); maxX = Math.max(maxX, c.position.x + hx);
+            minY = Math.min(minY, c.position.y - hy); maxY = Math.max(maxY, c.position.y + hy);
+            minZ = Math.min(minZ, c.position.z - hz); maxZ = Math.max(maxZ, c.position.z + hz);
+            if (Math.abs(c.rotation.y % 360) > 1) rotated++;
+        }
+        const w = maxX - minX, h = maxY - minY, d = maxZ - minZ;
+        const issues = [];
+        if ((w < 0.2 || d < 0.2) && h > 0.5) issues.push("Looks flat — almost no thickness on X/Z.");
+        if (Math.max(w, h, d) > 25) issues.push("Very large object (" + Math.round(Math.max(w, h, d)) + " m).");
+        if (minY < -0.5) issues.push("Sits below the floor — auto-lifted.");
+        if (cubes.length > budget.max) issues.push("Over budget by " + (cubes.length - budget.max) + " cubes.");
+        const materials = new Set(cubes.map(c => c.materialName)).size;
+        return {
+            count: cubes.length, dims: { w, h, d }, rotated, materials,
+            issues,
+            passed: issues.length === 0,
+            summary: issues.length === 0
+                ? "Good — " + cubes.length + " cubes, " + Math.round(w) + "×" + Math.round(h) + "×" + Math.round(d) + " m, " + materials + " material(s)."
+                : issues.length + " issue(s): " + issues[0]
+        };
+    },
+
+    /* ---------- Single-shot generator (small builds) ---------- */
+    _runSingleShot: async function(ctx) {
+        const { promptText, imageDescription, systemPrompt, budget } = ctx;
+        const base = imageDescription
+            ? `Build: ${promptText}.\n\nDetailed description of the reference image (match shape, parts, proportions, materials as closely as possible):\n${imageDescription}`
+            : `Build: ${promptText}.`;
+        const userContent = base + `\n\nAnswer strictly as JSON {"plan":"...","cubes":[...]}. Plan briefly (3-6 short sentences). Cube budget ≈ ${budget.budget} (max ${budget.max}).`;
+        let cubes = null, planText = null;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            this._setStatus('<span class="ai-spinner"></span> Generating (attempt ' + attempt + ')...', "");
+            const resp = await this._requestGeneration([
+                { role: "system", content: systemPrompt + (attempt > 1 ? "\n\nIMPORTANT: previous response was truncated or too large. Be more compact, keep the main structure." : "") },
+                { role: "user", content: userContent }
+            ], budget.max <= 80 ? 16000 : 24000, 0.5);
+            if (!resp.content) throw new Error("Model returned empty response. Try again.");
+            const parsed = this._parseCubesFromRaw(resp.content);
+            if (!planText && parsed.planText) planText = parsed.planText;
+            if (parsed.cubes && parsed.cubes.length) { cubes = parsed.cubes; if (!parsed.wasTruncated || attempt === 2) break; }
+        }
+        if (!cubes) throw new Error("Model returned invalid JSON.");
+        return { cubes, planText };
+    },
+
+    /* ---------- Chunked generator (big builds) — never truncates ---------- */
+    _runChunked: async function(ctx) {
+        const { promptText, imageDescription, systemPrompt, budget, detail } = ctx;
+        const CHUNK = (detail && detail.chunk) || 26;
+        const MAX_CHUNKS = 9;
+        const all = [];
+        let planText = null, total = 0, chunks = 0, done = false;
+        const prompt = imageDescription
+            ? `Build: ${promptText}.\n\nReference image description (match it closely):\n${imageDescription}`
+            : `Build: ${promptText}.`;
+
+        const firstUser = prompt + `\n\nBuild this in CHUNKS. Budget ≈ ${budget.budget} cubes (max ${budget.max}).
+In THIS first reply return ONLY JSON:
+{"plan":"brief part list with sizes","cubes":[ first ${CHUNK} cubes covering the FOUNDATION/FRAME and the largest main parts ],"done":false,"next":"one short line on what remains"}.
+Return only this first chunk now — never the whole build.`;
+
+        this._log("Chunk 1 — plan + first cubes...", "info");
+        let resp = await this._requestGeneration([
+            { role: "system", content: systemPrompt },
+            { role: "user", content: firstUser }
+        ], detail.maxTokens, 0.5);
+        let parsed = this._parseCubesFromRaw(resp.content);
+        if (parsed.cubes.length) { all.push(...parsed.cubes); total += parsed.cubes.length; }
+        if (parsed.planText) planText = parsed.planText;
+        done = parsed.done;
+        chunks = 1;
+        this._log("Chunk 1: got " + parsed.cubes.length + " cube(s)" + (done ? " — agent reports complete." : "") + ".", "ok");
+        if (planText) this._showPlan(planText);
+
+        while (!done && total < budget.max && chunks < MAX_CHUNKS) {
+            if (this._cancelRequested) { this._log("Stopped by user during generation.", "warn"); break; }
+            const contUser = `Continue the build of "${promptText}".
+Overall plan: ${planText || "(see system rules)"}.
+${total} cubes already exist covering the first parts. Add the NEXT chunk of up to ${CHUNK} NEW cubes for the remaining parts and details (order: main structure → secondary parts → decoration). Do NOT re-list or duplicate existing cubes.
+Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}`;
+            this._log("Chunk " + (chunks + 1) + " — asking for next " + CHUNK + " cubes...", "info");
+            resp = await this._requestGeneration([
+                { role: "system", content: systemPrompt },
+                { role: "user", content: contUser }
+            ], detail.maxTokens, 0.5);
+            parsed = this._parseCubesFromRaw(resp.content);
+            const newCount = parsed.cubes.length;
+            all.push(...parsed.cubes); total += newCount;
+            done = parsed.done;
+            chunks++;
+            this._log("Chunk " + chunks + ": got " + newCount + " cube(s)" + (done ? " — agent says done." : "") + ".", "ok");
+            if (newCount === 0) { this._log("No new cubes from this chunk — stopping.", "warn"); break; }
+        }
+        if (total >= budget.max) this._log("Reached cube budget cap; stopping generation.", "warn");
+        if (chunks >= MAX_CHUNKS) this._log("Reached max chunk count; finishing with what we have.", "warn");
+        this._log("Generation complete: " + all.length + " cube(s) across " + chunks + " chunk(s).", "ok");
+        return { cubes: all, planText };
+    },
+
     run: async function() {
         if (this.isRunning) return;
         const ta = document.getElementById("ai-builder-prompt");
         const promptText = (ta?.value || "").trim();
-        if (!promptText) {
-            this._setStatus("First describe what to build.", "error");
-            return;
-        }
+        if (!promptText) { this._setStatus("First describe what to build.", "error"); return; }
 
+        this._loadPrefs();
+        this._cancelRequested = false;
         this._setRunningUI(true);
         if (window.aiGenToast) aiGenToast.update("running", "Generation in progress…");
-        this._setStatus('<span class="ai-spinner"></span> Picking references and sending request...', "");
         this._setProgress(0);
         this._setRefLine("");
         this._clearConsole();
+        this._resetReport();
+        this._setStage("plan", "Analyzing request");
         this._log("Request: \"" + promptText + "\"" + (this._images.length ? " (+ " + this._images.length + " image" + (this._images.length > 1 ? "s" : "") + ")" : ""));
         const planWrapEl = document.getElementById("ai-plan-wrap");
         if (planWrapEl) planWrapEl.style.display = "none";
@@ -14779,235 +15137,70 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                 this._setStatus('<span class="ai-spinner"></span> Analyzing image' + (this._images.length > 1 ? "s" : "") + '...', "");
                 this._log("Sending " + this._images.length + " image" + (this._images.length > 1 ? "s" : "") + " for vision analysis...");
                 const imgStart = performance.now();
-                try {
-                    imageDescription = await this._analyzeImage();
-                } catch (imgErr) {
-                    this._log("Image analysis failed: " + (imgErr?.message || String(imgErr)), "error");
-                    throw new Error("Image analysis error: " + (imgErr?.message || String(imgErr)));
-                }
+                try { imageDescription = await this._analyzeImage(); }
+                catch (imgErr) { this._log("Image analysis failed: " + (imgErr?.message || String(imgErr)), "error"); throw new Error("Image analysis error: " + (imgErr?.message || String(imgErr))); }
                 this._log("Image analyzed in " + Math.round(performance.now() - imgStart) + " ms, received " + (imageDescription?.length || 0) + " chars of description.", "ok");
-                this._setStatus('<span class="ai-spinner"></span> Picking references and sending request...', "");
             }
 
             let refs = [];
-            try {
-                refs = await this._pickReferenceItemsSemantic(promptText, 4);
-            } catch (refErr) {
-                this._log("Semantic reference picker failed (" + (refErr?.message || String(refErr)) + "), falling back to keyword matching.", "warn");
-                refs = this._pickReferenceItems(promptText, 4);
-            }
+            try { refs = await this._pickReferenceItemsSemantic(promptText, 4); }
+            catch (refErr) { this._log("Semantic reference picker failed — falling back to keyword matching.", "warn"); refs = this._pickReferenceItems(promptText, 4); }
             if (refs.length) {
                 this._setRefLine("References: " + refs.map(r => r.name).join(", "));
                 this._log("References picked from collection: " + refs.map(r => r.name).join(", "));
             } else {
                 this._log("No suitable references found in collection — working from text rules only.", "warn");
             }
+
             const availableTextures = this._getAvailableTextureNames();
-            const cubeBudget = this._estimateCubeBudget(promptText);
-            this._log("Cube budget estimated for \"" + promptText + "\": ~" + cubeBudget.budget + " (hard max " + cubeBudget.max + ").", "ok");
-            const systemPrompt = this._buildSystemPrompt(refs, availableTextures, cubeBudget);
+            const base = this._estimateCubeBudget(promptText);
+            const detail = this._detailConfig();
+            const budget = {
+                budget: Math.max(20, Math.round(base.budget * detail.mult)),
+                min: Math.round(base.budget * detail.mult * 0.75),
+                max: Math.min(Math.round(base.max * detail.mult), 300),
+                hardCap: base.hardCap
+            };
+            this._log("Agent preset: " + detail.label + " (target ~" + budget.budget + " cubes, max " + budget.max + ").", "ok");
+
+            const refsForPrompt = this.prefs.useReferenceStyle ? refs : [];
+            if (!this.prefs.useReferenceStyle) this._log("Style-from-reference disabled — using text rules only.", "warn");
+            const systemPrompt = this._buildSystemPrompt(refsForPrompt, availableTextures, budget);
 
             if (!this.ENDPOINT || this.ENDPOINT === '') {
                 this._log("ENDPOINT not set.", "error");
                 throw new Error("⚠️ AI Builder не работает с GitHub Pages!\n\nОткрой редактор через Vercel:\n👉 https://mapcg.vercel.app\n\nИли укажи свой домен Vercel в настройках ENDPOINT.");
             }
 
-            const userContent = imageDescription
-                ? `Build: ${promptText}.\n\nDetailed description of the attached reference image${this._images.length > 1 ? "s" : ""} (rely on it as precisely as possible — shape, parts, proportions, materials, element arrangement must match this description as closely as possible):\n${imageDescription}\n\nAnswer strictly as a JSON object {"plan": "...", "cubes": [...]}. Write the plan briefly (3-6 short sentences) — the main response budget must go into the full array of cubes covering ALL parts of the plan, not a single plan part should remain without cubes.\n\nCube budget for this build: ~${cubeBudget.budget} cubes (stay within ${cubeBudget.min}–${cubeBudget.max}, NEVER more than ${cubeBudget.max}).`
-                : `Build: ${promptText}. Answer strictly as a JSON object {"plan": "...", "cubes": [...]}. Write the plan briefly (3-6 short sentences) — the main response budget must go into the full array of cubes covering ALL parts of the plan, not a single plan part should remain without cubes.\n\nCube budget for this build: ~${cubeBudget.budget} cubes (stay within ${cubeBudget.min}–${cubeBudget.max}, NEVER more than ${cubeBudget.max}).`;
+            const mode = budget.max <= 45 ? "single" : "chunked";
+            this._setStage("generate", mode === "chunked" ? "Generating in chunks" : "Generating");
+            this._log("Generation mode: " + mode + ".", "ok");
 
-            // Up to two attempts: if first attempt returns valid but truncated by MAX_TOKENS
-            // JSON (common situation on very large builds), try one more time
-            // with an explicit request to the model to be more compact with cubes, not just give up.
-            let cubes = null;
-            let planText = null;
-            let lastRepairNote = "";
-            const MAX_ATTEMPTS = 2;
-
-            for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-                this._setStatus('<span class="ai-spinner"></span> Waiting for model response' + (attempt > 1 ? " (attempt " + attempt + ")" : "") + '...', "");
-                this._log((attempt > 1 ? "Retry attempt " + attempt + ": " : "Sending model request...") + (attempt > 1 ? lastRepairNote : ""));
-                const reqStart = performance.now();
-
-                // Transient failures — HTTP 429 (rate limit), 502/503/504 (provider
-                // overloaded / gateway hiccup) or a dropped network connection —
-                // are retried automatically with backoff before giving up, because
-                // "high demand" spikes usually clear within a short while. The Worker
-                // itself already rotates keys/models internally on 429/502/503, so by
-                // the time we see one of these here it means that already failed too —
-                // give it a longer, patient backoff rather than a quick single retry.
-                const TRANSIENT_STATUS = [429, 502, 503, 504];
-                const MAX_NET_ATTEMPTS = 5;
-                let response = null;
-                let lastNetError = null;
-                let serverRetryAfterSec = null;
-                for (let netAttempt = 1; netAttempt <= MAX_NET_ATTEMPTS; netAttempt++) {
-                    try {
-                        response = await fetch(this.ENDPOINT, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                messages: [
-                                    { role: "system", content: systemPrompt + (attempt > 1 ? "\n\nIMPORTANT: the previous response did not fit within the limit and was truncated. This time be more compact — use slightly fewer cubes (simplify small decorative details, keep the main structure) and a shorter plan, so it is guaranteed to fit within the token limit." : "") },
-                                    { role: "user", content: userContent }
-                                ],
-                                temperature: 0.5,
-                                max_tokens: 24000
-                            })
-                        });
-                        lastNetError = null;
-                    } catch (netErr) {
-                        lastNetError = netErr;
-                        response = null;
-                    }
-                    serverRetryAfterSec = null;
-                    if (response && TRANSIENT_STATUS.includes(response.status)) {
-                        try {
-                            const cloned = response.clone();
-                            const errJson = await cloned.json();
-                            if (errJson?._debug?.retryAfterSec) serverRetryAfterSec = errJson._debug.retryAfterSec;
-                        } catch (e) {}
-                    }
-                    const isTransient = !!lastNetError || (response && TRANSIENT_STATUS.includes(response.status));
-                    if (isTransient && netAttempt < MAX_NET_ATTEMPTS) {
-                        const waitSec = serverRetryAfterSec || Math.min(6 * netAttempt, 20);
-                        const reason = lastNetError ? "network error" : "server busy (" + response.status + ")";
-                        this._log("Server busy (" + reason + ") — auto-retry " + netAttempt + "/" + (MAX_NET_ATTEMPTS - 1) + " in " + waitSec + "s...", "warn");
-                        this._setStatus('<span class="ai-spinner"></span> Server busy (' + reason + ") — retrying in " + waitSec + "s...", "");
-                        if (window.aiGenToast) aiGenToast.update("running", "Server busy (" + reason + ") — retrying…");
-                        await new Promise(r => setTimeout(r, waitSec * 1000));
-                        continue;
-                    }
-                    break;
-                }
-
-                if (lastNetError) {
-                    const nmsg = "Network error: " + (lastNetError?.message || String(lastNetError));
-                    this._log(nmsg, "error");
-                    throw new Error(nmsg + ". Check your internet connection and try again.");
-                }
-
-                const elapsedMs = Math.round(performance.now() - reqStart);
-
-                if (!response.ok) {
-                    let msg = "Server returned error (" + response.status + ")";
-                    let hasServerMsg = false;
-                    try {
-                        const errJson = await response.json();
-                        if (errJson?.error) {
-                            msg = typeof errJson.error === "string" ? errJson.error : (errJson.error.message || msg);
-                            hasServerMsg = true;
-                        }
-                    } catch (e) {}
-                    if (!hasServerMsg) {
-                        if (response.status === 429) msg = "Rate limit reached — wait about a minute and try again.";
-                        else if (response.status >= 500) msg += " — the AI provider is temporarily overloaded. Wait a minute and press Build again.";
-                    }
-                    this._log("Response error (" + response.status + ") after " + elapsedMs + " ms: " + msg, "error");
-                    throw new Error(msg);
-                }
-
-                const data = await response.json();
-                const content = data?.choices?.[0]?.message?.content;
-                const debug = data?._debug;
-                if (debug) {
-                    this._log(`Response received in ${elapsedMs} ms — model: ${debug.model}, finish reason: ${debug.finishReason}, characters: ${debug.outputChars}.`, debug.finishReason === "STOP" ? "ok" : "warn");
-                } else {
-                    this._log(`Response received in ${elapsedMs} ms.`, "ok");
-                }
-
-                if (!content || typeof content !== "string" || !content.trim()) {
-                    this._log("Model returned empty response.", "error");
-                    throw new Error("Model returned empty response. Try again.");
-                }
-
-                let raw = content.trim();
-                raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
-                this._log("Parsing JSON (" + raw.length + " chars)...");
-
-                let parsed = null;
-                let wasTruncated = false;
-                try {
-                    parsed = JSON.parse(raw);
-                } catch (e) {
-                    // Truncation in the middle of array cubes — частая сandтуацandя прand MAX_TOKENS on крупных
-                    // builds. Trying to "repair" JSON: cut to last fully
-                    // закрытого объекта into массintoе, а not throw away whole result.
-                    this._log("JSON truncated (" + (e?.message || "parse error") + ") — trying to recover partial result...", "warn");
-                    const repaired = this._repairTruncatedCubesJson(raw);
-                    if (repaired) {
-                        parsed = repaired;
-                        wasTruncated = true;
-                        this._log("Recovered " + (repaired.cubes?.length || 0) + " cubes from truncated response.", "warn");
-                    }
-                }
-
-                const extractedCubes = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.cubes) ? parsed.cubes : null);
-                if (parsed?.plan && typeof parsed.plan === "string" && !planText) {
-                    planText = parsed.plan;
-                }
-
-                if (extractedCubes && extractedCubes.length) {
-                    cubes = extractedCubes;
-                    if (wasTruncated && attempt < MAX_ATTEMPTS) {
-                        // We give model another one chance on full, not truncated result,
-                        // but we keep current partial result on case if and second attempt not works.
-                        lastRepairNote = "the previous response was truncated at " + extractedCubes.length + " cubes.";
-                        this._log("Partial result (truncated) — trying to get full version again before using this.", "warn");
-                        continue;
-                    }
-                    break;
-                }
-
-                if (attempt === MAX_ATTEMPTS) {
-                    this._log("Failed to get valid JSON on any attempt.", "error");
-                    throw new Error("Model returned invalid JSON after " + MAX_ATTEMPTS + " attempts.");
-                }
-                this._log("No valid cubes found in response, trying again...", "warn");
+            let cubes = null, planText = null;
+            if (mode === "chunked") {
+                const r = await this._runChunked({ promptText, imageDescription, systemPrompt, budget, detail });
+                cubes = r.cubes; planText = r.planText;
+            } else {
+                const r = await this._runSingleShot({ promptText, imageDescription, systemPrompt, budget });
+                cubes = r.cubes; planText = r.planText;
             }
 
-            if (planText) {
-                console.info("[AI Builder] Plan:", planText);
-                this._showPlan(planText);
-            }
-            if (!cubes || !cubes.length) {
-                throw new Error("Empty result from model");
-            }
-            // Базоintoая санandтandзацandя каждого куба перед byстройкой
-            cubes = cubes.filter(c => c && typeof c === "object").map(c => ({
-                name: "MapCube",
-                tag: typeof c.tag === "string" ? c.tag : "Concrete",
-                tileMode: typeof c.tileMode === "number" ? c.tileMode : 2,
-                materialName: typeof c.materialName === "string" ? c.materialName : "grid",
-                visible: c.visible !== false,
-                collisions: c.collisions !== false,
-                physics: !!c.physics,
-                position: {
-                    x: Number.isFinite(+c.position?.x) ? +c.position.x : 0,
-                    y: Number.isFinite(+c.position?.y) ? +c.position.y : 0,
-                    z: Number.isFinite(+c.position?.z) ? +c.position.z : 0
-                },
-                rotation: {
-                    x: Number.isFinite(+c.rotation?.x) ? +c.rotation.x : 0,
-                    y: Number.isFinite(+c.rotation?.y) ? +c.rotation.y : 0,
-                    z: Number.isFinite(+c.rotation?.z) ? +c.rotation.z : 0
-                },
-                scale: {
-                    x: Number.isFinite(+c.scale?.x) && +c.scale.x > 0 ? +c.scale.x : 1,
-                    y: Number.isFinite(+c.scale?.y) && +c.scale.y > 0 ? +c.scale.y : 1,
-                    z: Number.isFinite(+c.scale?.z) && +c.scale.z > 0 ? +c.scale.z : 1
-                }
-            }));
-            if (!cubes.length) throw new Error("No valid cubes left after check");
-            // Client-side safety net: clamp wild values, sit the build on the floor,
-            // and if the model overshot its budget, trim the least-important cubes so
-            // the build never comes out broken or unmanageable.
-            cubes = this._normalizeCubesForBuild(cubes, cubeBudget);
+            if (planText) { console.info("[AI Builder] Plan:", planText); this._showPlan(planText); }
+
+            cubes = this._sanitizeCubes(cubes);
+            if (!cubes.length) throw new Error("Empty result from model");
+            cubes = this._dedupCubes(cubes);
+            cubes = this._normalizeCubesForBuild(cubes, budget, this.prefs.groundSnap);
             this._log("Ready to build: " + cubes.length + " cubes passed check.", "ok");
 
+            this._setStage("verify", "Checking quality");
+            const report = this._verifyCubes(cubes, planText, budget);
+            this._renderReport(report);
+            this._log("Quality check: " + report.summary, report.passed ? "ok" : "warn");
+
+            this._setStage("build", "Assembling in scene");
             this._setStatus(`Building: 0 / ${cubes.length} cubes...`, "");
             this._setProgress(0);
-
             const buildName = promptText.slice(0, 40);
             const handle = await engine.buildFromCubesAnimated(cubes, {
                 delayMs: cubes.length > 80 ? 25 : cubes.length > 40 ? 40 : 60,
@@ -15020,6 +15213,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                 onDone: (created, wasCancelled) => {
                     this._setRunningUI(false);
                     this._cancelHandle = null;
+                    this._hideStepper();
                     if (wasCancelled) {
                         this._log("Stopped by user at " + created.length + " of " + cubes.length + " cubes.", "warn");
                         this._setStatus(`Stopped by user (${created.length} of ${cubes.length} cubes built).`, "");
@@ -15036,79 +15230,53 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
 
         } catch (err) {
             console.error("[AI Builder]", err);
-            const base = err?.message || "Failed to build object.";
-            this._log("Error: " + base, "error");
-            this._setStatus("✕ " + base, "error");
+            const baseMsg = err?.message || "Failed to build object.";
+            this._log("Error: " + baseMsg, "error");
+            this._setStatus("✕ " + baseMsg, "error");
             this._setRunningUI(false);
             this._setProgress(null);
-            if (window.aiGenToast) aiGenToast.update("error", base);
+            this._hideStepper();
+            if (window.aiGenToast) aiGenToast.update("error", baseMsg);
         }
     },
 
     /**
-     * Пыfadesся intoытащandть максandмум intoалandдных кубоinto andз оборintoанbutго (обрезанbutго by MAX_TOKENS)
-     * JSON-отintoета intoandда {"plan":"...", "cubes":[ {...}, {...}, {...
-     * Стратегandя: onйтand onчало массinto "cubes":[ , заthe andдтand by тексту, отслежintoя глубandну
-     * фandгурных/кintoадратных скобок and строкand (учandтыintoая экранandроintoанandе), and собandрать только те
-     * elementы intoерхnotго уроintoня массinto, что закрылandсь byлbutстью до места обрыintoа.
+     * Tries to extract as many valid cubes as possible from a truncated
+     * (cut by MAX_TOKENS) JSON like {"plan":"...", "cubes":[ {...}, {...}, ...
+     * Strategy: locate the "cubes":[, then scan forward tracking brace/bracket
+     * and string depth, collecting only fully-closed top-level elements.
      */
     _repairTruncatedCubesJson: function(raw) {
         try {
             const cubesKeyMatch = raw.match(/"cubes"\s*:\s*\[/);
             if (!cubesKeyMatch) return null;
             const arrStart = cubesKeyMatch.index + cubesKeyMatch[0].length;
-
             let planText = null;
             const planMatch = raw.match(/"plan"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-            if (planMatch) {
-                try { planText = JSON.parse('"' + planMatch[1] + '"'); } catch (e) { planText = planMatch[1]; }
-            }
-
+            if (planMatch) { try { planText = JSON.parse('"' + planMatch[1] + '"'); } catch (e) { planText = planMatch[1]; } }
             const items = [];
-            let depth = 0;
-            let itemStart = -1;
-            let inString = false;
-            let escaped = false;
-
+            let depth = 0, itemStart = -1, inString = false, escaped = false;
             for (let i = arrStart; i < raw.length; i++) {
                 const ch = raw[i];
-                if (inString) {
-                    if (escaped) { escaped = false; }
-                    else if (ch === "\\") { escaped = true; }
-                    else if (ch === '"') { inString = false; }
-                    continue;
-                }
+                if (inString) { if (escaped) { escaped = false; } else if (ch === "\\") { escaped = true; } else if (ch === '"') { inString = false; } continue; }
                 if (ch === '"') { inString = true; continue; }
-                if (ch === "{") {
-                    if (depth === 0) itemStart = i;
-                    depth++;
-                } else if (ch === "}") {
-                    depth--;
-                    if (depth === 0 && itemStart >= 0) {
-                        const itemText = raw.slice(itemStart, i + 1);
-                        try {
-                            items.push(JSON.parse(itemText));
-                        } catch (e) { /* damaged last element — skip it silently */ }
-                        itemStart = -1;
-                    }
-                } else if (ch === "]" && depth === 0) {
-                    break; // normal array end, further not going
-                }
+                if (ch === "{") { if (depth === 0) itemStart = i; depth++; }
+                else if (ch === "}") { depth--; if (depth === 0 && itemStart >= 0) { try { items.push(JSON.parse(raw.slice(itemStart, i + 1))); } catch (e) {} itemStart = -1; } }
+                else if (ch === "]" && depth === 0) { break; }
             }
-
             if (!items.length) return null;
             return { plan: planText, cubes: items };
-        } catch (e) {
-            return null;
-        }
+        } catch (e) { return null; }
     },
 
     cancel: function() {
+        this._cancelRequested = true;
         if (this._cancelHandle && typeof this._cancelHandle.cancel === "function") {
             this._cancelHandle.cancel();
         }
     }
 };
+
     
 
 /**
@@ -16383,6 +16551,13 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
                 </div>
                 <div class="ai-modal-body">
                     <textarea id="ai-builder-prompt" class="ai-prompt-input" placeholder="Describe what to build: e.g. "wooden bridge over river" or "rusty metal barrel"..."></textarea>
+                    <div class="ai-stepper" id="ai-stepper">
+                        <div class="ai-step" data-ai-stage="plan"><span class="ai-step-dot">1</span><span class="ai-step-label">Plan</span></div>
+                        <div class="ai-step" data-ai-stage="generate"><span class="ai-step-dot">2</span><span class="ai-step-label">Generate</span></div>
+                        <div class="ai-step" data-ai-stage="verify"><span class="ai-step-dot">3</span><span class="ai-step-label">Verify</span></div>
+                        <div class="ai-step" data-ai-stage="build"><span class="ai-step-dot">4</span><span class="ai-step-label">Build</span></div>
+                    </div>
+
                     <div class="ai-image-row" id="ai-image-row">
                         <input type="file" id="ai-image-input" accept="image/*" multiple style="display:none" onchange="aiBuilder.onImageSelected(event)">
                         <button type="button" class="ai-image-attach-btn" id="ai-image-attach-btn" onclick="document.getElementById('ai-image-input').click()">🖼 Attach images</button>
@@ -16396,6 +16571,25 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
                         <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Wooden watchtower'">Tower</span>
                         <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Stone stairs with railings'">Stairs</span>
                         <span class="ai-quick-chip" onclick="document.getElementById('ai-builder-prompt').value='Heavy bunker door with arch, frame, wheel handle and rivets'">Bunker door</span>
+                    </div>
+                    <div class="ai-agent-panel" id="ai-agent-panel">
+                        <div class="ai-agent-head" onclick="aiBuilder.toggleAgentPanel()">
+                            <span class="ai-agent-title">⚙ Agent</span>
+                            <span class="ai-agent-sub" id="ai-detail-label">Balanced</span>
+                            <span class="ai-agent-toggle">▾</span>
+                        </div>
+                        <div class="ai-agent-body" id="ai-agent-body">
+                            <div class="ai-agent-row">
+                                <span class="ai-agent-rowlabel">Detail</span>
+                                <div class="ai-chiprow">
+                                    <button class="ai-chip" data-ai-detail="economic" onclick="aiBuilder.setDetail('economic')">Economic</button>
+                                    <button class="ai-chip" data-ai-detail="balanced" onclick="aiBuilder.setDetail('balanced')">Balanced</button>
+                                    <button class="ai-chip" data-ai-detail="detailed" onclick="aiBuilder.setDetail('detailed')">Detailed</button>
+                                </div>
+                            </div>
+                            <label class="ai-switch-row"><span>Snap build to floor</span><input type="checkbox" id="ai-toggle-ground" onchange="aiBuilder.toggleGround(this.checked)"></label>
+                            <label class="ai-switch-row"><span>Mimic collection example style</span><input type="checkbox" id="ai-toggle-ref" onchange="aiBuilder.toggleRef(this.checked)"></label>
+                        </div>
                     </div>
                     <div class="ai-progress-wrap" id="ai-progress-wrap"><div class="ai-progress-bar" id="ai-progress-bar"></div></div>
                     <div class="ai-status-line" id="ai-status-line"></div>
@@ -16414,6 +16608,11 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
                         </div>
                         <div class="ai-plan-body" id="ai-plan-body"></div>
                     </div>
+                    <div class="ai-report-wrap" id="ai-report-wrap" style="display:none">
+                        <div class="ai-report-head"><span>🧐 Quality report</span><span class="ai-report-status ok" id="ai-report-status">PASS</span></div>
+                        <div class="ai-report-body" id="ai-report-body"></div>
+                    </div>
+
                 </div>
                 <div class="collection-modal-footer">
                     <button class="ai-cancel-btn" id="ai-cancel-btn" style="display:none" onclick="aiBuilder.cancel()"><span class="ui-icon ui-icon-mask" data-icon="Close"  alt="" style="width:12px;height:12px;object-fit:contain;vertical-align:-2px;margin-right:4px;"></span>Cancel</button>
