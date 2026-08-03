@@ -847,15 +847,6 @@
         }
         .ai-chip:hover { border-color: var(--td-border-strong); color: #fff; }
         .ai-chip-active { background: rgba(124,92,255,.16); border-color: #b79dff; color: #cbb8ff; }
-        .ai-switch-row {
-            display: flex; align-items: center; justify-content: space-between; gap: 10px;
-            padding: 6px 8px; background: var(--td-bg-2); border: 1px solid var(--td-border);
-            color: var(--td-text-dim); cursor: pointer;
-        }
-        .ai-switch-row input[type=checkbox] { width: 30px; height: 16px; appearance: none; -webkit-appearance: none; position: relative; background: var(--td-bg-3); border: 1px solid var(--td-border-strong); border-radius: 10px; cursor: pointer; transition: all .15s; }
-        .ai-switch-row input[type=checkbox]::after { content: ''; position: absolute; top: 1px; left: 1px; width: 12px; height: 12px; border-radius: 50%; background: var(--td-text-dim); transition: all .15s; }
-        .ai-switch-row input[type=checkbox]:checked { background: rgba(124,92,255,.3); border-color: #b79dff; }
-        .ai-switch-row input[type=checkbox]:checked::after { left: 15px; background: #b79dff; }
 
         /* ===== AI Agent 2.0: quality report ===== */
         .ai-report-wrap { border: 1px solid var(--td-border); background: var(--td-bg-1); font-size: 11px; }
@@ -14647,7 +14638,7 @@ Write in English, concisely, by points, without introduction or conclusion — o
      *   • if the model overshot its budget, drops the least-important (smallest)
      *     cubes first so the main form and large parts survive.
      *  Returns a new array; never throws. */
-    _normalizeCubesForBuild: function(cubes, budgetInfo, groundSnap = true) {
+    _normalizeCubesForBuild: function(cubes, budgetInfo) {
         if (!Array.isArray(cubes) || !cubes.length) return cubes;
         const hardCap = (budgetInfo && budgetInfo.hardCap) || 240;
         let out = cubes.slice();
@@ -14668,17 +14659,6 @@ Write in English, concisely, by points, without introduction or conclusion — o
             }
         }
         if (clamped) this._log("Sanitized a few out-of-range positions/scales.", "warn");
-
-        // Rest the build on the floor: if the lowest point is clearly below Y=0,
-        // shift the whole object up so it doesn't look sunk into the ground.
-        // (Only when ground-snap is enabled in the agent settings.)
-        let minY = Infinity;
-        for (const c of out) { const h = c.position.y - c.scale.y / 2; if (h < minY) minY = h; }
-        if (groundSnap && Number.isFinite(minY) && minY < -0.5) {
-            const lift = -minY;
-            for (const c of out) c.position.y += lift;
-            this._log("Lifted build by " + lift.toFixed(2) + " m so it sits on the floor.", "warn");
-        }
 
         // Enforce the hard cube cap: if the model overshot, remove the smallest
         // (least visible / likely decorative) cubes first, keeping the big parts.
@@ -14834,11 +14814,11 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
     _cancelRequested: false,
 
     /* ---------- Agent prefs (persisted) ---------- */
-    prefs: { detail: "balanced", groundSnap: true, useReferenceStyle: true },
+    prefs: { detail: "balanced" },
     _loadPrefs: function() {
         let saved = null;
         try { saved = JSON.parse(localStorage.getItem("mapcg_ai_agent") || "null"); } catch (e) {}
-        this.prefs = Object.assign({ detail: "balanced", groundSnap: true, useReferenceStyle: true }, saved || {});
+        this.prefs = Object.assign({ detail: "balanced" }, saved || {});
         this._syncAgentControls();
     },
     _savePrefs: function() {
@@ -14848,8 +14828,6 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         document.querySelectorAll("[data-ai-detail]").forEach(el => {
             el.classList.toggle("ai-chip-active", el.getAttribute("data-ai-detail") === this.prefs.detail);
         });
-        const g = document.getElementById("ai-toggle-ground"); if (g) g.checked = !!this.prefs.groundSnap;
-        const r = document.getElementById("ai-toggle-ref"); if (r) r.checked = !!this.prefs.useReferenceStyle;
         const lbl = document.getElementById("ai-detail-label"); if (lbl) lbl.textContent = this._detailConfig().label;
     },
     _detailConfig: function() {
@@ -14858,8 +14836,6 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         return { label: "Balanced", mult: 1, maxTokens: 24000, chunk: 26 };
     },
     setDetail: function(v) { this.prefs.detail = v; this._savePrefs(); this._syncAgentControls(); },
-    toggleGround: function(on) { this.prefs.groundSnap = !!on; this._savePrefs(); },
-    toggleRef: function(on) { this.prefs.useReferenceStyle = !!on; this._savePrefs(); },
     toggleAgentPanel: function() {
         const p = document.getElementById("ai-agent-panel");
         if (p) p.classList.toggle("collapsed");
@@ -15163,9 +15139,7 @@ Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}
             };
             this._log("Agent preset: " + detail.label + " (target ~" + budget.budget + " cubes, max " + budget.max + ").", "ok");
 
-            const refsForPrompt = this.prefs.useReferenceStyle ? refs : [];
-            if (!this.prefs.useReferenceStyle) this._log("Style-from-reference disabled — using text rules only.", "warn");
-            const systemPrompt = this._buildSystemPrompt(refsForPrompt, availableTextures, budget);
+            const systemPrompt = this._buildSystemPrompt([], availableTextures, budget);
 
             if (!this.ENDPOINT || this.ENDPOINT === '') {
                 this._log("ENDPOINT not set.", "error");
@@ -15190,7 +15164,7 @@ Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}
             cubes = this._sanitizeCubes(cubes);
             if (!cubes.length) throw new Error("Empty result from model");
             cubes = this._dedupCubes(cubes);
-            cubes = this._normalizeCubesForBuild(cubes, budget, this.prefs.groundSnap);
+            cubes = this._normalizeCubesForBuild(cubes, budget);
             this._log("Ready to build: " + cubes.length + " cubes passed check.", "ok");
 
             this._setStage("verify", "Checking quality");
@@ -16587,8 +16561,6 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
                                     <button class="ai-chip" data-ai-detail="detailed" onclick="aiBuilder.setDetail('detailed')">Detailed</button>
                                 </div>
                             </div>
-                            <label class="ai-switch-row"><span>Snap build to floor</span><input type="checkbox" id="ai-toggle-ground" onchange="aiBuilder.toggleGround(this.checked)"></label>
-                            <label class="ai-switch-row"><span>Mimic collection example style</span><input type="checkbox" id="ai-toggle-ref" onchange="aiBuilder.toggleRef(this.checked)"></label>
                         </div>
                     </div>
                     <div class="ai-progress-wrap" id="ai-progress-wrap"><div class="ai-progress-bar" id="ai-progress-bar"></div></div>
