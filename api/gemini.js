@@ -36,7 +36,12 @@ const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 // Модели вынесены в env — можно переключать качество без правки кода.
 const MODEL_BUILD = process.env.GEMINI_BUILD_MODEL || "gemini-3.1-flash-lite";
 const MODEL_VISION = process.env.GEMINI_VISION_MODEL || "gemini-3.1-flash-lite";
-const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash";
+// ВАЖНО: раньше fallback по умолчанию был gemini-3.5-flash, который находится в
+// состоянии активного сбоя на стороне Google. Когда основная модель отдавала
+// 502/503, прокси уходил в заведомо битую модель → пользователь получал
+// бесконечные "Server busy (502)". Теперь по умолчанию fallback — та же
+// стабильная lite-модель. Задать свою можно через GEMINI_FALLBACK_MODEL.
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.1-flash-lite";
 
 // Принудительная схема JSON (опционально). По умолчанию выключена, чтобы
 // гарантированно не сломать работающий поток; включить можно env-переменной.
@@ -401,7 +406,7 @@ module.exports = async (req, res) => {
       lastResult = { ...result, usedModel };
 
       if (OVERLOADED.includes(status) && i < apiKeys.length - 1)
-        await sleep(1500);
+        await sleep(600);
     }
 
     // Проход 2: если 502/503 — пробуем FALLBACK немедленно
@@ -411,7 +416,7 @@ module.exports = async (req, res) => {
         if (result.resp.status !== 429 && !OVERLOADED.includes(result.resp.status))
           return { ...result, usedModel: FALLBACK_MODEL };
         lastResult = { ...result, usedModel: FALLBACK_MODEL };
-        if (i < apiKeys.length - 1) await sleep(1500);
+        if (i < apiKeys.length - 1) await sleep(600);
       }
     }
 
@@ -435,7 +440,8 @@ module.exports = async (req, res) => {
     }
 
     // Проход 4: ждём retryDelay, финальный проход
-    const waitMs = Math.min(minRetryMs ?? 62000, 90000);
+    // Fail fast on overloaded keys/models instead of sleeping up to 90s.
+    const waitMs = Math.min(minRetryMs ?? 12000, 15000);
     await sleep(waitMs);
 
     for (const tryModel of [modelName, FALLBACK_MODEL]) {
