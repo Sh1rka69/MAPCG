@@ -14721,6 +14721,17 @@ COORDINATE SYSTEM AND GEOMETRY:
 - Cube — a SINGLE cube centered at position, stretched by scale on each axis. Example thin plank: scale {x:2, y:0.08, z:0.3}. Thick wall: scale {x:3, y:2.5, z:0.15}.
 - rotation.y is used to rotate around the vertical axis; rotation.x/z — for tilts (sloped roofs, inclined bridge beams, stairs).
 
+REAL-WORLD SCALE ANCHOR (critical for realism — use this as your ruler for every part):
+1 scale unit = 1 meter, and the in-game player is the reference human: standing height ≈ 1.8 m, shoulder width ≈ 0.9 m. Mentally stand this player next to the object while you design it and size every part so a real person at that height/width would fit it believably. Concrete human-scale anchors to sanity-check against:
+- A walkable doorway/hatch a person passes through: opening height ≈ 2.0–2.2 m, opening width ≈ 0.9–1.1 m (single) or ≈ 1.6–2.0 m (double/vehicle gate). Never make a walk-through opening narrower than ~0.8 m or shorter than ~1.9 m unless the request explicitly wants a tiny/crawl hatch.
+- Ceiling / usable indoor height per floor: ≈ 2.4–2.8 m from floor to ceiling. A "house" is therefore usually 1 floor ≈ 2.7–3.2 m tall including the floor slab and roof structure, 2 floors ≈ 5.5–6.5 m, etc. — compute total height from floor count, don't guess a flat number.
+- Stair step: rise (height) ≈ 0.16–0.19 m, run (depth) ≈ 0.28–0.3 m per step — a staircase's total height ÷ step rise tells you how many steps to place.
+- Handrail / fence / table height: ≈ 0.9–1.1 m (roughly waist height on the reference player).
+- Chair seat height ≈ 0.45 m; table surface height ≈ 0.75 m; a standard door handle sits ≈ 1.0 m from the floor.
+- Furniture/prop depth (crate, barrel, cabinet): most household/industrial props are 0.3–1.2 m per side — a "small crate" should read as small next to a 1.8 m player, not the same size as them.
+- Vehicles: a car body is roughly 1.4–1.6 m tall (excluding wheels sticking a bit lower) and 1.7–1.9 m wide; do not build a "car" that is taller than the reference player's head by a large margin.
+If the request has no explicit size, infer it from what the object actually is in real life and these anchors — not from how many cubes fit the budget. It is better to slightly under-detail a correctly-scaled object than to hit the cube budget by inflating it to the wrong size.
+
 CYLINDRICAL / ROUNDED SHAPE TECHNIQUE (car bodies, barrels, pipes, wheel arches, domes, columns) — use ALWAYS when the object has anything round or curved, not only for obvious cylinders:
 One cube gives only a rectangular (voxel) shape. To get a cylinder / rounding, place a RING of N narrow cubes around the common center (X0, Z0) at one height Y, each shifted by radius R from center and rotated so it "looks" outward.
 
@@ -14784,6 +14795,7 @@ ${refBlock || "(no relevant examples found — rely on the rules above only)"}
 A structure must read as a SOLID object with real thickness in all three dimensions, not a flat 2D picture hung in the air. Anything described as a door / gate / hatch / wall / panel / lid must be given depth: build a front face AND visible side/thickness, plus an outer frame. If a requested object is a door, do not output just a thin flat slab — that is a FAIL.
 
 DOOR / GATE / HATCH / BUNKER-DOOR RECIPE (use for ANY request mentioning a door, gate, hatch, portal, entrance — adapt parts to size):
+Overall size FIRST: unless the request says otherwise, size the whole assembly (frame outer edge to frame outer edge) to a walkable human opening per the REAL-WORLD SCALE ANCHOR above — about 2.0–2.2 m tall × 0.9–1.1 m wide for a single door, or 1.6–2.0 m wide for a double door/vehicle gate. Only go larger for an explicitly oversized/monumental gate.
 A convincing heavy door is built from ALL of these, ordered by importance:
 1. FRAME / CASING — a thick rectangular border (left + right + top + bottom rails) of heavier material (RoughMetal or Concrete), wider than the panel, with real depth. This is the outer casing the door sits in.
 2. MAIN PANEL — the door slab itself, slightly inset from the frame, with genuine thickness (for a door facing the Z axis, scale.x ≈ 0.35–0.6; facing X, scale.z ≈ 0.35–0.6). Material Metal / RoughMetal.
@@ -14795,16 +14807,16 @@ A convincing heavy door is built from ALL of these, ordered by importance:
 Suggested distribution of cubes for a door: frame ~30%, panel ~35%, reinforcement ~15%, hinges+handle ~12%, rivets/details ~8%. Budget ≈ 45–90 cubes for a door/gate.
 
 FOOTPRINT, GROUND & SCALE SANITY:
-- Keep the whole object within a bounding box that matches its cube budget and real-world type: a small prop (barrel, crate, sign) fits in roughly ≤3×3×3 m; a medium object (door, fence section, drone) in roughly ≤6×6×6 m; a genuinely large structure (house, tower, bridge, wall) may need up to ~15–20 m along its longest axis — that is expected and correct, do NOT compress a house down to fit a small box. Whatever the size, every axis must be consistent with the others (no 1-cube-thick "cardboard" walls on a building that is 15 m tall).
+- Keep the whole object within a bounding box that matches its cube budget and real-world type: a small prop (barrel, crate, sign) fits in roughly ≤3×3×3 m — noticeably smaller than the 1.8 m player; a medium object (door, fence section, drone) in roughly ≤6×6×6 m; a genuinely large structure (house, tower, bridge, wall) may need up to ~15–20 m along its longest axis — that is expected and correct, do NOT compress a house down to fit a small box. Whatever the size, every axis must be consistent with the others (no 1-cube-thick "cardboard" walls on a building that is 15 m tall).
 - Do not scatter cubes far from the build center with no connecting structure between them.
 - Unless the request is explicitly for a floating/flying thing, rest the bottom of the build at/near Y=0 (the floor). Do not float the object in mid-air.
-- Avoid absurd scales and proportions (a door should not be 20 m tall unless asked; a house should not be 2 m tall). Stay realistic relative to a ~1 m cube and to the object's real-world scale.
+- Avoid absurd scales and proportions (a door should not be 20 m tall unless asked; a house should not be 2 m tall). Judge "absurd" against the 1.8 m player from the REAL-WORLD SCALE ANCHOR section above, not against an arbitrary number — e.g. a door frame noticeably shorter or narrower than the player is wrong even if it is technically inside the bounding-box limits.
 
 MANDATORY WORKFLOW (this is critical for result quality):
 Before writing cube coordinates, you must FIRST mentally design the object and write this plan into the text field "plan". The plan must be BRIEF (3-6 short sentences, no fluff) and list by points:
 1. What physical parts the object consists of (e.g. for a drone: central body, 4 cross arms, 4 propellers at arm ends, camera/sensor below, landing legs).
 2. How these parts are positioned relative to each other in space (what is top/bottom, what is symmetrical, at what distance from center, at what angle).
-3. What sizes (scale) are reasonable for each part relative to others (e.g. "arms are long and thin: scale x:1.4 y:0.08 z:0.08", "body — flattened parallelepiped at center: scale x:0.6 y:0.25 z:0.6").
+3. What sizes (scale) are reasonable for each part relative to others AND relative to the 1.8 m player from the REAL-WORLD SCALE ANCHOR section (e.g. "arms are long and thin: scale x:1.4 y:0.08 z:0.08", "body — flattened parallelepiped at center: scale x:0.6 y:0.25 z:0.6"; for anything a player walks through, stands next to, or sits on, state the target real-world height/width explicitly, e.g. "door opening 2.1 m tall × 1.0 m wide, sized for the player to walk through").
 4. Which parts are round / cylindrical / curved (body, dome, pipe, wheel, etc.) and will need the ring technique, and which parts are round in ALL directions (ball, planet, head, tank) and need the multi-band SPHERE technique instead — name each such part explicitly and say which of the two techniques applies to it, so you do not forget to apply it when generating cubes.
 5. At least 1-2 small decorative/accent details that are not strictly load-bearing (trim, seam, bolt, handle, accent stripe, etc.) — even a simple object should not be only bare structural cubes.
 The plan must be short, because the main response budget is needed for cubes. CRITICAL: EVERY part mentioned in the plan must get its cubes in the array "cubes" — do not drop cube generation in the middle of the plan parts list. If there are many parts, better make each part from fewer cubes than completely skip a plan part. Do not invent parts in cubes that are not in the plan, and do not skip plan parts when generating cubes.
@@ -15011,6 +15023,15 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         const issues = [];
         if ((w < 0.2 || d < 0.2) && h > 0.5) issues.push("Looks flat — almost no thickness on X/Z.");
         if (Math.max(w, h, d) > 25) issues.push("Very large object (" + Math.round(Math.max(w, h, d)) + " m).");
+        // Human-scale sanity check: catches the two most common realism failures —
+        // a "dollhouse" build shrunk far below the 1.8 m reference player, or a
+        // structural object (something with a door/passage-sized footprint) blown
+        // up far past human scale. This is advisory only (shown in the quality
+        // report) and never blocks or auto-rescales the build, since some objects
+        // (small props, a single brick, a giant statue) are legitimately outside
+        // typical human-scale range.
+        const maxDim = Math.max(w, h, d);
+        if (maxDim > 0 && maxDim < 0.5) issues.push("Very small relative to the 1.8 m player (" + maxDim.toFixed(2) + " m) — check if this was meant to be a tiny prop.");
         if (minY < -0.5) issues.push("Sits below the floor — auto-lifted.");
         if (cubes.length > budget.max) issues.push("Over budget by " + (cubes.length - budget.max) + " cubes.");
         const materials = new Set(cubes.map(c => c.materialName)).size;
