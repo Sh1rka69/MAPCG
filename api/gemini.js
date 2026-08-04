@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════
 //  MAPCG Web Engine — Vercel Serverless Function (Node.js)
-//  Прокси к Google Gemini API  —  УЛУЧШЕННАЯ ВЕРСИЯ (build-quality v2)
+//  Прокси к Google Gemini API  —  УЛУЧШЕННАЯ ВЕРСИЯ (build-quality v3)
 //
 //  Что добавлено/улучшено для РЕАЛЬНОГО качества построек:
 //    1. Серверная валидация JSON ответа с АВТО-КОРРЕКЦИЕЙ: если модель
@@ -15,13 +15,19 @@
 //       принудительная JSON-схема {plan,cubes[]} на стороне модели.
 //    5. Корректная связка schema+thinking: при включённой схеме thinking
 //       отключается, чтобы не ловить известное зависание у части моделей.
+//    6. Модели по умолчанию обновлены на актуальные GA-версии
+//       (gemini-3.6-flash / gemini-3.5-flash-lite) — см. комментарий
+//       у констант MODEL_BUILD/MODEL_VISION/FALLBACK_MODEL ниже.
+//    7. temperature больше не отправляется для моделей линейки Gemini 3.5+
+//       (Google официально считает temperature/top_p/top_k deprecated для
+//       них и рекомендует не трогать — see buildGenerationConfig/shouldSendTemperature).
 //
 //  Переменные окружения (настрой в Vercel Dashboard → Environment Variables):
 //    GEMINI_API_KEY       — основной ключ (если нет GEMINI_API_KEY_1..10)
 //    GEMINI_API_KEY_1..10 — до 10 ключей для ротации (приоритет)
-//    GEMINI_BUILD_MODEL   — модель для СБОРКИ (по умолч. gemini-3.1-flash-lite)
-//    GEMINI_VISION_MODEL  — модель для картинок (по умолч. gemini-3.1-flash-lite)
-//    GEMINI_FALLBACK_MODEL— запасная модель (по умолч. gemini-3.5-flash)
+//    GEMINI_BUILD_MODEL   — модель для СБОРКИ (по умолч. gemini-3.6-flash)
+//    GEMINI_VISION_MODEL  — модель для картинок (по умолч. gemini-3.6-flash)
+//    GEMINI_FALLBACK_MODEL— запасная модель (по умолч. gemini-3.5-flash-lite)
 //    ENABLE_RESPONSE_SCHEMA — "1" чтобы включить принудительную схему JSON
 //    ALLOWED_ORIGINS      — опционально: список разрешённых Origin через запятую
 //
@@ -34,14 +40,30 @@ const http = require("http");
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 // Модели вынесены в env — можно переключать качество без правки кода.
-const MODEL_BUILD = process.env.GEMINI_BUILD_MODEL || "gemini-3.1-flash-lite";
-const MODEL_VISION = process.env.GEMINI_VISION_MODEL || "gemini-3.1-flash-lite";
-// ВАЖНО: раньше fallback по умолчанию был gemini-3.5-flash, который находится в
-// состоянии активного сбоя на стороне Google. Когда основная модель отдавала
-// 502/503, прокси уходил в заведомо битую модель → пользователь получал
-// бесконечные "Server busy (502)". Теперь по умолчанию fallback — та же
-// стабильная lite-модель. Задать свою можно через GEMINI_FALLBACK_MODEL.
-const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.1-flash-lite";
+//
+// ── АКТУАЛЬНОСТЬ МОДЕЛЕЙ (проверено на дату правки) ────────────────
+// gemini-3.1-flash-lite — Google официально объявила эту модель устаревшей,
+// дата отключения назначена на 16 октября 2026. Она пока отвечает, но это
+// модель "на выход"; для новой сборки использовать её как основную не стоит.
+// Актуальные GA (generally available, "боевые") модели на замену:
+//   gemini-3.6-flash       — основная линейка, GA. Лучше держит инструкции,
+//                             меньше "зацикливаний" в агентных/многошаговых
+//                             задачах, качественнее в пространственных/
+//                             структурных рассуждениях — то, что нужно для
+//                             генерации геометрии из кубов. Обгоняет по
+//                             бенчмаркам даже более старую gemini-2.5-pro.
+//   gemini-3.5-flash-lite  — GA, самая быстрая/дешёвая модель линейки 3.5,
+//                             хороший выбор на роль fallback: если основная
+//                             модель перегружена (502/503), эта отвечает
+//                             быстро и почти всегда доступна.
+// Если Google в будущем выпустит более новую стабильную модель, задайте её
+// через переменные окружения ниже — код не нужно трогать.
+const MODEL_BUILD = process.env.GEMINI_BUILD_MODEL || "gemini-3.6-flash";
+const MODEL_VISION = process.env.GEMINI_VISION_MODEL || "gemini-3.6-flash";
+// Fallback — сознательно ДРУГАЯ модель (не копия основной), чтобы при сбое
+// именно build-модели на стороне Google (перегрузка/инцидент) запрос ушёл на
+// независимо обслуживаемую модель, а не наткнулся на тот же самый сбой.
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite";
 
 // Принудительная схема JSON (опционально). По умолчанию выключена, чтобы
 // гарантированно не сломать работающий поток; включить можно env-переменной.
@@ -84,6 +106,19 @@ function buildThinkingConfig(modelName, highEffort) {
   if (/^gemini-2\.5/.test(modelName))
     return { thinkingBudget: highEffort ? 8192 : 0 };
   return null;
+}
+
+// Начиная с Gemini 3.5 Flash / 3.6 Flash (и всех более новых моделей серии),
+// Google официально считает temperature/top_p/top_k deprecated — их значения
+// по умолчанию уже настроены под внутренние reasoning-механизмы модели, и
+// ручная правка может УХУДШИТЬ качество структурированных ответов вместо
+// улучшения. Поэтому для этих моделей параметр не отправляется вовсе.
+// Для более старых моделей (2.x и ранний 3.1) temperature всё ещё осмысленна
+// и оставлена как управляемый параметр.
+function shouldSendTemperature(modelName) {
+  if (/^gemini-3\.[5-9]/.test(modelName)) return false; // 3.5, 3.6, ...
+  if (/^gemini-[4-9]/.test(modelName)) return false;    // будущие поколения
+  return true;
 }
 
 function getApiKeys() {
@@ -253,7 +288,8 @@ function buildCorrectionUser(issue, prevText) {
   return `Your previous reply could not be parsed as valid JSON (${issue}).${note}
 Please reply with a SINGLE valid JSON object of the form {"plan":"...","cubes":[ ... ]}.
 Use only valid JSON: no code fences, no trailing commas, no commentary outside the object.
-Every cube must have position/rotation/scale as {x,y,z} and a valid materialName from the provided list.`;
+Every cube must have position/rotation/scale as {x,y,z} and a valid materialName from the provided list.
+Keep the SAME object, structure, and level of detail as your previous attempt — only fix the JSON formatting/syntax problem, do not simplify the build or drop parts to make the JSON shorter.`;
 }
 
 // ── Основной обработчик Vercel ───────────────────────────────────
@@ -337,9 +373,17 @@ module.exports = async (req, res) => {
   function buildGenerationConfig(modelName) {
     const useSchema = !isVision && ENABLE_SCHEMA;
     const cfg = {
-      temperature: typeof body.temperature === "number" ? body.temperature : isVision ? 0.3 : 0.5,
       maxOutputTokens: maxOutputTokens,
     };
+    // temperature: только если пользователь явно её передал, ИЛИ модель не
+    // входит в семейство, где Google просит оставить параметр нетронутым
+    // (см. shouldSendTemperature). Явный body.temperature всегда уважается —
+    // это осознанный выбор вызывающей стороны (например, коррекция JSON).
+    if (typeof body.temperature === "number") {
+      cfg.temperature = body.temperature;
+    } else if (shouldSendTemperature(modelName)) {
+      cfg.temperature = isVision ? 0.3 : 0.4;
+    }
     // При включённой схеме отключаем thinking — избегаем известного зависания
     // связки responseMimeType=json + thinkingConfig у части моделей.
     // Структуру JSON в этом случае держит сама схема.
