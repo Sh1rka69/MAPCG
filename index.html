@@ -14795,9 +14795,10 @@ A convincing heavy door is built from ALL of these, ordered by importance:
 Suggested distribution of cubes for a door: frame ~30%, panel ~35%, reinforcement ~15%, hinges+handle ~12%, rivets/details ~8%. Budget ≈ 45–90 cubes for a door/gate.
 
 FOOTPRINT, GROUND & SCALE SANITY:
-- Keep the whole object within a sensible bounding box (roughly ≤10×10×10 m for a medium build; larger only for genuinely big structures). Do not scatter cubes far from the build center.
+- Keep the whole object within a bounding box that matches its cube budget and real-world type: a small prop (barrel, crate, sign) fits in roughly ≤3×3×3 m; a medium object (door, fence section, drone) in roughly ≤6×6×6 m; a genuinely large structure (house, tower, bridge, wall) may need up to ~15–20 m along its longest axis — that is expected and correct, do NOT compress a house down to fit a small box. Whatever the size, every axis must be consistent with the others (no 1-cube-thick "cardboard" walls on a building that is 15 m tall).
+- Do not scatter cubes far from the build center with no connecting structure between them.
 - Unless the request is explicitly for a floating/flying thing, rest the bottom of the build at/near Y=0 (the floor). Do not float the object in mid-air.
-- Avoid absurd scales and proportions (a door should not be 20 m tall unless asked). Stay realistic relative to a ~1 m cube.
+- Avoid absurd scales and proportions (a door should not be 20 m tall unless asked; a house should not be 2 m tall). Stay realistic relative to a ~1 m cube and to the object's real-world scale.
 
 MANDATORY WORKFLOW (this is critical for result quality):
 Before writing cube coordinates, you must FIRST mentally design the object and write this plan into the text field "plan". The plan must be BRIEF (3-6 short sentences, no fluff) and list by points:
@@ -14898,12 +14899,21 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         // error instead of silently hanging for ~100s when the provider is overloaded.
         const MAX_NET = 3;
         let response = null, lastNetError = null, serverRetryAfterSec = null;
+        // NOTE on temperature: current-generation Gemini models (3.5/3.6 and newer)
+        // officially treat temperature/top_p/top_k as deprecated — Google recommends
+        // leaving them untouched, since the model's defaults are already tuned for
+        // its reasoning process and overriding them can hurt structured-output
+        // quality. So by default we send NO temperature at all and let the server
+        // pick the right behavior per-model. Callers that truly need a specific
+        // value (e.g. the JSON-repair correction pass) can still pass one explicitly.
+        const reqBody = { messages, max_tokens: maxTokens || 24000 };
+        if (typeof temperature === "number") reqBody.temperature = temperature;
         for (let a = 1; a <= MAX_NET; a++) {
             try {
                 response = await fetch(this.ENDPOINT, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ messages, temperature: (temperature == null ? 0.5 : temperature), max_tokens: maxTokens || 24000 })
+                    body: JSON.stringify(reqBody)
                 });
                 lastNetError = null;
             } catch (netErr) { lastNetError = netErr; response = null; }
@@ -14955,8 +14965,9 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         }
         const cubes = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.cubes) ? parsed.cubes : null);
         let planText = (parsed && typeof parsed.plan === "string") ? parsed.plan : null;
+        const next = (parsed && typeof parsed.next === "string") ? parsed.next : null;
         const done = !!(parsed && parsed.done);
-        return { cubes: cubes || [], planText, wasTruncated, done };
+        return { cubes: cubes || [], planText, wasTruncated, done, next };
     },
 
     _sanitizeCubes: function(arr) {
@@ -15026,7 +15037,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
             const resp = await this._requestGeneration([
                 { role: "system", content: systemPrompt + (attempt > 1 ? "\n\nIMPORTANT: previous response was truncated or too large. Be more compact, keep the main structure." : "") },
                 { role: "user", content: userContent }
-            ], budget.max <= 80 ? 16000 : 24000, 0.5);
+            ], budget.max <= 80 ? 16000 : 24000, null);
             if (!resp.content) throw new Error("Model returned empty response. Try again.");
             const parsed = this._parseCubesFromRaw(resp.content);
             if (!planText && parsed.planText) planText = parsed.planText;
@@ -15036,13 +15047,40 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         return { cubes, planText };
     },
 
+    /** Compact snapshot of already-generated cubes for continuation prompts:
+     *  overall bounding box + a coarse per-axis footprint, so the model can see
+     *  WHERE the existing geometry is (not just how many cubes) and avoid
+     *  overlapping it, drifting off scale, or re-centering the object. Kept
+     *  short on purpose — full coordinate dumps would blow the token budget. */
+    _summarizeCubesForContinuation: function(cubes) {
+        if (!cubes || !cubes.length) return "(nothing built yet)";
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        const tagCounts = {};
+        let usable = 0;
+        for (const c of cubes) {
+            const p = c && c.position, s = c && c.scale;
+            if (!p || !s || !Number.isFinite(+p.x) || !Number.isFinite(+s.x)) continue;
+            usable++;
+            const hx = (+s.x || 1) / 2, hy = (+s.y || 1) / 2, hz = (+s.z || 1) / 2;
+            minX = Math.min(minX, (+p.x || 0) - hx); maxX = Math.max(maxX, (+p.x || 0) + hx);
+            minY = Math.min(minY, (+p.y || 0) - hy); maxY = Math.max(maxY, (+p.y || 0) + hy);
+            minZ = Math.min(minZ, (+p.z || 0) - hz); maxZ = Math.max(maxZ, (+p.z || 0) + hz);
+            const tag = c.tag || "?";
+            tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+        }
+        if (!usable) return "(nothing usable to summarize — " + cubes.length + " cube(s) with missing fields)";
+        const r = n => Math.round(n * 100) / 100;
+        const byTag = Object.entries(tagCounts).map(([t, n]) => `${t}:${n}`).join(", ");
+        return `bounding box so far X[${r(minX)}..${r(maxX)}] Y[${r(minY)}..${r(maxY)}] Z[${r(minZ)}..${r(maxZ)}], ${cubes.length} cubes (${byTag})`;
+    },
+
     /* ---------- Chunked generator (big builds) — never truncates ---------- */
     _runChunked: async function(ctx) {
         const { promptText, imageDescription, systemPrompt, budget, detail } = ctx;
         const CHUNK = (detail && detail.chunk) || 26;
         const MAX_CHUNKS = 9;
         const all = [];
-        let planText = null, total = 0, chunks = 0, done = false;
+        let planText = null, total = 0, chunks = 0, done = false, nextHint = "";
         const prompt = imageDescription
             ? `Build: ${promptText}.\n\nReference image description (match it closely):\n${imageDescription}`
             : `Build: ${promptText}.`;
@@ -15056,30 +15094,34 @@ Return only this first chunk now — never the whole build.`;
         let resp = await this._requestGeneration([
             { role: "system", content: systemPrompt },
             { role: "user", content: firstUser }
-        ], detail.maxTokens, 0.5);
+        ], detail.maxTokens, null);
         let parsed = this._parseCubesFromRaw(resp.content);
         if (parsed.cubes.length) { all.push(...parsed.cubes); total += parsed.cubes.length; }
         if (parsed.planText) planText = parsed.planText;
         done = parsed.done;
+        nextHint = parsed.next || "";
         chunks = 1;
         this._log("Chunk 1: got " + parsed.cubes.length + " cube(s)" + (done ? " — agent reports complete." : "") + ".", "ok");
         if (planText) this._showPlan(planText);
 
         while (!done && total < budget.max && chunks < MAX_CHUNKS) {
             if (this._cancelRequested) { this._log("Stopped by user during generation.", "warn"); break; }
+            const snapshot = this._summarizeCubesForContinuation(all);
             const contUser = `Continue the build of "${promptText}".
 Overall plan: ${planText || "(see system rules)"}.
-${total} cubes already exist covering the first parts. Add the NEXT chunk of up to ${CHUNK} NEW cubes for the remaining parts and details (order: main structure → secondary parts → decoration). Do NOT re-list or duplicate existing cubes.
+Already built: ${snapshot}.
+${nextHint ? `What you said remains: ${nextHint}.\n` : ""}Add the NEXT chunk of up to ${CHUNK} NEW cubes for the remaining parts and details (order: main structure → secondary parts → decoration). All positions are still relative to the SAME local build center (0,0,0) as before — do not shift the origin or re-scale existing parts. Do NOT re-list or duplicate existing cubes, and do NOT place new cubes overlapping the bounding box above unless they are genuinely meant to sit there (e.g. attaching a detail to an existing wall).
 Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}`;
             this._log("Chunk " + (chunks + 1) + " — asking for next " + CHUNK + " cubes...", "info");
             resp = await this._requestGeneration([
                 { role: "system", content: systemPrompt },
                 { role: "user", content: contUser }
-            ], detail.maxTokens, 0.5);
+            ], detail.maxTokens, null);
             parsed = this._parseCubesFromRaw(resp.content);
             const newCount = parsed.cubes.length;
             all.push(...parsed.cubes); total += newCount;
             done = parsed.done;
+            nextHint = parsed.next || "";
             chunks++;
             this._log("Chunk " + chunks + ": got " + newCount + " cube(s)" + (done ? " — agent says done." : "") + ".", "ok");
             if (newCount === 0) { this._log("No new cubes from this chunk — stopping.", "warn"); break; }
@@ -15141,7 +15183,7 @@ Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}
             };
             this._log("Agent preset: " + detail.label + " (target ~" + budget.budget + " cubes, max " + budget.max + ").", "ok");
 
-            const systemPrompt = this._buildSystemPrompt([], availableTextures, budget);
+            const systemPrompt = this._buildSystemPrompt(refs, availableTextures, budget);
 
             if (!this.ENDPOINT || this.ENDPOINT === '') {
                 this._log("ENDPOINT not set.", "error");
