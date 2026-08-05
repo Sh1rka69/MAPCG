@@ -865,6 +865,88 @@
         .ai-report-row.ai-report-warn { width: 100%; color: var(--td-warn); }
         .ai-report-row.ai-report-warn .ai-report-label { color: var(--td-warn); }
 
+        /* ===== AI Custom Textures: toggle row ===== */
+        .ai-textures-toggle-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 0;
+        }
+        .ai-textures-toggle-row input[type="checkbox"] {
+            accent-color: #b79dff;
+        }
+        .ai-textures-toggle-label {
+            font-size: 11px; color: var(--td-text-dim); letter-spacing: .04em;
+            cursor: pointer; user-select: none;
+        }
+        .ai-textures-toggle-label .ai-textures-toggle-icon {
+            color: #b79dff; margin-right: 3px;
+        }
+
+        /* ===== AI Custom Textures: gallery ===== */
+        .ai-textures-wrap {
+            border: 1px solid var(--td-border); background: var(--td-bg-1);
+            font-size: 11px; display: none;
+        }
+        .ai-textures-wrap.visible { display: block; }
+        .ai-textures-head {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 7px 10px; border-bottom: 1px solid var(--td-border);
+            color: #b79dff; letter-spacing: .04em; font-weight: 600; font-size: 10px;
+        }
+        .ai-textures-grid {
+            padding: 8px; display: flex; flex-wrap: wrap; gap: 6px;
+        }
+        .ai-texture-item {
+            width: 80px; cursor: pointer; transition: transform .12s, box-shadow .12s;
+        }
+        .ai-texture-item:hover { transform: scale(1.06); }
+        .ai-texture-thumb {
+            width: 80px; height: 80px; object-fit: cover; border: 1px solid var(--td-border);
+            background: #000; display: block;
+        }
+        .ai-texture-name {
+            margin-top: 3px; font-size: 9px; color: var(--td-text-dim);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            text-align: center; letter-spacing: .02em;
+        }
+
+        /* ===== AI Custom Textures: lightbox ===== */
+        .ai-texture-lightbox-overlay {
+            position: fixed; inset: 0; z-index: 9999;
+            background: rgba(0,0,0,0.82);
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s;
+        }
+        .ai-texture-lightbox-overlay.open {
+            opacity: 1; visibility: visible; transition: opacity .2s, visibility 0s;
+        }
+        .ai-texture-lightbox-card {
+            background: var(--td-bg-panel-solid); border: 1px solid var(--td-border-strong);
+            max-width: min(92vw, 520px); display: flex; flex-direction: column; gap: 12px;
+            padding: 16px; animation: tdModalIn .22s ease;
+        }
+        .ai-texture-lightbox-img {
+            max-width: 100%; max-height: 60vh; object-fit: contain;
+            border: 1px solid var(--td-border); background: #000;
+        }
+        .ai-texture-lightbox-title {
+            font-size: 13px; font-weight: 600; color: var(--td-text); letter-spacing: .04em;
+        }
+        .ai-texture-lightbox-actions { display: flex; gap: 8px; }
+        .ai-texture-lightbox-btn {
+            padding: 8px 14px; font-size: 11px; font-weight: 700;
+            letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
+            border: 1px solid var(--td-border); background: var(--td-bg-2);
+            color: var(--td-text); transition: all .12s;
+        }
+        .ai-texture-lightbox-btn:hover { border-color: var(--td-border-strong); color: #fff; }
+        .ai-texture-lightbox-btn.primary {
+            background: rgba(255,138,61,.16); border-color: rgba(255,138,61,.55);
+            color: var(--td-accent-bright);
+        }
+        .ai-texture-lightbox-btn.primary:hover {
+            background: rgba(255,138,61,.28); border-color: var(--td-accent); color: #fff;
+        }
+
         .collection-btn-select, .collection-btn-spawn {
             flex: 1; padding: 10px 14px; font-size: 12px; font-weight: 600;
             letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer;
@@ -12954,6 +13036,7 @@ window.uiManager = {
         if (window.aiGenToast) aiGenToast.onModalOpened();
         if (typeof initSubjectsCollection === "function") initSubjectsCollection();
         if (window.aiBuilder) {
+            aiBuilder._loadPrefs();
             aiBuilder._setStatus("", "");
             aiBuilder._setRefLine("");
             aiBuilder._setProgress(null);
@@ -14822,16 +14905,20 @@ Before writing cube coordinates, you must FIRST mentally design the object and w
 The plan must be short, because the main response budget is needed for cubes. CRITICAL: EVERY part mentioned in the plan must get its cubes in the array "cubes" — do not drop cube generation in the middle of the plan parts list. If there are many parts, better make each part from fewer cubes than completely skip a plan part. Do not invent parts in cubes that are not in the plan, and do not skip plan parts when generating cubes.
 
 ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text", "cubes": [ ... ]}, where "plan" is a short reasoning string per points above, and "cubes" is the array of cubes in the format described above, built strictly according to this plan and covering ALL its parts. No explanations outside these two fields, no markdown formatting. The first character must be { and the last — }.`;
+
+        if (this.prefs.customTextures) {
+            systemPrompt += `\n\nCUSTOM AI TEXTURES (ACTIVE):\nThe user has enabled AI custom texture generation. After you return the cubes, the system will automatically generate 1–3 custom textures (as images) based on the build theme and assign them to appropriate cubes. You do NOT need to reference custom texture names in materialName — just use the standard textures from the AVAILABLE TEXTURES list as usual. The system will replace materialName on relevant cubes with the generated custom texture keys (prefixed "custom_") after generation. Focus on producing the best geometry; the texture refinement happens automatically.\nFor flat thin panels (doors, sign boards, walls), prefer tileMode 2 (stretch) so the custom texture covers the full face cleanly. For chunky/cubic parts, prefer tileMode 0 (xy tiling) so the texture repeats at a natural scale.`;
+        }
     },
 
     _cancelRequested: false,
 
     /* ---------- Agent prefs (persisted) ---------- */
-    prefs: { detail: "balanced" },
+    prefs: { detail: "balanced", customTextures: false },
     _loadPrefs: function() {
         let saved = null;
         try { saved = JSON.parse(localStorage.getItem("mapcg_ai_agent") || "null"); } catch (e) {}
-        this.prefs = Object.assign({ detail: "balanced" }, saved || {});
+        this.prefs = Object.assign({ detail: "balanced", customTextures: false }, saved || {});
         this._syncAgentControls();
     },
     _savePrefs: function() {
@@ -14842,6 +14929,9 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
             el.classList.toggle("ai-chip-active", el.getAttribute("data-ai-detail") === this.prefs.detail);
         });
         const lbl = document.getElementById("ai-detail-label"); if (lbl) lbl.textContent = this._detailConfig().label;
+        const cb = document.getElementById("ai-custom-textures-toggle"); if (cb) cb.checked = !!this.prefs.customTextures;
+        const texStep = document.querySelector('[data-ai-stage="textures"]');
+        if (texStep) texStep.style.display = this.prefs.customTextures ? "" : "none";
     },
     _detailConfig: function() {
         if (this.prefs.detail === "economic")  return { label: "Economic",  mult: 0.6, maxTokens: 14000, chunk: 55 };
@@ -14849,13 +14939,332 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         return { label: "Balanced", mult: 1, maxTokens: 24000, chunk: 60 };
     },
     setDetail: function(v) { this.prefs.detail = v; this._savePrefs(); this._syncAgentControls(); },
+    setCustomTextures: function(v) {
+        this.prefs.customTextures = !!v;
+        this._savePrefs();
+        this._syncAgentControls();
+        // Show/hide the textures step in the stepper
+        const texStep = document.querySelector('[data-ai-stage="textures"]');
+        if (texStep) texStep.style.display = this.prefs.customTextures ? "" : "none";
+    },
     toggleAgentPanel: function() {
         const p = document.getElementById("ai-agent-panel");
         if (p) p.classList.toggle("collapsed");
     },
 
+    /* ---------- Custom texture generation ---------- */
+    /** Stores generated textures for the current session */
+    _generatedTextures: [],
+
+    /**
+     * Request image generation from the Gemini image model.
+     * Returns { dataUrl, mimeType } or throws.
+     */
+    _requestImageGeneration: async function(prompt) {
+        const reqBody = {
+            messages: [{ role: "user", content: prompt }],
+            mode: "image"
+        };
+        const MAX_RETRIES = 2;
+        let lastErr = null;
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                const response = await fetch(this.ENDPOINT, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(reqBody)
+                });
+                if (!response.ok) {
+                    let msg = "Image generation error (" + response.status + ")";
+                    try { const j = await response.json(); if (j?.error) msg = typeof j.error === "string" ? j.error : (j.error.message || msg); } catch (e) {}
+                    throw new Error(msg);
+                }
+                const data = await response.json();
+                const images = data?.choices?.[0]?.message?.images;
+                if (images && images.length > 0 && images[0].dataUrl) {
+                    return { dataUrl: images[0].dataUrl, mimeType: images[0].mimeType || "image/png" };
+                }
+                throw new Error("No image in response");
+            } catch (err) {
+                lastErr = err;
+                if (attempt < MAX_RETRIES) {
+                    this._log("Image gen retry " + attempt + ": " + (err?.message || err), "warn");
+                    await new Promise(r => setTimeout(r, 1500));
+                }
+            }
+        }
+        throw lastErr || new Error("Image generation failed");
+    },
+
+    /**
+     * Analyze the build to decide which custom textures to generate (1–3).
+     * Returns an array of texture prompt objects: [{ name, prompt, suggestedCubes }]
+     */
+    _decideTexturePrompts: function(promptText, planText, cubes) {
+        const lower = (promptText + " " + (planText || "")).toLowerCase();
+        const prompts = [];
+
+        // Analyze material usage in the build
+        const matCounts = {};
+        cubes.forEach(c => {
+            const m = c.materialName || "grid";
+            matCounts[m] = (matCounts[m] || 0) + 1;
+        });
+
+        // Determine dominant themes
+        const isWooden = /wood|timber|plank|log|fence|barrel|crate|pallet|bench|table|chair|cabinet|door|bridge/.test(lower);
+        const isStone = /stone|rock|brick|concrete|wall|tower|castle|bridge|arch|ruin/.test(lower);
+        const isMetal = /metal|steel|iron|barrel|bunker|door|gate|hatch|mech|drone|tank|vehicle|car/.test(lower);
+        const isSign = /sign|label|poster|banner|placard|calligraphy|writing|text|inscrip/.test(lower);
+        const isJapanese = /japan|torii|pagoda|shrine|temple|calligraphy|shoji|tatami/.test(lower);
+
+        if (isJapanese && isSign) {
+            prompts.push({
+                name: "jp_calligraphy",
+                prompt: "A square seamless texture of Japanese calligraphy kanji characters on aged washi paper, black ink on cream background, traditional brush stroke style, high detail, game texture",
+                suggestedCubes: c => c.materialName === "Wood" || c.tag === "Wood"
+            });
+        }
+
+        if (isSign || isJapanese) {
+            if (prompts.length === 0) {
+                prompts.push({
+                    name: "sign_painted",
+                    prompt: "A square seamless texture of a painted wooden sign with faded lettering and decorative border, vintage style, weathered paint, game texture for 3D object",
+                    suggestedCubes: c => (c.scale.x > 1 && c.scale.y > 0.5 && c.scale.z < 0.3) || (c.scale.z > 1 && c.scale.y > 0.5 && c.scale.x < 0.3)
+                });
+            }
+        }
+
+        if (isWooden && prompts.length < 3) {
+            prompts.push({
+                name: "wood_detailed",
+                prompt: "A square seamless texture of detailed wooden planks with visible grain, knots, and subtle color variation, natural warm brown tones, realistic wood for game 3D model",
+                suggestedCubes: c => c.tag === "Wood" || c.materialName === "WoodPlanks" || c.materialName === "Wood"
+            });
+        }
+
+        if (isMetal && prompts.length < 3) {
+            prompts.push({
+                name: "metal_worn",
+                prompt: "A square seamless texture of worn rusty metal plate with rivets, scratches, patina and subtle corrosion spots, industrial style, game texture for 3D object",
+                suggestedCubes: c => c.tag === "Metal" || c.materialName === "RoughMetal" || c.materialName === "Metal"
+            });
+        }
+
+        if (isStone && prompts.length < 3) {
+            prompts.push({
+                name: "stone_brick",
+                prompt: "A square seamless texture of old stone bricks with mortar lines, weathered surface, moss traces, medieval construction style, game texture",
+                suggestedCubes: c => c.tag === "Concrete" || c.materialName === "Concrete" || c.materialName === "StoneBrick"
+            });
+        }
+
+        // If nothing specific matched, generate at least one generic texture
+        if (prompts.length === 0) {
+            if (isWooden) {
+                prompts.push({
+                    name: "wood_generic",
+                    prompt: "A square seamless wood plank texture with rich grain detail, warm brown color, game-ready texture for 3D model",
+                    suggestedCubes: c => c.tag === "Wood"
+                });
+            } else if (isMetal) {
+                prompts.push({
+                    name: "metal_generic",
+                    prompt: "A square seamless metal plate texture with brushed finish and slight wear, cool grey steel color, game-ready texture",
+                    suggestedCubes: c => c.tag === "Metal"
+                });
+            } else {
+                prompts.push({
+                    name: "surface_detail",
+                    prompt: "A square seamless weathered surface texture with subtle detail and color variation, suitable for a 3D game object, realistic style",
+                    suggestedCubes: () => false
+                });
+            }
+        }
+
+        // Cap at 3
+        return prompts.slice(0, 3);
+    },
+
+    /**
+     * Generate custom textures for the build.
+     * Returns array of { name, dataUrl, mimeType, assignedCubes }
+     */
+    _generateCustomTextures: async function(promptText, planText, cubes) {
+        const texPrompts = this._decideTexturePrompts(promptText, planText, cubes);
+        if (!texPrompts.length) {
+            this._log("No suitable texture prompts derived from build.", "warn");
+            return [];
+        }
+
+        const generated = [];
+        const total = texPrompts.length;
+
+        for (let i = 0; i < total; i++) {
+            if (this._cancelRequested) break;
+            const tp = texPrompts[i];
+            const progress = (i + 1) / (total + 1);
+            this._setStatus('<span class="ai-spinner"></span> Generating texture ' + (i + 1) + '/' + total + '…', "");
+            this._setProgress(progress);
+            if (window.aiGenToast) aiGenToast.update("running", "Generating texture " + (i + 1) + "/" + total + "…");
+            this._log("Texture " + (i + 1) + "/" + total + ": \"" + tp.name + "\"", "info");
+
+            try {
+                const result = await this._requestImageGeneration(tp.prompt);
+                // Find which cubes to assign this texture to
+                const assignedCubes = [];
+                cubes.forEach((c, idx) => {
+                    if (tp.suggestedCubes(c)) assignedCubes.push(idx);
+                });
+
+                generated.push({
+                    name: tp.name,
+                    dataUrl: result.dataUrl,
+                    mimeType: result.mimeType,
+                    assignedCubes: assignedCubes
+                });
+                this._log("Texture \"" + tp.name + "\" generated successfully (" + assignedCubes.length + " cubes matched).", "ok");
+            } catch (err) {
+                this._log("Texture \"" + tp.name + "\" generation failed: " + (err?.message || err), "warn");
+                // Continue with remaining textures even if one fails
+            }
+        }
+
+        return generated;
+    },
+
+    /**
+     * Apply generated textures to cubes and register them in the engine.
+     * Modifies cubes array in-place (changes materialName to custom_ key).
+     * Returns the array of registered texture keys.
+     */
+    _applyCustomTextures: async function(cubes, generatedTextures) {
+        const registeredKeys = [];
+
+        for (const tex of generatedTextures) {
+            const matKey = "custom_" + tex.name;
+            // Register the texture in the engine before build starts
+            try {
+                await uiManager.addTextureToEngine(matKey, tex.name, tex.dataUrl, false, false);
+                registeredKeys.push(matKey);
+            } catch (err) {
+                this._log("Failed to register texture \"" + tex.name + "\": " + (err?.message || err), "error");
+                continue;
+            }
+
+            // Assign to matching cubes
+            let assigned = 0;
+            for (const cubeIdx of tex.assignedCubes) {
+                if (cubeIdx < cubes.length) {
+                    const cube = cubes[cubeIdx];
+                    // Determine best tileMode based on cube shape
+                    const sx = cube.scale.x, sy = cube.scale.y, sz = cube.scale.z;
+                    const minDim = Math.min(sx, sy, sz);
+                    const maxDim = Math.max(sx, sy, sz);
+                    // Thin flat faces → stretch; chunky cubes → tile
+                    if (maxDim / Math.max(minDim, 0.01) > 4) {
+                        cube.tileMode = 2; // stretch for thin panels
+                    } else {
+                        cube.tileMode = 0; // xy tiling for chunky parts
+                    }
+                    cube.materialName = matKey;
+                    assigned++;
+                }
+            }
+
+            // If no cubes were matched by the heuristic, assign to the largest flat surfaces
+            if (assigned === 0 && cubes.length > 0) {
+                // Sort cubes by face area descending and pick the top ones
+                const scored = cubes.map((c, i) => {
+                    const area = Math.max(c.scale.x * c.scale.y, c.scale.x * c.scale.z, c.scale.y * c.scale.z);
+                    return { idx: i, area };
+                }).sort((a, b) => b.area - a.area);
+                const count = Math.min(Math.ceil(cubes.length * 0.3), 5);
+                for (let j = 0; j < count && j < scored.length; j++) {
+                    const cube = cubes[scored[j].idx];
+                    cube.materialName = matKey;
+                    const minDim = Math.min(cube.scale.x, cube.scale.y, cube.scale.z);
+                    const maxDim = Math.max(cube.scale.x, cube.scale.y, cube.scale.z);
+                    cube.tileMode = (maxDim / Math.max(minDim, 0.01) > 4) ? 2 : 0;
+                }
+                this._log("No auto-matched cubes for \"" + tex.name + "\" — assigned to largest faces.", "info");
+            }
+        }
+
+        return registeredKeys;
+    },
+
+    /* ---------- Texture gallery UI ---------- */
+    _renderTextureGallery: function(textures) {
+        this._generatedTextures = textures || [];
+        const wrap = document.getElementById("ai-textures-wrap");
+        const grid = document.getElementById("ai-textures-grid");
+        const countEl = document.getElementById("ai-textures-count");
+        if (!wrap || !grid) return;
+
+        grid.innerHTML = "";
+        if (!textures || !textures.length) {
+            wrap.classList.remove("visible");
+            return;
+        }
+
+        wrap.classList.add("visible");
+        if (countEl) countEl.textContent = textures.length;
+
+        textures.forEach((tex, i) => {
+            const item = document.createElement("div");
+            item.className = "ai-texture-item";
+            item.title = tex.name + " — click to preview";
+
+            const img = document.createElement("img");
+            img.className = "ai-texture-thumb";
+            img.src = tex.dataUrl;
+            img.alt = tex.name;
+            img.loading = "lazy";
+
+            const name = document.createElement("div");
+            name.className = "ai-texture-name";
+            name.textContent = tex.name.replace(/_/g, " ");
+
+            item.appendChild(img);
+            item.appendChild(name);
+            item.onclick = () => this._openTextureLightbox(tex);
+            grid.appendChild(item);
+        });
+    },
+
+    /* ---------- Texture lightbox ---------- */
+    _lightboxTexture: null,
+    _openTextureLightbox: function(tex) {
+        this._lightboxTexture = tex;
+        const overlay = document.getElementById("ai-texture-lightbox-overlay");
+        const img = document.getElementById("ai-texture-lightbox-img");
+        const title = document.getElementById("ai-texture-lightbox-title");
+        if (!overlay || !img || !title) return;
+        img.src = tex.dataUrl;
+        title.textContent = tex.name.replace(/_/g, " ");
+        overlay.classList.add("open");
+    },
+    closeTextureLightbox: function() {
+        const overlay = document.getElementById("ai-texture-lightbox-overlay");
+        if (overlay) overlay.classList.remove("open");
+        this._lightboxTexture = null;
+    },
+    _downloadLightboxTexture: function() {
+        const tex = this._lightboxTexture;
+        if (!tex || !tex.dataUrl) return;
+        const a = document.createElement("a");
+        a.href = tex.dataUrl;
+        const ext = (tex.mimeType === "image/jpeg") ? "jpg" : "png";
+        a.download = "ai_texture_" + tex.name + "." + ext;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    },
+
     /* ---------- Stage state machine + UI ---------- */
-    _STAGES: ["plan", "generate", "verify", "build"],
+    _STAGES: ["plan", "generate", "textures", "verify", "build"],
     _setStage: function(stage, label) {
         this._stage = stage;
         const order = this._STAGES.indexOf(stage);
@@ -15171,6 +15580,8 @@ Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}
         this._log("Request: \"" + promptText + "\"" + (this._images.length ? " (+ " + this._images.length + " image" + (this._images.length > 1 ? "s" : "") + ")" : ""));
         const planWrapEl = document.getElementById("ai-plan-wrap");
         if (planWrapEl) planWrapEl.style.display = "none";
+        // Clear texture gallery from previous runs
+        this._renderTextureGallery([]);
 
         try {
             let imageDescription = null;
@@ -15235,7 +15646,33 @@ Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}
             cubes = this._normalizeCubesForBuild(cubes, budget);
             this._log("Ready to build: " + cubes.length + " cubes passed check.", "ok");
 
+            // ===== Custom texture generation =====
+            let generatedTextures = [];
+            if (this.prefs.customTextures) {
+                this._setStage("textures", "Generating custom textures");
+                this._log("AI custom textures enabled — generating 1–3 textures...", "info");
+                try {
+                    generatedTextures = await this._generateCustomTextures(promptText, planText, cubes);
+                    if (generatedTextures.length) {
+                        this._log("Applying " + generatedTextures.length + " custom texture(s) to cubes...", "info");
+                        const regKeys = await this._applyCustomTextures(cubes, generatedTextures);
+                        this._log("Registered textures: " + regKeys.join(", "), "ok");
+                        // Show gallery
+                        this._renderTextureGallery(generatedTextures);
+                    } else {
+                        this._log("No custom textures generated (no matching themes or all failed).", "warn");
+                    }
+                } catch (texErr) {
+                    this._log("Custom texture generation error: " + (texErr?.message || texErr), "error");
+                    // Non-fatal: continue building without custom textures
+                }
+            } else {
+                // Clear gallery from previous runs
+                this._renderTextureGallery([]);
+            }
+
             this._setStage("verify", "Checking quality");
+            this._setProgress(0);
             const report = this._verifyCubes(cubes, planText, budget);
             this._renderReport(report);
             this._log("Quality check: " + report.summary, report.passed ? "ok" : "warn");
@@ -15262,8 +15699,9 @@ Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}
                         if (window.aiGenToast) aiGenToast.update("cancelled", "Cancelled by user — built " + created.length + " of " + cubes.length + " cubes");
                     } else {
                         this._log("Build finished: " + created.length + " cubes.", "ok");
-                        this._setStatus(`✓ Done — built ${created.length} cubes.`, "ok");
-                        if (window.aiGenToast) aiGenToast.update("done", "Done — built " + created.length + " cubes ✓");
+                        const texInfo = generatedTextures.length ? " + " + generatedTextures.length + " texture" + (generatedTextures.length > 1 ? "s" : "") : "";
+                        this._setStatus(`✓ Done — built ${created.length} cubes${texInfo}.`, "ok");
+                        if (window.aiGenToast) aiGenToast.update("done", "Done — built " + created.length + " cubes" + texInfo + " ✓");
                     }
                     this._setProgress(null);
                 }
@@ -16596,8 +17034,9 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
                     <div class="ai-stepper" id="ai-stepper">
                         <div class="ai-step" data-ai-stage="plan"><span class="ai-step-dot">1</span><span class="ai-step-label">Plan</span></div>
                         <div class="ai-step" data-ai-stage="generate"><span class="ai-step-dot">2</span><span class="ai-step-label">Generate</span></div>
-                        <div class="ai-step" data-ai-stage="verify"><span class="ai-step-dot">3</span><span class="ai-step-label">Verify</span></div>
-                        <div class="ai-step" data-ai-stage="build"><span class="ai-step-dot">4</span><span class="ai-step-label">Build</span></div>
+                        <div class="ai-step" data-ai-stage="textures"><span class="ai-step-dot">3</span><span class="ai-step-label">Textures</span></div>
+                        <div class="ai-step" data-ai-stage="verify"><span class="ai-step-dot">4</span><span class="ai-step-label">Verify</span></div>
+                        <div class="ai-step" data-ai-stage="build"><span class="ai-step-dot">5</span><span class="ai-step-label">Build</span></div>
                     </div>
 
                     <div class="ai-image-row" id="ai-image-row">
@@ -16629,6 +17068,10 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
                                     <button class="ai-chip" data-ai-detail="detailed" onclick="aiBuilder.setDetail('detailed')">Detailed</button>
                                 </div>
                             </div>
+                            <div class="ai-textures-toggle-row">
+                                <input type="checkbox" id="ai-custom-textures-toggle" onchange="aiBuilder.setCustomTextures(this.checked)">
+                                <label for="ai-custom-textures-toggle" class="ai-textures-toggle-label"><span class="ai-textures-toggle-icon">✦</span> AI custom textures</label>
+                            </div>
                         </div>
                     </div>
                     <div class="ai-progress-wrap" id="ai-progress-wrap"><div class="ai-progress-bar" id="ai-progress-bar"></div></div>
@@ -16651,6 +17094,14 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
                     <div class="ai-report-wrap" id="ai-report-wrap" style="display:none">
                         <div class="ai-report-head"><span>🧐 Quality report</span><span class="ai-report-status ok" id="ai-report-status">PASS</span></div>
                         <div class="ai-report-body" id="ai-report-body"></div>
+                    </div>
+
+                    <div class="ai-textures-wrap" id="ai-textures-wrap">
+                        <div class="ai-textures-head">
+                            <span>🎨 Generated textures</span>
+                            <span id="ai-textures-count" style="color:var(--td-text-dim);font-weight:400;font-size:9px;">0</span>
+                        </div>
+                        <div class="ai-textures-grid" id="ai-textures-grid"></div>
                     </div>
 
                 </div>
@@ -18284,5 +18735,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f"}' crossorigin="anonymous"></script>
+
+        <div class="ai-texture-lightbox-overlay" id="ai-texture-lightbox-overlay" onclick="if(event.target===this)aiBuilder.closeTextureLightbox()">
+            <div class="ai-texture-lightbox-card">
+                <img class="ai-texture-lightbox-img" id="ai-texture-lightbox-img" src="" alt="">
+                <div class="ai-texture-lightbox-title" id="ai-texture-lightbox-title"></div>
+                <div class="ai-texture-lightbox-actions">
+                    <button class="ai-texture-lightbox-btn primary" id="ai-texture-lightbox-download" onclick="aiBuilder._downloadLightboxTexture()">⬇ Download</button>
+                    <button class="ai-texture-lightbox-btn" onclick="aiBuilder.closeTextureLightbox()">Close</button>
+                </div>
+            </div>
+        </div>
 </body>
 </html>
