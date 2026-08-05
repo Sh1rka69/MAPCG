@@ -21,13 +21,22 @@
 //    7. temperature больше не отправляется для моделей линейки Gemini 3.5+
 //       (Google официально считает temperature/top_p/top_k deprecated для
 //       них и рекомендует не трогать — see buildGenerationConfig/shouldSendTemperature).
+//    8. Новый режим mode:"image" (AI Custom Textures) — генерирует изображение
+//       текстуры через нативную image-модель Gemini (gemini-3.1-flash-image,
+//       она же "Nano Banana 2", GA-версия, точный рендер текста на картинке —
+//       важно для вывесок/табличек с надписями) и возвращает его как data:URL
+//       PNG прямо в JSON-ответе. Полностью отдельный путь от сборки/vision:
+//       свой набор ключей той же ротации, свой конфиг (responseModalities
+//       TEXT+IMAGE, без JSON schema/mimeType, без auto-fix), но та же
+//       инфраструктура retry/fallback/CORS.
 //
 //  Переменные окружения (настрой в Vercel Dashboard → Environment Variables):
 //    GEMINI_API_KEY       — основной ключ (если нет GEMINI_API_KEY_1..10)
 //    GEMINI_API_KEY_1..10 — до 10 ключей для ротации (приоритет)
 //    GEMINI_BUILD_MODEL   — модель для СБОРКИ (по умолч. gemini-3.6-flash)
-//    GEMINI_VISION_MODEL  — модель для картинок (по умолч. gemini-3.6-flash)
-//    GEMINI_FALLBACK_MODEL— запасная модель (по умолч. gemini-3.5-flash-lite)
+//    GEMINI_VISION_MODEL  — модель для картинок-референсов (по умолч. gemini-3.6-flash)
+//    GEMINI_IMAGE_MODEL   — модель для ГЕНЕРАЦИИ текстур (по умолч. gemini-3.1-flash-image)
+//    GEMINI_FALLBACK_MODEL— запасная модель для текста (по умолч. gemini-3.5-flash-lite)
 //    ENABLE_RESPONSE_SCHEMA — "1" чтобы включить принудительную схему JSON
 //    ALLOWED_ORIGINS      — опционально: список разрешённых Origin через запятую
 //
@@ -64,6 +73,21 @@ const MODEL_VISION = process.env.GEMINI_VISION_MODEL || "gemini-3.6-flash";
 // именно build-модели на стороне Google (перегрузка/инцидент) запрос ушёл на
 // независимо обслуживаемую модель, а не наткнулся на тот же самый сбой.
 const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite";
+// Модель ГЕНЕРАЦИИ изображений (для AI Custom Textures). gemini-3.1-flash-image
+// — официальная GA-версия (не -preview!) вышла 28 мая 2026, preview-версия уже
+// отключена Google. Это "Nano Banana 2": быстрая, поддерживает точный рендер
+// текста на изображении (важно для табличек/вывесок с надписями) и до 14
+// референс-картинок для консистентности стиля. Используется отдельно от
+// MODEL_BUILD/MODEL_VISION — генерация картинок не участвует в text-фолбэке.
+const MODEL_IMAGE = process.env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image";
+// Fallback для генерации текстур — опционален. По умолчанию совпадает с
+// основной image-моделью (в этом случае "фолбэк" сводится к ротации ключей и
+// финальной паузе-повтору), так как на момент написания нет второй реально
+// независимой GA image-модели, которую стоило бы включать по умолчанию без
+// явного запроса разработчика. Задать другую можно через
+// GEMINI_IMAGE_FALLBACK_MODEL (например gemini-3-pro-image, если нужен более
+// качественный, но медленный и дорогой резерв).
+const IMAGE_FALLBACK_MODEL = process.env.GEMINI_IMAGE_FALLBACK_MODEL || MODEL_IMAGE;
 
 // Принудительная схема JSON (опционально). По умолчанию выключена, чтобы
 // гарантированно не сломать работающий поток; включить можно env-переменной.
@@ -184,14 +208,23 @@ function toGeminiRequest(messages) {
 function toOpenAIResponse(geminiData) {
   const candidate = geminiData?.candidates?.[0];
   const finishReason = candidate?.finishReason || "unknown";
-  const text = (candidate?.content?.parts || [])
+  const parts = candidate?.content?.parts || [];
+  const text = parts
     .filter((p) => typeof p.text === "string" && !p.thought)
     .map((p) => p.text)
     .join("");
+  // Собираем все inline-картинки ответа (обычно ровно одна для генерации
+  // текстуры, но модель технически может вернуть несколько частей).
+  const images = parts
+    .filter((p) => p.inlineData && p.inlineData.data)
+    .map((p) => ({
+      dataUrl: `data:${p.inlineData.mimeType || "image/png"};base64,${p.inlineData.data}`,
+      mimeType: p.inlineData.mimeType || "image/png",
+    }));
   return {
     choices: [
       {
-        message: { role: "assistant", content: text },
+        message: { role: "assistant", content: text, images: images.length ? images : undefined },
         finish_reason:
           finishReason === "MAX_TOKENS" ? "length" : finishReason.toLowerCase(),
       },
@@ -357,21 +390,22 @@ module.exports = async (req, res) => {
   }
 
   const isVision = body.mode === "vision";
-  const model = isVision ? MODEL_VISION : MODEL_BUILD;
-  const highEffort = !isVision;
+  const isImage = body.mode === "image";
+  const model = isImage ? MODEL_IMAGE : (isVision ? MODEL_VISION : MODEL_BUILD);
+  const highEffort = !isVision && !isImage;
 
   const maxOutputTokens = Math.min(
     Math.max(
-      typeof body.max_tokens === "number" ? body.max_tokens : isVision ? 1200 : 24000,
+      typeof body.max_tokens === "number" ? body.max_tokens : isVision ? 1200 : isImage ? 4096 : 24000,
       500
     ),
-    isVision ? 2000 : 32000
+    isVision ? 2000 : isImage ? 8192 : 32000
   );
 
   const { systemText, contents } = toGeminiRequest(messages);
 
   function buildGenerationConfig(modelName) {
-    const useSchema = !isVision && ENABLE_SCHEMA;
+    const useSchema = !isVision && !isImage && ENABLE_SCHEMA;
     const cfg = {
       maxOutputTokens: maxOutputTokens,
     };
@@ -382,7 +416,14 @@ module.exports = async (req, res) => {
     if (typeof body.temperature === "number") {
       cfg.temperature = body.temperature;
     } else if (shouldSendTemperature(modelName)) {
-      cfg.temperature = isVision ? 0.3 : 0.4;
+      cfg.temperature = isVision ? 0.3 : isImage ? 0.8 : 0.4;
+    }
+    if (isImage) {
+      // Картинка-текстура — не JSON, свой набор модальностей ответа.
+      // thinkingConfig/responseMimeType/schema здесь не применимы и могут
+      // конфликтовать с image-выдачей у некоторых моделей — не добавляем их.
+      cfg.responseModalities = ["TEXT", "IMAGE"];
+      return cfg;
     }
     // При включённой схеме отключаем thinking — избегаем известного зависания
     // связки responseMimeType=json + thinkingConfig у части моделей.
@@ -421,7 +462,7 @@ module.exports = async (req, res) => {
     return { resp: { status: result.status }, text: result.text, elapsedMs: Date.now() - t0 };
   }
 
-  async function callWithKeyRotation(modelName) {
+  async function callWithKeyRotation(modelName, fallbackModel) {
     const OVERLOADED = [502, 503];
     let lastResult = null;
     let minRetryMs = null;
@@ -431,8 +472,8 @@ module.exports = async (req, res) => {
     for (let i = 0; i < apiKeys.length; i++) {
       let result = await callGemini(usedModel, apiKeys[i]);
 
-      if (result.resp.status === 404 && usedModel !== FALLBACK_MODEL) {
-        usedModel = FALLBACK_MODEL;
+      if (result.resp.status === 404 && usedModel !== fallbackModel) {
+        usedModel = fallbackModel;
         result = await callGemini(usedModel, apiKeys[i]);
       }
 
@@ -454,30 +495,30 @@ module.exports = async (req, res) => {
     }
 
     // Проход 2: если 502/503 — пробуем FALLBACK немедленно
-    if (lastResult && OVERLOADED.includes(lastResult.resp.status) && usedModel !== FALLBACK_MODEL) {
+    if (lastResult && OVERLOADED.includes(lastResult.resp.status) && usedModel !== fallbackModel) {
       for (let i = 0; i < apiKeys.length; i++) {
-        const result = await callGemini(FALLBACK_MODEL, apiKeys[i]);
+        const result = await callGemini(fallbackModel, apiKeys[i]);
         if (result.resp.status !== 429 && !OVERLOADED.includes(result.resp.status))
-          return { ...result, usedModel: FALLBACK_MODEL };
-        lastResult = { ...result, usedModel: FALLBACK_MODEL };
+          return { ...result, usedModel: fallbackModel };
+        lastResult = { ...result, usedModel: fallbackModel };
         if (i < apiKeys.length - 1) await sleep(600);
       }
     }
 
     // Проход 3: все ключи на 429 — пробуем FALLBACK_MODEL
-    if (usedModel !== FALLBACK_MODEL) {
+    if (usedModel !== fallbackModel) {
       let fallbackMinRetryMs = null;
       for (let i = 0; i < apiKeys.length; i++) {
-        const result = await callGemini(FALLBACK_MODEL, apiKeys[i]);
+        const result = await callGemini(fallbackModel, apiKeys[i]);
         const { status } = result.resp;
         if (status !== 429 && !OVERLOADED.includes(status))
-          return { ...result, usedModel: FALLBACK_MODEL };
+          return { ...result, usedModel: fallbackModel };
         if (status === 429) {
           const ms = parseRetryDelayMs(result.text);
           if (ms !== null && (fallbackMinRetryMs === null || ms < fallbackMinRetryMs))
             fallbackMinRetryMs = ms;
         }
-        lastResult = { ...result, usedModel: FALLBACK_MODEL };
+        lastResult = { ...result, usedModel: fallbackModel };
       }
       if (fallbackMinRetryMs !== null && (minRetryMs === null || fallbackMinRetryMs < minRetryMs))
         minRetryMs = fallbackMinRetryMs;
@@ -488,7 +529,7 @@ module.exports = async (req, res) => {
     const waitMs = Math.min(minRetryMs ?? 12000, 15000);
     await sleep(waitMs);
 
-    for (const tryModel of [modelName, FALLBACK_MODEL]) {
+    for (const tryModel of [modelName, fallbackModel]) {
       for (let i = 0; i < apiKeys.length; i++) {
         const result = await callGemini(tryModel, apiKeys[i]);
         if (result.resp.status !== 429 && !OVERLOADED.includes(result.resp.status))
@@ -501,7 +542,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { resp, text: rawText, elapsedMs, usedModel } = await callWithKeyRotation(model);
+    const { resp, text: rawText, elapsedMs, usedModel } = await callWithKeyRotation(model, isImage ? IMAGE_FALLBACK_MODEL : FALLBACK_MODEL);
 
     if (resp.status !== 200) {
       let errMsg = `Gemini API error (${resp.status})`;
@@ -543,11 +584,41 @@ module.exports = async (req, res) => {
 
     let out = toOpenAIResponse(geminiData);
 
+    // ✦ Режим генерации текстуры (AI Custom Textures): не JSON, не нужен
+    // auto-fix. Единственная валидация — что модель реально вернула картинку;
+    // Gemini image-модели иногда отказывают текстовым отказом вместо картинки
+    // (редко, но случается на пограничных промптах) — тогда явно сообщаем
+    // об этом клиенту вместо того, чтобы отдать 200 с пустым images[].
+    if (isImage) {
+      const hasImage = !!(out.choices[0]?.message?.images?.length);
+      if (!hasImage) {
+        res
+          .writeHead(502, { "Content-Type": "application/json", ...cors })
+          .end(
+            JSON.stringify({
+              error: "The model did not return an image" + (out.choices[0]?.message?.content ? (": " + out.choices[0].message.content.slice(0, 200)) : "") + ".",
+              _debug: { model: usedModel, elapsedMs },
+            })
+          );
+        return;
+      }
+      out._debug = {
+        model: usedModel,
+        elapsedMs,
+        finishReason: out._gemini_finish_reason,
+        keyCount: apiKeys.length,
+      };
+      res
+        .writeHead(200, { "Content-Type": "application/json", ...cors })
+        .end(JSON.stringify(out));
+      return;
+    }
+
     // ✦ САМОИСЦЕЛЕНИЕ для сборки: если ответ не прошёл валидацию как
     // JSON с cubes[] — делаем до MAX_FIX попыток корректирующего запроса.
     let fixedCount = 0;
     let content = out.choices[0]?.message?.content || "";
-    const isBuild = !isVision;
+    const isBuild = !isVision && !isImage;
 
     if (isBuild) {
       const MAX_FIX = 2;
