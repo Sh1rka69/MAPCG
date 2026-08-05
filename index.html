@@ -14314,7 +14314,14 @@ window.aiBuilder = {
     // It is anonymous best-effort and rate-limited, but needs no paid Gemini
     // image quota. Native Gemini can be enabled later when a paid quota exists.
     NATIVE_IMAGE_ENABLED: false,
-    FREE_RASTER_ENABLED: true,
+    // Pollinations now asks for Pollen on the anonymous route, so it is
+    // disabled by default. Set true only if that account/provider has free
+    // balance available.
+    FREE_RASTER_ENABLED: false,
+    // Second free raster provider. AI Horde is community-powered and async;
+    // anonymous requests use the lowest queue priority but do not need money
+    // or a paid API key.
+    HORDE_RASTER_ENABLED: true,
     TEXTURE_SVG_FALLBACK_ENABLED: false,
     _textureCache: new Map(),
     // Автоопределение эндпоинта: работает и с GitHub Pages, и с Vercel.
@@ -15018,7 +15025,16 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                     this._log("Texture \"" + textureName + "\" generated as native raster image by Flux.", "ok");
                     return remember(raster);
                 } catch (rasterErr) {
-                    this._log("Free raster provider failed: " + (rasterErr?.message || rasterErr), "warn");
+                    this._log("Free Flux provider failed: " + (rasterErr?.message || rasterErr) + " — trying AI Horde queue.", "warn");
+                }
+            }
+            if (this.HORDE_RASTER_ENABLED) {
+                try {
+                    const horde = await this._requestHordeRasterGeneration(prompt, textureName, textureMeta);
+                    this._log("Texture \"" + textureName + "\" generated as native raster image by AI Horde.", "ok");
+                    return remember(horde);
+                } catch (hordeErr) {
+                    this._log("AI Horde provider failed: " + (hordeErr?.message || hordeErr), "warn");
                 }
             }
             if (this.TEXTURE_SVG_FALLBACK_ENABLED) {
@@ -15144,6 +15160,97 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
             try { finalDataUrl = await this._makeSeamlessTextureDataUrl(finalDataUrl); } catch (e) {}
         }
         return { dataUrl: finalDataUrl, mimeType: blob.type || "image/jpeg", source: "free-flux" };
+    },
+
+    /**
+     * Free asynchronous raster fallback through AI Horde. Anonymous requests
+     * use the public ten-zero key and the community queue. The result is a
+     * real WebP/PNG image; there is no SVG conversion here.
+     */
+    _requestHordeRasterGeneration: async function(prompt, textureName, textureMeta = {}) {
+        if (this._cancelRequested) throw new Error("Cancelled");
+        const aspect = textureMeta.aspectRatio || "1:1";
+        const size = aspect === "16:9" ? { w: 1024, h: 576 } : aspect === "9:16" ? { w: 576, h: 1024 } : { w: 1024, h: 1024 };
+        const negative = textureMeta.role === "screen"
+            ? "television frame, bezel, room, furniture, reflection, glare, border, text, watermark, logo, UI, duplicate screen, perspective, blurry, low quality"
+            : "text, watermark, logo, border, frame, perspective, scene, object, blurry, low quality, tiling seams, random black speckles";
+        const submit = await fetch("https://aihorde.net/api/v2/generate/async", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "apikey": "0000000000",
+                "Client-Agent": "MAPCG/1.0"
+            },
+            body: JSON.stringify({
+                prompt,
+                params: {
+                    width: size.w,
+                    height: size.h,
+                    steps: 24,
+                    n: 1,
+                    cfg_scale: 7,
+                    sampler_name: "k_euler_a",
+                    negative_prompt: negative
+                },
+                models: ["stable_diffusion_xl_base_1.0"],
+                nsfw: false,
+                censor_nsfw: true,
+                validated_backends: true,
+                slow_workers: true,
+                extra_slow_workers: true,
+                allow_downgrade: true,
+                r2: true,
+                shared: true
+            })
+        });
+        let submitData = null;
+        try { submitData = await submit.json(); } catch (e) {}
+        if (!submit.ok || !submitData?.id) {
+            throw new Error("submit HTTP " + submit.status + (submitData?.message ? ": " + submitData.message : ""));
+        }
+        const id = submitData.id;
+        const started = Date.now();
+        const maxWait = 180000;
+        while (Date.now() - started < maxWait) {
+            if (this._cancelRequested) throw new Error("Cancelled");
+            await new Promise(r => setTimeout(r, 3000));
+            const check = await fetch("https://aihorde.net/api/v2/generate/check/" + encodeURIComponent(id), {
+                headers: { "apikey": "0000000000", "Client-Agent": "MAPCG/1.0" }
+            });
+            let state = null;
+            try { state = await check.json(); } catch (e) {}
+            if (!check.ok) throw new Error("status HTTP " + check.status);
+            if (state?.faulted) throw new Error(state.message || "AI Horde generation faulted");
+            const waiting = Number(state?.queue_position || 0);
+            const eta = Number(state?.wait_time || 0);
+            this._setStatus('<span class="ai-spinner"></span> Free AI Horde queue — ' + (waiting ? ("position " + waiting) : "generating") + (eta ? (" · ~" + eta + "s") : "") + '…', "");
+            if (Number(state?.finished || 0) > 0 || state?.done === true) break;
+        }
+        if (Date.now() - started >= maxWait) throw new Error("AI Horde queue timeout (3 minutes)");
+        const status = await fetch("https://aihorde.net/api/v2/generate/status/" + encodeURIComponent(id), {
+            headers: { "apikey": "0000000000", "Client-Agent": "MAPCG/1.0" }
+        });
+        const data = await status.json();
+        const gen = data?.generations?.[0];
+        if (!status.ok || !gen?.img) throw new Error(data?.message || "AI Horde returned no image");
+        let dataUrl = String(gen.img);
+        if (/^https?:\/\//i.test(dataUrl)) {
+            const imgResp = await fetch(dataUrl, { mode: "cors" });
+            if (!imgResp.ok) throw new Error("AI Horde image download HTTP " + imgResp.status);
+            const blob = await imgResp.blob();
+            dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(reader.error || new Error("image read failed"));
+                reader.readAsDataURL(blob);
+            });
+        } else if (!dataUrl.startsWith("data:")) {
+            dataUrl = "data:image/webp;base64," + dataUrl;
+        }
+        if (textureMeta.seamless) {
+            try { dataUrl = await this._makeSeamlessTextureDataUrl(dataUrl); } catch (e) {}
+        }
+        return { dataUrl, mimeType: "image/webp", source: "ai-horde" };
     },
 
     /**
