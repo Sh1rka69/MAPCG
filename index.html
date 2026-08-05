@@ -14960,14 +14960,22 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
      * Request image generation from the Gemini image model.
      * Returns { dataUrl, mimeType } or throws.
      */
-    _requestImageGeneration: async function(prompt) {
+    _requestImageGeneration: async function(prompt, textureName) {
         const reqBody = {
             messages: [{ role: "user", content: prompt }],
             mode: "image"
         };
-        const MAX_RETRIES = 2;
+        // Gemini image-модель имеет жёсткий rate-limit (~2–5 RPM на ключ).
+        // Сервер сам делает ротацию всех ключей и одно ожидание retryDelay,
+        // но если даже после этого все ключи остаются в кулдауне — клиент
+        // должен уважать retryAfterSec из ответа и честно ждать, иначе
+        // все последующие попытки тоже получат 429.
+        // MAX_CLIENT_RETRIES намеренно высокий (5): реальная работа идёт на
+        // сервере; клиентские попытки — это обёртка над serverRetryAfterSec-ожиданием.
+        const MAX_CLIENT_RETRIES = 5;
         let lastErr = null;
-        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        for (let attempt = 1; attempt <= MAX_CLIENT_RETRIES; attempt++) {
+            if (this._cancelRequested) throw new Error("Cancelled");
             try {
                 const response = await fetch(this.ENDPOINT, {
                     method: "POST",
@@ -14976,7 +14984,27 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                 });
                 if (!response.ok) {
                     let msg = "Image generation error (" + response.status + ")";
-                    try { const j = await response.json(); if (j?.error) msg = typeof j.error === "string" ? j.error : (j.error.message || msg); } catch (e) {}
+                    let retryAfterSec = null;
+                    try {
+                        const j = await response.json();
+                        if (j?.error) msg = typeof j.error === "string" ? j.error : (j.error.message || msg);
+                        if (j?._debug?.retryAfterSec) retryAfterSec = j._debug.retryAfterSec;
+                    } catch (e) {}
+                    const isRateLimit = response.status === 429 || (msg && msg.toLowerCase().includes("rate-limit"));
+                    if (isRateLimit && attempt < MAX_CLIENT_RETRIES) {
+                        // Ждём именно столько, сколько просит API — не меньше.
+                        const waitSec = Math.max(retryAfterSec || 65, 20);
+                        this._log("Image gen retry " + attempt + ": rate-limited — waiting " + waitSec + "s before retry " + (attempt + 1) + "/" + MAX_CLIENT_RETRIES + "...", "warn");
+                        // Показываем живой обратный отсчёт пользователю
+                        for (let s = waitSec; s > 0 && !this._cancelRequested; s--) {
+                            const label = textureName ? ("\"" + textureName + "\" rate-limited") : "Texture rate-limited";
+                            this._setStatus('<span class="ai-spinner"></span> ' + label + " — retry in " + s + "s…", "");
+                            if (window.aiGenToast) aiGenToast.update("running", label + " — retry in " + s + "s…");
+                            await new Promise(r => setTimeout(r, 1000));
+                        }
+                        if (this._cancelRequested) throw new Error("Cancelled");
+                        continue;
+                    }
                     throw new Error(msg);
                 }
                 const data = await response.json();
@@ -14986,10 +15014,11 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
                 }
                 throw new Error("No image in response");
             } catch (err) {
+                if (err.message === "Cancelled") throw err;
                 lastErr = err;
-                if (attempt < MAX_RETRIES) {
+                if (attempt < MAX_CLIENT_RETRIES) {
                     this._log("Image gen retry " + attempt + ": " + (err?.message || err), "warn");
-                    await new Promise(r => setTimeout(r, 1500));
+                    await new Promise(r => setTimeout(r, 2000));
                 }
             }
         }
@@ -15111,7 +15140,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
             this._log("Texture " + (i + 1) + "/" + total + ": \"" + tp.name + "\"", "info");
 
             try {
-                const result = await this._requestImageGeneration(tp.prompt);
+                const result = await this._requestImageGeneration(tp.prompt, tp.name);
                 // Find which cubes to assign this texture to
                 const assignedCubes = [];
                 cubes.forEach((c, idx) => {
