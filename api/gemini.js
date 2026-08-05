@@ -36,6 +36,10 @@
 //    GEMINI_BUILD_MODEL   — модель для СБОРКИ (по умолч. gemini-3.6-flash)
 //    GEMINI_VISION_MODEL  — модель для картинок-референсов (по умолч. gemini-3.6-flash)
 //    GEMINI_IMAGE_MODEL   — модель для ГЕНЕРАЦИИ текстур (по умолч. gemini-3.1-flash-image)
+//    GEMINI_IMAGE_FALLBACK_MODEL — быстрый резерв для картинок
+//                                 (по умолч. gemini-3.1-flash-lite-image)
+//    GEMINI_TEXTURE_MODEL  — текстовая модель для SVG-fallback текстур
+//                            (по умолч. GEMINI_BUILD_MODEL)
 //    GEMINI_FALLBACK_MODEL— запасная модель для текста (по умолч. gemini-3.5-flash-lite)
 //    ENABLE_RESPONSE_SCHEMA — "1" чтобы включить принудительную схему JSON
 //    ALLOWED_ORIGINS      — опционально: список разрешённых Origin через запятую
@@ -74,21 +78,21 @@ const MODEL_VISION = process.env.GEMINI_VISION_MODEL || "gemini-3.6-flash";
 // независимо обслуживаемую модель, а не наткнулся на тот же самый сбой.
 const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite";
 // Модель ГЕНЕРАЦИИ изображений (для AI Custom Textures). gemini-3.1-flash-image
-// — официальная GA-версия (не -preview!) вышла 28 мая 2026, preview-версия уже
-// отключена Google. Это "Nano Banana 2": быстрая, поддерживает точный рендер
-// текста на изображении (важно для табличек/вывесок с надписями) и до 14
-// референс-картинок для консистентности стиля. Используется отдельно от
-// MODEL_BUILD/MODEL_VISION — генерация картинок не участвует в text-фолбэке.
+// — production-модель Nano Banana 2. Она поддерживает точный рендер текста
+// и работает через тот же generateContent endpoint. Используется отдельно от
+// MODEL_BUILD/MODEL_VISION — генерация картинок не участвует в обычной сборке.
 const MODEL_IMAGE = process.env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image";
-// Fallback для генерации текстур — сознательно ДРУГАЯ модель, а не копия
-// MODEL_IMAGE. У gemini-3.1-flash-image лимит (RPM/квота) общий на модель,
-// а не на ключ — при 429 перебор ключей той же модели бесполезен (именно
-// это было видно в логах: "retry 2/5" крутится впустую). gemini-2.5-flash-image
-// ("Nano Banana" первого поколения) обслуживается отдельно и имеет свою
-// квоту, поэтому реально спасает при перегрузе основной. Переопределить можно
-// через GEMINI_IMAGE_FALLBACK_MODEL (например gemini-3-pro-image, если нужен
-// более качественный, но медленный и дорогой резерв).
-const IMAGE_FALLBACK_MODEL = process.env.GEMINI_IMAGE_FALLBACK_MODEL || "gemini-2.5-flash-image";
+// Fallback для генерации текстур — другая native-image модель. Важно: ключи
+// внутри одного проекта не увеличивают image quota, поэтому при 429 мы не
+// крутим один и тот же endpoint, а быстро переходим к text-to-SVG fallback.
+const IMAGE_FALLBACK_MODEL = process.env.GEMINI_IMAGE_FALLBACK_MODEL || "gemini-3.1-flash-lite-image";
+// Последний image-fallback оставляем для проектов, где Lite-модель ещё не
+// включена. Он вызывается не всегда: при 429 сервер быстро возвращает управление
+// клиенту, а клиент переключается на SVG-текстуру без длинного ожидания.
+const IMAGE_LEGACY_FALLBACK_MODEL = process.env.GEMINI_IMAGE_FALLBACK_MODEL_2 || "gemini-2.5-flash-image";
+// Text-to-SVG не зависит от квоты native image generation. SVG потом декодируется
+// обычным браузерным Image/Three.js как полноценная project texture.
+const MODEL_TEXTURE = process.env.GEMINI_TEXTURE_MODEL || MODEL_BUILD;
 
 // Принудительная схема JSON (опционально). По умолчанию выключена, чтобы
 // гарантированно не сломать работающий поток; включить можно env-переменной.
@@ -392,21 +396,27 @@ module.exports = async (req, res) => {
 
   const isVision = body.mode === "vision";
   const isImage = body.mode === "image";
-  const model = isImage ? MODEL_IMAGE : (isVision ? MODEL_VISION : MODEL_BUILD);
-  const highEffort = !isVision && !isImage;
+  // texture_svg is an intentional fallback path for native image-model 429s.
+  // It uses an ordinary text model to produce a self-contained SVG, so the
+  // builder remains usable even when the project has zero image quota.
+  const isTextureSvg = body.mode === "texture_svg" || body.mode === "texture";
+  const model = isImage ? MODEL_IMAGE : (isVision ? MODEL_VISION : (isTextureSvg ? MODEL_TEXTURE : MODEL_BUILD));
+  const highEffort = !isVision && !isImage && !isTextureSvg;
 
   const maxOutputTokens = Math.min(
     Math.max(
-      typeof body.max_tokens === "number" ? body.max_tokens : isVision ? 1200 : isImage ? 4096 : 24000,
+      typeof body.max_tokens === "number"
+        ? body.max_tokens
+        : isVision ? 1200 : isImage ? 4096 : isTextureSvg ? 7000 : 24000,
       500
     ),
-    isVision ? 2000 : isImage ? 8192 : 32000
+    isVision ? 2000 : isImage ? 8192 : isTextureSvg ? 9000 : 32000
   );
 
   const { systemText, contents } = toGeminiRequest(messages);
 
   function buildGenerationConfig(modelName) {
-    const useSchema = !isVision && !isImage && ENABLE_SCHEMA;
+    const useSchema = !isVision && !isImage && !isTextureSvg && ENABLE_SCHEMA;
     const cfg = {
       maxOutputTokens: maxOutputTokens,
     };
@@ -424,6 +434,21 @@ module.exports = async (req, res) => {
       // thinkingConfig/responseMimeType/schema здесь не применимы и могут
       // конфликтовать с image-выдачей у некоторых моделей — не добавляем их.
       cfg.responseModalities = ["TEXT", "IMAGE"];
+      // 1K is supported by both Nano Banana 2 and its Lite fallback and is
+      // more than enough for a repeating building texture.
+      cfg.responseFormat = {
+        image: {
+          aspectRatio: body.aspect_ratio || "1:1",
+          imageSize: body.image_size || "1K",
+        },
+      };
+      return cfg;
+    }
+    if (isTextureSvg) {
+      // SVG is returned as ordinary text. Do not add responseMimeType=json:
+      // the client needs the raw <svg> document.
+      const thinkingConfig = buildThinkingConfig(modelName, false);
+      if (thinkingConfig) cfg.thinkingConfig = thinkingConfig;
       return cfg;
     }
     // При включённой схеме отключаем thinking — избегаем известного зависания
@@ -465,6 +490,40 @@ module.exports = async (req, res) => {
 
   async function callWithKeyRotation(modelName, fallbackModel) {
     const OVERLOADED = [502, 503];
+
+    // Native image generation is quota-limited per project/model, not per API
+    // key. Retrying the same image model with ten keys only burns time and
+    // produces the long 30–90 second loop visible in the builder. Try each
+    // distinct image model once per key, then return 429 immediately; the
+    // browser will switch to the text-to-SVG fallback.
+    if (isImage || isTextureSvg) {
+      let lastFastResult = null;
+      const fastModels = isImage
+        ? [modelName, fallbackModel, IMAGE_LEGACY_FALLBACK_MODEL]
+        : [modelName, fallbackModel];
+      for (const tryModel of [...new Set(fastModels.filter(Boolean))]) {
+        for (let i = 0; i < apiKeys.length; i++) {
+          const result = await callGemini(tryModel, apiKeys[i]);
+          const status = result.resp.status;
+          // A model can be unavailable in a particular project (404); try
+          // the next configured fallback instead of surfacing that as the
+          // final image/SVG error.
+          if (status === 404) {
+            lastFastResult = { ...result, usedModel: tryModel };
+            break;
+          }
+          if (status !== 429 && !OVERLOADED.includes(status))
+            return { ...result, usedModel: tryModel };
+          lastFastResult = { ...result, usedModel: tryModel };
+          // A 429 is project/model quota exhaustion; another key in the same
+          // project cannot make it succeed. Move to the next model instead.
+          if (status === 429) break;
+          if (i < apiKeys.length - 1) await sleep(350);
+        }
+      }
+      return lastFastResult;
+    }
+
     let lastResult = null;
     let minRetryMs = null;
     let usedModel = modelName;
@@ -555,13 +614,18 @@ module.exports = async (req, res) => {
       if (resp.status === 429) {
         const ms = parseRetryDelayMs(rawText);
         retryAfterSec = ms ? Math.ceil(ms / 1000) : 65;
-        errMsg = `All API keys are rate-limited. Try again in ~${retryAfterSec}s.`;
+        errMsg = isImage
+          ? `Native image generation quota is temporarily unavailable. The builder can use an SVG texture fallback.`
+          : `All API keys are rate-limited. Try again in ~${retryAfterSec}s.`;
       } else if (resp.status === 502 || resp.status === 503) {
         retryAfterSec = 20;
-        errMsg = `The AI model (and its fallback) are both overloaded right now. Wait about ${retryAfterSec}s and press Build again.`;
+        errMsg = isImage
+          ? `Native image generation is unavailable right now. The builder can use an SVG texture fallback.`
+          : `The AI model (and its fallback) are both overloaded right now. Wait about ${retryAfterSec}s and press Build again.`;
       }
       const debug = { model: usedModel, elapsedMs, keyCount: apiKeys.length };
       if (retryAfterSec !== null) debug.retryAfterSec = retryAfterSec;
+      if (isImage) debug.textureFallback = "texture_svg";
       res
         .writeHead(resp.status, { "Content-Type": "application/json", ...cors })
         .end(JSON.stringify({ error: errMsg, _debug: debug }));
@@ -615,11 +679,34 @@ module.exports = async (req, res) => {
       return;
     }
 
+    // SVG-fallback is deliberately a plain-text endpoint; do not send it
+    // through the cube JSON auto-repair loop.
+    if (isTextureSvg) {
+      const svgText = out.choices[0]?.message?.content || "";
+      if (!svgText.trim()) {
+        res
+          .writeHead(502, { "Content-Type": "application/json", ...cors })
+          .end(JSON.stringify({ error: "The texture model returned an empty SVG.", _debug: { model: usedModel, elapsedMs } }));
+        return;
+      }
+      out._debug = {
+        model: usedModel,
+        elapsedMs,
+        mode: "texture_svg",
+        outputChars: svgText.length,
+        keyCount: apiKeys.length,
+      };
+      res
+        .writeHead(200, { "Content-Type": "application/json", ...cors })
+        .end(JSON.stringify(out));
+      return;
+    }
+
     // ✦ САМОИСЦЕЛЕНИЕ для сборки: если ответ не прошёл валидацию как
     // JSON с cubes[] — делаем до MAX_FIX попыток корректирующего запроса.
     let fixedCount = 0;
     let content = out.choices[0]?.message?.content || "";
-    const isBuild = !isVision && !isImage;
+    const isBuild = !isVision && !isImage && !isTextureSvg;
 
     if (isBuild) {
       const MAX_FIX = 2;
