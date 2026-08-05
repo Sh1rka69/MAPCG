@@ -848,84 +848,6 @@
         .ai-chip:hover { border-color: var(--td-border-strong); color: #fff; }
         .ai-chip-active { background: rgba(124,92,255,.16); border-color: #b79dff; color: #cbb8ff; }
 
-        /* ===== AI Custom Textures toggle row ===== */
-        .ai-toggle-row { display: flex; align-items: center; gap: 10px; }
-        .ai-toggle-label-wrap { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-        .ai-toggle-label { color: var(--td-text); font-size: 10.5px; font-weight: 600; letter-spacing: .03em; text-transform: none; }
-        .ai-toggle-hint { color: var(--td-text-dim); font-size: 9.5px; letter-spacing: .01em; line-height: 1.35; }
-        .ai-switch { position: relative; width: 34px; height: 18px; flex-shrink: 0; cursor: pointer; }
-        .ai-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
-        .ai-switch-track {
-            position: absolute; inset: 0; border: 1px solid var(--td-border-strong);
-            background: var(--td-bg-2); transition: background .15s, border-color .15s;
-        }
-        .ai-switch-thumb {
-            position: absolute; top: 2px; left: 2px; width: 12px; height: 12px;
-            background: var(--td-text-dim); transition: transform .15s, background .15s;
-        }
-        .ai-switch input:checked ~ .ai-switch-track { background: rgba(124,92,255,.22); border-color: #b79dff; }
-        .ai-switch input:checked ~ .ai-switch-track .ai-switch-thumb,
-        .ai-switch input:checked + .ai-switch-track .ai-switch-thumb { }
-        .ai-switch input:checked ~ .ai-switch-thumb { transform: translateX(16px); background: #cbb8ff; }
-        .ai-switch input:focus-visible ~ .ai-switch-track { border-color: #cbb8ff; }
-
-        /* ===== AI-generated texture gallery (under console) ===== */
-        .ai-textures-wrap { border: 1px solid var(--td-border); background: var(--td-bg-1); font-size: 11px; display: none; }
-        .ai-textures-wrap.has-items { display: block; }
-        .ai-textures-head {
-            display: flex; align-items: center; gap: 6px; padding: 7px 10px;
-            border-bottom: 1px solid var(--td-border); color: var(--td-text-dim);
-            letter-spacing: .06em; text-transform: uppercase; font-size: 10px; font-weight: 600;
-        }
-        .ai-textures-count { margin-left: auto; color: var(--td-text-dim); font-weight: 400; text-transform: none; letter-spacing: 0; }
-        .ai-textures-grid { display: flex; flex-wrap: wrap; gap: 8px; padding: 9px 10px; }
-        .ai-texture-item {
-            width: 56px; display: flex; flex-direction: column; gap: 4px; cursor: pointer;
-        }
-        .ai-texture-thumb {
-            width: 56px; height: 56px; border: 1px solid var(--td-border-strong);
-            background: var(--td-bg-2) repeating-conic-gradient(#2a2a2e 0% 25%, transparent 0% 50%) 50% / 10px 10px;
-            overflow: hidden; position: relative; transition: border-color .12s, transform .12s;
-        }
-        .ai-texture-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-        .ai-texture-item:hover .ai-texture-thumb { border-color: #b79dff; transform: translateY(-1px); }
-        .ai-texture-thumb.pending { display: flex; align-items: center; justify-content: center; }
-        .ai-texture-name { font-size: 8.5px; color: var(--td-text-dim); text-align: center; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-        /* Lightbox for viewing/downloading a generated texture at full size */
-        .ai-texture-lightbox-overlay {
-            position: fixed; inset: 0; z-index: 10050; background: rgba(0,0,0,.72);
-            display: flex; align-items: center; justify-content: center; padding: 24px;
-        }
-        .ai-texture-lightbox {
-            background: var(--td-bg-1); border: 1px solid var(--td-border-strong);
-            max-width: min(90vw, 520px); max-height: 90vh; display: flex; flex-direction: column;
-        }
-        .ai-texture-lightbox-head {
-            display: flex; align-items: center; gap: 8px; padding: 10px 14px;
-            border-bottom: 1px solid var(--td-border);
-        }
-        .ai-texture-lightbox-title { font-size: 12px; font-weight: 600; color: var(--td-text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .ai-texture-lightbox-close { cursor: pointer; color: var(--td-text-dim); padding: 2px; }
-        .ai-texture-lightbox-close:hover { color: #fff; }
-        .ai-texture-lightbox-img-wrap {
-            flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
-            padding: 14px; background: var(--td-bg-2) repeating-conic-gradient(#26262a 0% 25%, transparent 0% 50%) 50% / 16px 16px;
-        }
-        .ai-texture-lightbox-img-wrap img { max-width: 100%; max-height: 60vh; object-fit: contain; image-rendering: pixelated; }
-        .ai-texture-lightbox-meta { padding: 8px 14px 0; font-size: 10.5px; color: var(--td-text-dim); }
-        .ai-texture-lightbox-foot { display: flex; gap: 8px; padding: 12px 14px; }
-        .ai-texture-download-btn, .ai-texture-apply-btn {
-            flex: 1; padding: 9px 10px; font-size: 11px; font-weight: 600;
-            letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
-            border: 1px solid var(--td-border-strong); background: transparent; color: var(--td-text);
-            transition: all .12s; text-align: center; text-decoration: none; display: block;
-        }
-        .ai-texture-download-btn:hover { border-color: var(--td-accent); color: var(--td-accent); }
-        .ai-texture-apply-btn { border-color: #b79dff; color: #cbb8ff; }
-        .ai-texture-apply-btn:hover { background: rgba(124,92,255,.16); }
-
-
         /* ===== AI Agent 2.0: quality report ===== */
         .ai-report-wrap { border: 1px solid var(--td-border); background: var(--td-bg-1); font-size: 11px; }
         .ai-report-head {
@@ -14750,7 +14672,7 @@ Write in English, concisely, by points, without introduction or conclusion — o
         return out;
     },
 
-    _buildSystemPrompt: function(referenceItems, availableTextures, cubeBudget, enableCustomTextures) {
+    _buildSystemPrompt: function(referenceItems, availableTextures, cubeBudget) {
         const tagList = "Concrete, Grass, Dirt, Sand, Metal, Snow, Wood, Carpet, Water";
         const texSample = availableTextures.slice(0, 60).join(", ");
         const MAX_CUBES_PER_REF = 30;
@@ -14766,18 +14688,6 @@ Write in English, concisely, by points, without introduction or conclusion — o
                 : "";
             return `### Example: "${item.name}" (${item.cubeCount} cubes${note})\n${cubesJson}`;
         }).join("\n\n");
-
-        const customTexBlock = !enableCustomTextures ? "" : `
-
-AI CUSTOM TEXTURES (enabled for this build):
-In addition to the fixed texture library above, you may request 1 to 3 UNIQUE custom textures to be generated by an image model and applied to specific cubes — use this ONLY where it genuinely adds realism/character that no library texture can provide: text/writing (signs, plaques, labels, posters, book covers, control panels), a specific graphic pattern or emblem, or a distinctive surface design central to the object's identity (e.g. Japanese kanji on a noren curtain or wooden sign, a "DANGER" stencil on a crate, a clock face, a flag emblem). Do NOT request a custom texture for plain materials already covered by the library (wood grain, plain metal, brick, grass, concrete, etc.) — those must keep using the library "materialName" as normal.
-Rules for this feature:
-- Return requests in a top-level array field "customTextureRequests" (sibling of "plan" and "cubes"), maximum 3 items, each: {"id": "short_snake_case_id", "prompt": "a precise, self-contained image-generation prompt in English describing EXACTLY what the flat texture image should show", "tileMode": 0 | 1 | 2, "notes": "optional: any text/characters that MUST appear legibly on the texture, spelled out exactly"}.
-- The "prompt" must describe a flat, front-facing, seamless-if-tiled 2D texture/image suitable for mapping onto a cube face — NOT a 3D render, NOT a photo of an object in a scene, NOT include any mention of cubes/voxels/3D. E.g. good: "A weathered wooden sign texture with hand-painted Japanese kanji reading '温泉' (hot spring) in black ink, aged wood grain background, traditional Edo-period style, flat front view". Bad: "A 3D rendered wooden sign hanging outside a house".
-- If any text/characters must appear on the texture, put the EXACT text in both the prompt and the "notes" field, and keep it short (a handful of characters/words) — image models render short text far more reliably than long sentences.
-- For each cube that should use a requested custom texture instead of a library one, set that cube's "materialName" to "custom:<id>" (the exact id you used in customTextureRequests, prefixed with "custom:"), and still set a sensible "tileMode" for that cube matching the texture's intended tiling.
-- A custom texture can be reused on multiple cubes (e.g. the same sign texture on both faces of a two-sided sign) — just reference the same "custom:<id>" on each.
-- If nothing in this build genuinely benefits from a custom texture, omit "customTextureRequests" entirely (or return an empty array) and use only library materialNames — this is the expected outcome for most simple/generic objects.` : "";
 
         return `You are an expert architect inside the GoreBox (MAPCG) map editor. Your task: from a text description, generate a 3D object/building as an array of cubes (JSON) that the engine will assemble in the scene.
 
@@ -14796,7 +14706,7 @@ CUBE FORMAT (strict):
   "visible": true,
   "collisions": true,
   "physics": false,
-  "materialName": one of the actually available texture names from the project (see list below) — pick the closest by meaning and by tag${enableCustomTextures ? ', OR "custom:<id>" to use a requested custom texture (see AI CUSTOM TEXTURES below)' : ""},
+  "materialName": one of the actually available texture names from the project (see list below) — pick the closest by meaning and by tag,
   "position": {"x":0,"y":0,"z":0},
   "rotation": {"x":0,"y":0,"z":0}  (degrees, Unity axes: Y = rotation around vertical, X/Z = tilts),
   "scale": {"x":1,"y":1,"z":1}  (cube scale per axis, unit = approx. 1 meter)
@@ -14804,7 +14714,6 @@ CUBE FORMAT (strict):
 
 AVAILABLE TEXTURES (materialName), use ONLY these values, pick the closest by meaning and tag:
 ${texSample}
-${customTexBlock}
 
 COORDINATE SYSTEM AND GEOMETRY:
 - position — cube offset RELATIVE to the object center (0,0,0 = where the player placed the object). DO NOT use absolute world coordinates; always count from the local build center.
@@ -14912,7 +14821,7 @@ Before writing cube coordinates, you must FIRST mentally design the object and w
 5. At least 1-2 small decorative/accent details that are not strictly load-bearing (trim, seam, bolt, handle, accent stripe, etc.) — even a simple object should not be only bare structural cubes.
 The plan must be short, because the main response budget is needed for cubes. CRITICAL: EVERY part mentioned in the plan must get its cubes in the array "cubes" — do not drop cube generation in the middle of the plan parts list. If there are many parts, better make each part from fewer cubes than completely skip a plan part. Do not invent parts in cubes that are not in the plan, and do not skip plan parts when generating cubes.
 
-ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text", "cubes": [ ... ]${enableCustomTextures ? ', "customTextureRequests": [ ... ] (optional, 0-3 items, see AI CUSTOM TEXTURES above)' : ""}}, where "plan" is a short reasoning string per points above, and "cubes" is the array of cubes in the format described above, built strictly according to this plan and covering ALL its parts. No explanations outside these fields, no markdown formatting. The first character must be { and the last — }.`;
+ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text", "cubes": [ ... ]}, where "plan" is a short reasoning string per points above, and "cubes" is the array of cubes in the format described above, built strictly according to this plan and covering ALL its parts. No explanations outside these two fields, no markdown formatting. The first character must be { and the last — }.`;
     },
 
     _cancelRequested: false,
@@ -14922,8 +14831,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
     _loadPrefs: function() {
         let saved = null;
         try { saved = JSON.parse(localStorage.getItem("mapcg_ai_agent") || "null"); } catch (e) {}
-        this.prefs = Object.assign({ detail: "balanced", customTextures: false }, saved || {});
-        this._customTexturesEnabled = !!this.prefs.customTextures;
+        this.prefs = Object.assign({ detail: "balanced" }, saved || {});
         this._syncAgentControls();
     },
     _savePrefs: function() {
@@ -14934,14 +14842,6 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
             el.classList.toggle("ai-chip-active", el.getAttribute("data-ai-detail") === this.prefs.detail);
         });
         const lbl = document.getElementById("ai-detail-label"); if (lbl) lbl.textContent = this._detailConfig().label;
-        const toggle = document.getElementById("ai-custom-textures-toggle");
-        if (toggle) toggle.checked = !!this.prefs.customTextures;
-    },
-    /** Enables/disables the "AI custom textures" feature (off by default). Persisted like Detail. */
-    setCustomTextures: function(enabled) {
-        this._customTexturesEnabled = !!enabled;
-        this.prefs.customTextures = !!enabled;
-        this._savePrefs();
     },
     _detailConfig: function() {
         if (this.prefs.detail === "economic")  return { label: "Economic",  mult: 0.6, maxTokens: 14000, chunk: 55 };
@@ -15079,8 +14979,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         let planText = (parsed && typeof parsed.plan === "string") ? parsed.plan : null;
         const next = (parsed && typeof parsed.next === "string") ? parsed.next : null;
         const done = !!(parsed && parsed.done);
-        const customTextureRequests = Array.isArray(parsed?.customTextureRequests) ? parsed.customTextureRequests : [];
-        return { cubes: cubes || [], planText, wasTruncated, done, next, customTextureRequests };
+        return { cubes: cubes || [], planText, wasTruncated, done, next };
     },
 
     _sanitizeCubes: function(arr) {
@@ -15153,7 +15052,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
             ? `Build: ${promptText}.\n\nDetailed description of the reference image (match shape, parts, proportions, materials as closely as possible):\n${imageDescription}`
             : `Build: ${promptText}.`;
         const userContent = base + `\n\nAnswer strictly as JSON {"plan":"...","cubes":[...]}. Plan briefly (3-6 short sentences). Cube budget ≈ ${budget.budget} (max ${budget.max}).`;
-        let cubes = null, planText = null, customTextureRequests = [];
+        let cubes = null, planText = null;
         for (let attempt = 1; attempt <= 2; attempt++) {
             this._setStatus('<span class="ai-spinner"></span> Generating (attempt ' + attempt + ')...', "");
             const resp = await this._requestGeneration([
@@ -15163,11 +15062,10 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
             if (!resp.content) throw new Error("Model returned empty response. Try again.");
             const parsed = this._parseCubesFromRaw(resp.content);
             if (!planText && parsed.planText) planText = parsed.planText;
-            if (parsed.customTextureRequests && parsed.customTextureRequests.length) customTextureRequests = parsed.customTextureRequests;
             if (parsed.cubes && parsed.cubes.length) { cubes = parsed.cubes; if (!parsed.wasTruncated || attempt === 2) break; }
         }
         if (!cubes) throw new Error("Model returned invalid JSON.");
-        return { cubes, planText, customTextureRequests };
+        return { cubes, planText };
     },
 
     /** Compact snapshot of already-generated cubes for continuation prompts:
@@ -15203,7 +15101,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         const CHUNK = (detail && detail.chunk) || 26;
         const MAX_CHUNKS = 9;
         const all = [];
-        let planText = null, total = 0, chunks = 0, done = false, nextHint = "", customTextureRequests = [];
+        let planText = null, total = 0, chunks = 0, done = false, nextHint = "";
         const prompt = imageDescription
             ? `Build: ${promptText}.\n\nReference image description (match it closely):\n${imageDescription}`
             : `Build: ${promptText}.`;
@@ -15221,7 +15119,6 @@ Return only this first chunk now — never the whole build.`;
         let parsed = this._parseCubesFromRaw(resp.content);
         if (parsed.cubes.length) { all.push(...parsed.cubes); total += parsed.cubes.length; }
         if (parsed.planText) planText = parsed.planText;
-        if (parsed.customTextureRequests && parsed.customTextureRequests.length) customTextureRequests = parsed.customTextureRequests;
         done = parsed.done;
         nextHint = parsed.next || "";
         chunks = 1;
@@ -15253,7 +15150,7 @@ Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}
         if (total >= budget.max) this._log("Reached cube budget cap; stopping generation.", "warn");
         if (chunks >= MAX_CHUNKS) this._log("Reached max chunk count; finishing with what we have.", "warn");
         this._log("Generation complete: " + all.length + " cube(s) across " + chunks + " chunk(s).", "ok");
-        return { cubes: all, planText, customTextureRequests };
+        return { cubes: all, planText };
     },
 
     run: async function() {
@@ -15270,8 +15167,6 @@ Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}
         this._setRefLine("");
         this._clearConsole();
         this._resetReport();
-        this._generatedTextures = [];
-        this._renderTextureGallery(false);
         this._setStage("plan", "Analyzing request");
         this._log("Request: \"" + promptText + "\"" + (this._images.length ? " (+ " + this._images.length + " image" + (this._images.length > 1 ? "s" : "") + ")" : ""));
         const planWrapEl = document.getElementById("ai-plan-wrap");
@@ -15309,7 +15204,7 @@ Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}
             };
             this._log("Agent preset: " + detail.label + " (target ~" + budget.budget + " cubes, max " + budget.max + ").", "ok");
 
-            const systemPrompt = this._buildSystemPrompt(refs, availableTextures, budget, this._customTexturesEnabled);
+            const systemPrompt = this._buildSystemPrompt(refs, availableTextures, budget);
 
             if (!this.ENDPOINT || this.ENDPOINT === '') {
                 this._log("ENDPOINT not set.", "error");
@@ -15323,13 +15218,13 @@ Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}
             this._setStage("generate", mode === "chunked" ? "Generating in chunks" : "Generating");
             this._log("Generation mode: " + mode + ".", "ok");
 
-            let cubes = null, planText = null, customTextureRequests = [];
+            let cubes = null, planText = null;
             if (mode === "chunked") {
                 const r = await this._runChunked({ promptText, imageDescription, systemPrompt, budget, detail });
-                cubes = r.cubes; planText = r.planText; customTextureRequests = r.customTextureRequests || [];
+                cubes = r.cubes; planText = r.planText;
             } else {
                 const r = await this._runSingleShot({ promptText, imageDescription, systemPrompt, budget });
-                cubes = r.cubes; planText = r.planText; customTextureRequests = r.customTextureRequests || [];
+                cubes = r.cubes; planText = r.planText;
             }
 
             if (planText) { console.info("[AI Builder] Plan:", planText); this._showPlan(planText); }
@@ -15339,14 +15234,6 @@ Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}
             cubes = this._dedupCubes(cubes);
             cubes = this._normalizeCubesForBuild(cubes, budget);
             this._log("Ready to build: " + cubes.length + " cubes passed check.", "ok");
-
-            // ── AI Custom Textures: generate up to 3 requested images, register
-            // them in the engine, then remap any cube using "custom:<id>" to the
-            // real material key the engine now knows about. If this is off, or
-            // the model requested nothing, this is a no-op.
-            if (this._customTexturesEnabled && customTextureRequests && customTextureRequests.length) {
-                cubes = await this._generateCustomTextures(customTextureRequests, cubes);
-            }
 
             this._setStage("verify", "Checking quality");
             const report = this._verifyCubes(cubes, planText, budget);
@@ -15393,115 +15280,6 @@ Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}
             this._hideStepper();
             if (window.aiGenToast) aiGenToast.update("error", baseMsg);
         }
-    },
-
-    /* ---------- AI Custom Textures ---------- */
-    _generatedTextures: [],  // {id, matKey, name, dataUrl, prompt, tileMode}
-
-    /** Generates 1-3 requested textures via mode:"image", registers each into the
-     *  engine's texture library, remaps "custom:<id>" materialNames on the cubes
-     *  to the real key, and renders the gallery. Never throws — on any single
-     *  texture failure it logs a warning and leaves those cubes on a safe
-     *  fallback material ("grid") rather than aborting the whole build. */
-    _generateCustomTextures: async function(requests, cubes) {
-        const reqs = requests.filter(r => r && typeof r.prompt === "string" && r.prompt.trim()).slice(0, 3);
-        if (!reqs.length) return cubes;
-        this._setStage("generate", "Generating custom textures");
-        const idToMatKey = {};
-        for (let i = 0; i < reqs.length; i++) {
-            const r = reqs[i];
-            const id = (typeof r.id === "string" && r.id.trim()) ? r.id.trim().replace(/[^a-z0-9_]/gi, "_").slice(0, 40) : ("tex_" + i);
-            const tileMode = typeof r.tileMode === "number" ? r.tileMode : 2;
-            this._setStatus('<span class="ai-spinner"></span> Generating texture ' + (i + 1) + '/' + reqs.length + ': ' + id + '...', "");
-            this._log("Generating custom texture \"" + id + "\": " + r.prompt.slice(0, 90) + (r.prompt.length > 90 ? "…" : ""), "info");
-            this._renderTextureGallery(true); // show a pending slot immediately
-            try {
-                const fullPrompt = r.prompt.trim() + (r.notes ? ("\nText that must appear exactly as written, legibly: " + r.notes) : "") +
-                    "\nThe image must be a flat, front-facing, square texture suitable for tiling on a 3D cube face — no scene, no background context, no 3D perspective.";
-                const resp = await fetch(this.ENDPOINT, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ mode: "image", messages: [{ role: "user", content: fullPrompt }] })
-                });
-                const data = await resp.json().catch(() => null);
-                if (!resp.ok || !data) throw new Error(data?.error || ("Server error " + resp.status));
-                const img = data.choices?.[0]?.message?.images?.[0];
-                if (!img?.dataUrl) throw new Error("No image returned");
-                const matKey = "custom_" + Date.now().toString(36) + "_" + id;
-                await uiManager.addTextureToEngine(matKey, id, img.dataUrl, false, true);
-                idToMatKey[id] = matKey;
-                this._generatedTextures.push({ id, matKey, name: id, dataUrl: img.dataUrl, prompt: r.prompt, tileMode });
-                this._log("Texture \"" + id + "\" generated and added to the texture library.", "ok");
-            } catch (texErr) {
-                this._log("Texture \"" + id + "\" failed: " + (texErr?.message || String(texErr)) + " — cubes using it will fall back to a default material.", "warn");
-            }
-            this._renderTextureGallery(false);
-        }
-        // Remap cubes referencing "custom:<id>" to the real registered key, or to
-        // a safe fallback ("grid") if that particular texture failed to generate.
-        let remapped = 0, fellBack = 0;
-        const out = cubes.map(c => {
-            if (typeof c.materialName === "string" && c.materialName.startsWith("custom:")) {
-                const id = c.materialName.slice(7);
-                if (idToMatKey[id]) { remapped++; return { ...c, materialName: idToMatKey[id], tileMode: (reqs.find(r => (r.id || "") === id)?.tileMode ?? c.tileMode) }; }
-                fellBack++; return { ...c, materialName: "grid" };
-            }
-            return c;
-        });
-        if (remapped) this._log(remapped + " cube(s) assigned their generated custom texture.", "ok");
-        if (fellBack) this._log(fellBack + " cube(s) fell back to default material (their texture failed to generate).", "warn");
-        return out;
-    },
-
-    /** Renders the "Generated textures" gallery under the console. pendingExtra
-     *  shows one extra placeholder tile while a texture is still being generated. */
-    _renderTextureGallery: function(pendingExtra) {
-        const wrap = document.getElementById("ai-textures-wrap");
-        const grid = document.getElementById("ai-textures-grid");
-        const countEl = document.getElementById("ai-textures-count");
-        if (!wrap || !grid) return;
-        grid.innerHTML = "";
-        this._generatedTextures.forEach((t, idx) => {
-            const item = document.createElement("div");
-            item.className = "ai-texture-item";
-            item.innerHTML = `<div class="ai-texture-thumb"><img src="${t.dataUrl}" alt="${t.name}"></div><div class="ai-texture-name">${t.name}</div>`;
-            item.addEventListener("click", () => this.openTextureLightbox(idx));
-            grid.appendChild(item);
-        });
-        if (pendingExtra) {
-            const item = document.createElement("div");
-            item.className = "ai-texture-item";
-            item.innerHTML = `<div class="ai-texture-thumb pending"><span class="ai-spinner"></span></div><div class="ai-texture-name">generating…</div>`;
-            grid.appendChild(item);
-        }
-        const total = this._generatedTextures.length;
-        if (countEl) countEl.textContent = total ? (total + " texture" + (total > 1 ? "s" : "")) : "";
-        wrap.classList.toggle("has-items", total > 0 || !!pendingExtra);
-    },
-
-    /** Opens the full-size lightbox for a generated texture, with a working Download button. */
-    openTextureLightbox: function(index) {
-        const t = this._generatedTextures[index];
-        if (!t) return;
-        const overlay = document.getElementById("ai-texture-lightbox-overlay");
-        const img = document.getElementById("ai-texture-lightbox-img");
-        const title = document.getElementById("ai-texture-lightbox-title");
-        const meta = document.getElementById("ai-texture-lightbox-meta");
-        const dl = document.getElementById("ai-texture-lightbox-download");
-        if (!overlay || !img) return;
-        img.src = t.dataUrl;
-        if (title) title.textContent = t.name;
-        if (meta) meta.textContent = t.prompt ? t.prompt : "";
-        if (dl) {
-            dl.href = t.dataUrl;
-            const safeName = (t.name || "texture").replace(/[^a-z0-9_-]/gi, "_");
-            dl.setAttribute("download", safeName + ".png");
-        }
-        overlay.classList.remove("hidden");
-    },
-    closeTextureLightbox: function() {
-        const overlay = document.getElementById("ai-texture-lightbox-overlay");
-        if (overlay) overlay.classList.add("hidden");
     },
 
     /**
@@ -16851,17 +16629,6 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
                                     <button class="ai-chip" data-ai-detail="detailed" onclick="aiBuilder.setDetail('detailed')">Detailed</button>
                                 </div>
                             </div>
-                            <div class="ai-toggle-row">
-                                <div class="ai-toggle-label-wrap">
-                                    <span class="ai-toggle-label">✦ AI custom textures</span>
-                                    <span class="ai-toggle-hint">Generates 1–3 unique images (signs, patterns, labels) and applies them where they fit — e.g. Japanese signage on a house.</span>
-                                </div>
-                                <label class="ai-switch" title="Generate custom AI textures for this build">
-                                    <input type="checkbox" id="ai-custom-textures-toggle" onchange="aiBuilder.setCustomTextures(this.checked)">
-                                    <span class="ai-switch-track"></span>
-                                    <span class="ai-switch-thumb"></span>
-                                </label>
-                            </div>
                         </div>
                     </div>
                     <div class="ai-progress-wrap" id="ai-progress-wrap"><div class="ai-progress-bar" id="ai-progress-bar"></div></div>
@@ -16873,13 +16640,6 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
                             <span class="ai-console-toggle" id="ai-console-toggle">▾</span>
                         </div>
                         <div class="ai-console-body" id="ai-console-body"></div>
-                    </div>
-                    <div class="ai-textures-wrap" id="ai-textures-wrap">
-                        <div class="ai-textures-head">
-                            <span>✦ Generated textures</span>
-                            <span class="ai-textures-count" id="ai-textures-count"></span>
-                        </div>
-                        <div class="ai-textures-grid" id="ai-textures-grid"></div>
                     </div>
                     <div class="ai-plan-wrap" id="ai-plan-wrap" style="display:none">
                         <div class="ai-plan-header" onclick="aiBuilder.togglePlan()">
@@ -16897,20 +16657,6 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
                 <div class="collection-modal-footer">
                     <button class="ai-cancel-btn" id="ai-cancel-btn" style="display:none" onclick="aiBuilder.cancel()"><span class="ui-icon ui-icon-mask" data-icon="Close"  alt="" style="width:12px;height:12px;object-fit:contain;vertical-align:-2px;margin-right:4px;"></span>Cancel</button>
                     <button class="ai-build-btn" id="ai-build-btn" style="flex:1" onclick="aiBuilder.run()"><span class="ui-icon ui-icon-mask" data-icon="Hammer"  alt="" style="width:13px;height:13px;object-fit:contain;vertical-align:-2px;margin-right:5px;"></span>Build</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="ai-texture-lightbox-overlay" class="ai-texture-lightbox-overlay hidden" onclick="if(event.target===this)aiBuilder.closeTextureLightbox()">
-            <div class="ai-texture-lightbox">
-                <div class="ai-texture-lightbox-head">
-                    <span class="ai-texture-lightbox-title" id="ai-texture-lightbox-title">texture</span>
-                    <span class="ai-texture-lightbox-close" onclick="aiBuilder.closeTextureLightbox()"><span class="ui-icon ui-icon-mask" data-icon="Close" alt="" style="width:13px;height:13px;object-fit:contain;"></span></span>
-                </div>
-                <div class="ai-texture-lightbox-img-wrap"><img id="ai-texture-lightbox-img" src="" alt="Generated texture"></div>
-                <div class="ai-texture-lightbox-meta" id="ai-texture-lightbox-meta"></div>
-                <div class="ai-texture-lightbox-foot">
-                    <a class="ai-texture-download-btn" id="ai-texture-lightbox-download" download="texture.png" href="">⬇ Download</a>
                 </div>
             </div>
         </div>
