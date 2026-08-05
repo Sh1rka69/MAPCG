@@ -5073,11 +5073,17 @@ function applyCanvasToExistingTexture(texture, canvas) {
 
 function applyGlobalTextureFiltering(texture) {
     if (!texture) return;
-    const smooth = document.getElementById("setting-texture-smoothing")?.checked ?? false;
+    const aiTexture = texture.userData?.isAITexture === true;
+    const smooth = aiTexture || (document.getElementById("setting-texture-smoothing")?.checked ?? false);
+    const tw = texture.image?.width || texture.image?.naturalWidth || 0;
+    const th = texture.image?.height || texture.image?.naturalHeight || 0;
+    const isPowerOfTwo = n => n > 0 && (n & (n - 1)) === 0;
+    const canMipmap = isPowerOfTwo(tw) && isPowerOfTwo(th);
     texture.magFilter = smooth ? THREE.LinearFilter : THREE.NearestFilter;
-    texture.minFilter = smooth ? THREE.LinearFilter : THREE.NearestFilter;
-    texture.generateMipmaps = false;
-    texture.anisotropy = 1;
+    texture.minFilter = aiTexture ? (canMipmap ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter) : (smooth ? THREE.LinearFilter : THREE.NearestFilter);
+    texture.generateMipmaps = aiTexture && canMipmap;
+    const maxAnisotropy = window.engine?.renderer?.capabilities?.getMaxAnisotropy?.() || 1;
+    texture.anisotropy = aiTexture ? Math.min(4, maxAnisotropy) : 1;
     texture.needsUpdate = true;
 }
 
@@ -13284,9 +13290,10 @@ window.uiManager = {
                 tex.wrapT = THREE.RepeatWrapping;
                 tex.colorSpace = THREE.SRGBColorSpace;
                 applyCanvasToExistingTexture(tex, canvas);
-                applyGlobalTextureFiltering(tex);
                 const hasAlpha = getCanvasAlphaFlag(canvas);
+                const isAITexture = String(matKey || "").startsWith("custom_");
                 tex.userData = {
+                    isAITexture: isAITexture,
                     hasAlpha: hasAlpha,
                     originalDataUrl: dataUrl,
                     sourceDataUrl: dataUrl,
@@ -13296,6 +13303,7 @@ window.uiManager = {
                     optimizedWidth: canvas.width,
                     optimizedHeight: canvas.height
                 };
+                applyGlobalTextureFiltering(tex);
                 activeProjectCustomTextures[matKey] = tex;
                 // Keep the decoded texture alive in the vault so Undo/Redo can
                 // re-bind it without re-decoding (and without losing it).
@@ -14296,6 +14304,18 @@ window.aiBuilder = {
     // cubes. If native image quota is unavailable, the request transparently
     // falls back to an AI-authored SVG, then to a local procedural texture.
     MAX_CUSTOM_TEXTURES_PER_BUILD: 1,
+    // Free-key mode: native Gemini image generation is disabled by default.
+    // A valid model name does not guarantee free image quota; with quota=0
+    // Google returns 429 even when ordinary text generation works. The
+    // Builder therefore starts with the free text-model SVG path and only
+    // uses native images if this flag is deliberately changed to true after
+    // image quota/billing is available.
+    // Free raster provider: Pollinations/Flux returns a real PNG/JPEG, not SVG.
+    // It is anonymous best-effort and rate-limited, but needs no paid Gemini
+    // image quota. Native Gemini can be enabled later when a paid quota exists.
+    NATIVE_IMAGE_ENABLED: false,
+    FREE_RASTER_ENABLED: true,
+    TEXTURE_SVG_FALLBACK_ENABLED: false,
     _textureCache: new Map(),
     // Автоопределение эндпоинта: работает и с GitHub Pages, и с Vercel.
     ENDPOINT: (function(){
@@ -14801,6 +14821,11 @@ CUBE FORMAT (strict):
   "scale": {"x":1,"y":1,"z":1}  (cube scale per axis, unit = approx. 1 meter)
 }
 
+SEMANTIC PART NAMES (important for texture assignment):
+- Do not name every cube MapCube. Give important parts meaningful short names: TV_Body, TV_Bezel, TV_Screen, Monitor_Display, Sign_Face, Poster_Face, Window_Glass, Lamp_Shade, etc.
+- A television/monitor must contain a separate thin front-facing cube named exactly or very similarly to TV_Screen / Monitor_Display. Use a dark/Glass material for its frame and a distinct flat panel for the screen.
+- If the user asks what is shown on a screen, keep the screen content separate from the frame; the texture generator will create a real raster image for that screen only.
+
 AVAILABLE TEXTURES (materialName), use ONLY these values, pick the closest by meaning and tag:
 ${texSample}
 
@@ -14971,7 +14996,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
      *   3) local procedural PNG (last-resort offline texture).
      * Returns { dataUrl, mimeType, source }.
      */
-    _requestImageGeneration: async function(prompt, textureName) {
+    _requestImageGeneration: async function(prompt, textureName, textureMeta = {}) {
         const cacheKey = String(textureName || "") + "|" + String(prompt || "");
         const cached = this._textureCache.get(cacheKey);
         if (cached?.dataUrl) {
@@ -14985,25 +15010,42 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         };
         const fallback = async reason => {
             if (this._cancelRequested) throw new Error("Cancelled");
-            this._log("Native image unavailable (" + reason + ") — switching to AI SVG texture without waiting.", "warn");
-            this._setStatus('<span class="ai-spinner"></span> Native image quota unavailable — creating AI SVG texture…', "");
-            try {
-                const svgResult = await this._requestSvgTextureGeneration(prompt, textureName);
-                this._log("Texture \"" + textureName + "\" generated by the text-model SVG fallback.", "ok");
-                return remember(svgResult);
-            } catch (svgErr) {
-                if (this._cancelRequested || svgErr?.message === "Cancelled") throw new Error("Cancelled");
-                this._log("AI SVG fallback failed (" + (svgErr?.message || svgErr) + ") — using local procedural texture.", "warn");
-                const dataUrl = this._createProceduralTextureDataUrl(prompt, textureName);
-                const localResult = { dataUrl, mimeType: "image/png", source: "local-procedural" };
-                return remember(localResult);
+            this._log("Native Gemini image unavailable (" + reason + ") — trying free raster Flux provider.", "warn");
+            this._setStatus('<span class="ai-spinner"></span> Generating native raster texture…', "");
+            if (this.FREE_RASTER_ENABLED) {
+                try {
+                    const raster = await this._requestFreeRasterGeneration(prompt, textureName, textureMeta);
+                    this._log("Texture \"" + textureName + "\" generated as native raster image by Flux.", "ok");
+                    return remember(raster);
+                } catch (rasterErr) {
+                    this._log("Free raster provider failed: " + (rasterErr?.message || rasterErr), "warn");
+                }
             }
+            if (this.TEXTURE_SVG_FALLBACK_ENABLED) {
+                try {
+                    const svgResult = await this._requestSvgTextureGeneration(prompt, textureName, textureMeta);
+                    this._log("Texture \"" + textureName + "\" generated by the text-model SVG fallback.", "ok");
+                    return remember(svgResult);
+                } catch (svgErr) {
+                    if (this._cancelRequested || svgErr?.message === "Cancelled") throw new Error("Cancelled");
+                    this._log("AI SVG fallback failed: " + (svgErr?.message || svgErr), "warn");
+                }
+            }
+            throw new Error("No native raster image provider is available. Add a free provider token or wait for its rate limit to reset.");
         };
+
+        // Do not even touch the native image endpoint for free-key projects.
+        // This avoids the 429 wait entirely and goes straight to the AI SVG
+        // texture path below. Set NATIVE_IMAGE_ENABLED=true only when the
+        // project has a working image quota.
+        if (!this.NATIVE_IMAGE_ENABLED) {
+            return fallback("free-key mode: native image generation disabled");
+        }
 
         const reqBody = {
             messages: [{ role: "user", content: prompt }],
             mode: "image",
-            aspect_ratio: "1:1",
+            aspect_ratio: textureMeta.aspectRatio || "1:1",
             image_size: "1K"
         };
 
@@ -15033,9 +15075,19 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
 
         const images = payload?.choices?.[0]?.message?.images;
         if (images && images.length > 0 && images[0].dataUrl) {
+            let nativeDataUrl = images[0].dataUrl;
+            // Native image models sometimes return a beautiful but non-tileable
+            // photograph-like surface. For repeating materials, convert it to
+            // a mirrored seamless tile before it reaches the cube UVs. Decals
+            // and signs deliberately bypass this step.
+            if (textureMeta.seamless) {
+                try { nativeDataUrl = await this._makeSeamlessTextureDataUrl(nativeDataUrl); } catch (e) {
+                    this._log("Seamless post-process skipped: " + (e?.message || e), "warn");
+                }
+            }
             const result = {
-                dataUrl: images[0].dataUrl,
-                mimeType: images[0].mimeType || "image/png",
+                dataUrl: nativeDataUrl,
+                mimeType: "image/png",
                 source: "native-image"
             };
             this._log("Texture \"" + textureName + "\" generated by native image model.", "ok");
@@ -15045,21 +15097,114 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
     },
 
     /**
+     * Free native raster generation through the public Flux endpoint. It is
+     * intentionally best-effort: anonymous traffic is rate-limited and has
+     * no SLA, but it produces a real JPEG/PNG image and does not use SVG.
+     */
+    _requestFreeRasterGeneration: async function(prompt, textureName, textureMeta = {}) {
+        if (this._cancelRequested) throw new Error("Cancelled");
+        const aspect = textureMeta.aspectRatio || "1:1";
+        const size = aspect === "16:9" ? { w: 1024, h: 576 } : aspect === "9:16" ? { w: 576, h: 1024 } : { w: 1024, h: 1024 };
+        let seed = 2166136261;
+        const seedText = String(prompt || "") + "|" + String(textureName || "");
+        for (let i = 0; i < seedText.length; i++) seed = Math.imul(seed ^ seedText.charCodeAt(i), 16777619);
+        seed = (seed >>> 0) % 2147483647;
+        const query = new URLSearchParams({
+            model: "flux",
+            width: String(size.w),
+            height: String(size.h),
+            seed: String(seed),
+            enhance: textureMeta.role === "screen" ? "false" : "true",
+            nologo: "true"
+        });
+        const url = "https://image.pollinations.ai/prompt/" + encodeURIComponent(prompt) + "?" + query.toString();
+        const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+        const timeout = controller ? setTimeout(() => controller.abort(), 90000) : null;
+        let response;
+        try {
+            response = await fetch(url, { method: "GET", mode: "cors", signal: controller?.signal });
+        } finally {
+            if (timeout) clearTimeout(timeout);
+        }
+        if (!response.ok) {
+            let detail = "HTTP " + response.status;
+            try { detail += ": " + (await response.text()).slice(0, 180); } catch (e) {}
+            throw new Error("Flux provider " + detail);
+        }
+        const blob = await response.blob();
+        if (!blob.type.startsWith("image/")) throw new Error("Flux provider returned a non-image response");
+        const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error || new Error("Could not read raster response"));
+            reader.readAsDataURL(blob);
+        });
+        let finalDataUrl = dataUrl;
+        if (textureMeta.seamless) {
+            try { finalDataUrl = await this._makeSeamlessTextureDataUrl(finalDataUrl); } catch (e) {}
+        }
+        return { dataUrl: finalDataUrl, mimeType: blob.type || "image/jpeg", source: "free-flux" };
+    },
+
+    /**
+     * Turns an arbitrary material image into a soft, mirrored seamless tile.
+     * This is intentionally used only for repeating materials, never for a
+     * sign/poster decal where the composition itself must remain intact.
+     */
+    _makeSeamlessTextureDataUrl: async function(dataUrl) {
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = () => reject(new Error("texture image could not be decoded"));
+            img.src = dataUrl;
+        });
+        const w = Math.max(64, img.naturalWidth || img.width || 1024);
+        const h = Math.max(64, img.naturalHeight || img.height || 1024);
+        const big = document.createElement("canvas");
+        big.width = w * 2;
+        big.height = h * 2;
+        const b = big.getContext("2d");
+        const draw = (x, y, flipX, flipY) => {
+            b.save();
+            b.translate(x + (flipX ? w : 0), y + (flipY ? h : 0));
+            b.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+            b.drawImage(img, flipX ? -w : 0, flipY ? -h : 0, w, h);
+            b.restore();
+        };
+        draw(0, 0, false, false);
+        draw(w, 0, true, false);
+        draw(0, h, false, true);
+        draw(w, h, true, true);
+        const out = document.createElement("canvas");
+        out.width = w;
+        out.height = h;
+        out.getContext("2d").drawImage(big, Math.floor(w / 2), Math.floor(h / 2), w, h, 0, 0, w, h);
+        return out.toDataURL("image/png");
+    },
+
+    /**
      * Ask the ordinary text model for a small, tileable SVG. This path does
      * not consume native image quota, works on projects where image quota is
      * zero, and is decoded by the same addTextureToEngine() path as PNG/JPEG.
      */
-    _requestSvgTextureGeneration: async function(prompt, textureName) {
+    _requestSvgTextureGeneration: async function(prompt, textureName, textureMeta = {}) {
         if (this._cancelRequested) throw new Error("Cancelled");
-        const svgPrompt = `You are a game texture artist. Create ONE seamless square 1024x1024 SVG texture for a 3D building material.
+        const seamless = textureMeta.seamless !== false;
+        const svgPrompt = `You are a senior game-material artist creating a professional production texture.
+Create ONE square 1024x1024 SVG ALBEDO texture for a building in a block-based 3D game.
 Material brief: ${prompt}
+
+This is a ${seamless ? "SEAMLESS REPEATING MATERIAL" : "FLAT FRONT-FACING DECAL / SIGN FACE"}.
+${seamless
+    ? "The texture must be a close, orthographic material surface: no single object, no scene, no perspective, no floor, no table, no frame, no cast shadow, no empty margins, no large focal illustration, no readable words. Fill the entire canvas with the material pattern and make opposite edges match."
+    : "The texture must be a flat orthographic 2D artwork painted directly on the face: no 3D board, no perspective, no visible thickness, no surrounding environment, no cast shadow, no floor, no table. Fill the whole canvas; keep any border inside the canvas and make it suitable for a rectangular cube face."}
 
 Requirements:
 - Return ONLY one complete <svg>...</svg> document, with no Markdown fences, explanation, XML declaration, or comments outside the SVG.
 - Use only embedded SVG vector elements (rect, path, circle, ellipse, polygon, line, pattern, linearGradient, radialGradient, filter if needed).
 - No script, foreignObject, iframe, external image, external font, external URL, or animation.
-- Make the left/right and top/bottom edges visually tileable where practical.
-- Use a rich but readable game-ready style with layered color variation, wear, seams, grain, masonry, brush strokes, or rivets appropriate to the material brief.
+- Use layered but restrained colors, realistic surface variation, clean edge definition, and a coherent professional game-art palette.
+- Avoid AI-looking clutter, random black speckles, accidental symbols, excessive contrast, and photographic perspective.
 - Keep the SVG reasonably compact (under 60 KB) and use viewBox="0 0 1024 1024".
 `;
         const response = await fetch(this.ENDPOINT, {
@@ -15099,8 +15244,12 @@ Requirements:
             canvas.height = img.naturalHeight || 1024;
             const ctx = canvas.getContext("2d");
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            let dataUrl = canvas.toDataURL("image/png");
+            if (seamless) {
+                try { dataUrl = await this._makeSeamlessTextureDataUrl(dataUrl); } catch (e) {}
+            }
             return {
-                dataUrl: canvas.toDataURL("image/png"),
+                dataUrl,
                 mimeType: "image/png",
                 source: "ai-svg"
             };
@@ -15225,91 +15374,116 @@ Requirements:
     _decideTexturePrompts: function(promptText, planText, cubes) {
         const lower = (promptText + " " + (planText || "")).toLowerCase();
         const prompts = [];
+        const userTheme = String(promptText || "").trim().slice(0, 220);
 
-        // Analyze material usage in the build
-        const matCounts = {};
-        cubes.forEach(c => {
-            const m = c.materialName || "grid";
-            matCounts[m] = (matCounts[m] || 0) + 1;
+        // A decal/sign texture must only land on genuinely thin, wide panels.
+        // Applying a poster to every cube tagged Wood was the main reason a
+        // Japanese scroll turned into noisy black bands across the whole build.
+        const isFlatPanel = c => {
+            const dims = [Math.abs(+c?.scale?.x || 0), Math.abs(+c?.scale?.y || 0), Math.abs(+c?.scale?.z || 0)].sort((a, b) => a - b);
+            const thin = dims[0] > 0 && dims[0] <= 0.38;
+            const elongated = dims[2] / Math.max(dims[0], 0.01) >= 3.2;
+            const usefulFace = dims[1] * dims[2] >= 0.28;
+            return thin && elongated && usefulFace;
+        };
+        const materialText = c => String((c?.tag || "") + " " + (c?.materialName || "")).toLowerCase();
+        const cubeLabel = c => String((c?.name || "") + " " + materialText(c)).toLowerCase();
+        const countMaterial = re => (cubes || []).filter(c => re.test(materialText(c))).length;
+        const isScreenPanel = c => {
+            const dims = [Math.abs(+c?.scale?.x || 0), Math.abs(+c?.scale?.y || 0), Math.abs(+c?.scale?.z || 0)].sort((a, b) => a - b);
+            const flat = dims[0] > 0 && dims[0] <= 0.42 && dims[2] / Math.max(dims[0], 0.01) >= 2.4;
+            const semantic = /tv[_ -]?screen|monitor|display|screen|television|телевизор|экран|монитор|дисплей/.test(cubeLabel(c));
+            return semantic || (flat && /glass|display|screen|monitor/.test(cubeLabel(c)));
+        };
+
+        const isScreen = /\btv\b|television|monitor|screen|display|computer|laptop|billboard|cinema|телевизор|телек|экран|монитор|дисплей|компьютер|ноутбук|кинотеатр/.test(lower);
+        const isNatureContent = /nature|landscape|forest|mountain|ocean|sea|river|lake|waterfall|jungle|wildlife|sunset|природ|пейзаж|лес|гора|море|река|озеро/.test(lower);
+        const isWooden = /wood|timber|plank|log|fence|barrel|crate|pallet|bench|table|chair|cabinet|door/.test(lower);
+        const isStone = /stone|rock|brick|concrete|wall|tower|castle|bridge|arch|ruin/.test(lower);
+        const isMetal = /metal|steel|iron|rust|barrel|bunker|door|gate|hatch|mech|drone|tank|vehicle|car/.test(lower);
+        const isSign = /sign|label|poster|banner|placard|tavern|shop|writing|inscrip/.test(lower);
+        const isJapanese = /japan|torii|pagoda|shrine|temple|calligraphy|shoji|tatami|washi|anime/.test(lower);
+
+        const makeMaterialPrompt = (name, material, details) => ({
+            name,
+            prompt: `Professional ${material} game texture for the building theme "${userTheme}". ${details} Flat orthographic albedo surface, material fills the entire square, physically believable color variation, no 3D object, no scene, no perspective, no border, no frame, no text, no cast shadow, no empty margins, clean production game-art style.`,
+            seamless: true,
+            preferredTileMode: 0,
+            suggestedCubes: c => {
+                const t = materialText(c);
+                return (material === "wood" && /wood|timber|plank|log/.test(t)) ||
+                       (material === "metal" && /metal|steel|iron/.test(t)) ||
+                       (material === "stone" && /concrete|stone|brick|rock/.test(t));
+            }
         });
 
-        // Determine dominant themes
-        const isWooden = /wood|timber|plank|log|fence|barrel|crate|pallet|bench|table|chair|cabinet|door|bridge/.test(lower);
-        const isStone = /stone|rock|brick|concrete|wall|tower|castle|bridge|arch|ruin/.test(lower);
-        const isMetal = /metal|steel|iron|barrel|bunker|door|gate|hatch|mech|drone|tank|vehicle|car/.test(lower);
-        const isSign = /sign|label|poster|banner|placard|calligraphy|writing|text|inscrip/.test(lower);
-        const isJapanese = /japan|torii|pagoda|shrine|temple|calligraphy|shoji|tatami/.test(lower);
-
-        if (isJapanese && isSign) {
+        // Screen content is a separate raster image, not a surface material.
+        // Generate it in the requested aspect ratio and attach it only to the
+        // semantic TV_Screen/Monitor_Display cube.
+        if (isScreen) {
+            const screenScene = isNatureContent
+                ? "a realistic cinematic nature landscape: detailed mountains, forest, ocean, lake or wildlife chosen to fit the user's request"
+                : `a realistic scene/content matching the user's screen request: "${userTheme}"`;
+            prompts.push({
+                name: isNatureContent ? "screen_nature" : "screen_content",
+                role: "screen",
+                prompt: `Native raster image to be displayed inside a television or monitor. ${screenScene}. The image is the content of the screen only, not the television. Straight-on orthographic 16:9 view, photorealistic, high detail, natural lighting, professional game asset. No TV frame, no bezel, no room, no furniture, no external border, no reflections, no glare, no UI, no watermark, no readable text unless explicitly requested.`,
+                seamless: false,
+                aspectRatio: "16:9",
+                preferredTileMode: 2,
+                suggestedCubes: isScreenPanel
+            });
+        // Posters and Japanese scroll artwork are decals, not repeating building
+        // materials. They are generated front-on and stretched over one panel.
+        } else if (isJapanese) {
             prompts.push({
                 name: "jp_calligraphy",
-                prompt: "A square seamless texture of Japanese calligraphy kanji characters on aged washi paper, black ink on cream background, traditional brush stroke style, high detail, game texture",
-                suggestedCubes: c => c.materialName === "Wood" || c.tag === "Wood"
+                prompt: `Flat front-facing Japanese washi paper artwork for the building theme "${userTheme}". Warm ivory paper fibers, restrained black sumi brushwork, subtle ink bleeding and soft age variation. If the theme names a specific motif, interpret it as clean 2D artwork only. No scroll rollers, no wooden frame, no 3D object, no perspective, no random glyph soup, no anime character unless explicitly requested.`,
+                seamless: false,
+                preferredTileMode: 2,
+                suggestedCubes: isFlatPanel
             });
-        }
-
-        if (isSign || isJapanese) {
-            if (prompts.length === 0) {
-                prompts.push({
-                    name: "sign_painted",
-                    prompt: "A square seamless texture of a painted wooden sign with faded lettering and decorative border, vintage style, weathered paint, game texture for 3D object",
-                    suggestedCubes: c => (c.scale.x > 1 && c.scale.y > 0.5 && c.scale.z < 0.3) || (c.scale.z > 1 && c.scale.y > 0.5 && c.scale.x < 0.3)
-                });
+        } else if (isSign) {
+            prompts.push({
+                name: "sign_painted",
+                prompt: `Flat front-facing painted sign face for the building theme "${userTheme}". A tasteful centered border and controlled hand-painted lettering are allowed, but the image must be the paint layer itself: no physical signboard, no surrounding wood, no perspective, no screws, no environment, no dramatic shadow, no extra objects.`,
+                seamless: false,
+                preferredTileMode: 2,
+                suggestedCubes: isFlatPanel
+            });
+        } else {
+            // Rank by both user wording and the actual cube material tags so a
+            // stone bridge does not accidentally receive a wood texture merely
+            // because the word "bridge" appears in the prompt.
+            const explicitWood = /wood|wooden|timber|plank|log/.test(lower);
+            const explicitMetal = /metal|metallic|steel|iron|rust/.test(lower);
+            const explicitStone = /stone|stonework|brick|concrete|masonry/.test(lower);
+            const scores = [
+                { key: "wood", score: (explicitWood ? 5 : (isWooden ? 1 : 0)) + countMaterial(/wood|timber|plank|log/) * 3 },
+                { key: "metal", score: (explicitMetal ? 5 : (isMetal ? 1 : 0)) + countMaterial(/metal|steel|iron/) * 3 },
+                { key: "stone", score: (explicitStone ? 5 : (isStone ? 1 : 0)) + countMaterial(/concrete|stone|brick|rock/) * 3 }
+            ].sort((a, b) => b.score - a.score);
+            const primary = scores[0];
+            if (primary && primary.score > 0) {
+                if (primary.key === "wood") prompts.push(makeMaterialPrompt("wood_detailed", "wood", "Visible but controlled plank grain, knots, fine pores, gentle roughness, warm natural brown tones, no large boards or isolated objects."));
+                if (primary.key === "metal") prompts.push(makeMaterialPrompt("metal_worn", "metal", "Brushed or painted steel with restrained scratches, subtle oxidation, small rivet-like wear marks, cool grey palette, no large plate object."));
+                if (primary.key === "stone") prompts.push(makeMaterialPrompt("stone_brick", "stone", "Weathered masonry or concrete aggregate with coherent seams, small chips and restrained moss/dirt variation, neutral stone palette, no wall photographed in perspective."));
             }
         }
 
-        if (isWooden && prompts.length < 3) {
-            prompts.push({
-                name: "wood_detailed",
-                prompt: "A square seamless texture of detailed wooden planks with visible grain, knots, and subtle color variation, natural warm brown tones, realistic wood for game 3D model",
-                suggestedCubes: c => c.tag === "Wood" || c.materialName === "WoodPlanks" || c.materialName === "Wood"
-            });
-        }
-
-        if (isMetal && prompts.length < 3) {
-            prompts.push({
-                name: "metal_worn",
-                prompt: "A square seamless texture of worn rusty metal plate with rivets, scratches, patina and subtle corrosion spots, industrial style, game texture for 3D object",
-                suggestedCubes: c => c.tag === "Metal" || c.materialName === "RoughMetal" || c.materialName === "Metal"
-            });
-        }
-
-        if (isStone && prompts.length < 3) {
-            prompts.push({
-                name: "stone_brick",
-                prompt: "A square seamless texture of old stone bricks with mortar lines, weathered surface, moss traces, medieval construction style, game texture",
-                suggestedCubes: c => c.tag === "Concrete" || c.materialName === "Concrete" || c.materialName === "StoneBrick"
-            });
-        }
-
-        // If nothing specific matched, generate at least one generic texture
         if (prompts.length === 0) {
-            if (isWooden) {
-                prompts.push({
-                    name: "wood_generic",
-                    prompt: "A square seamless wood plank texture with rich grain detail, warm brown color, game-ready texture for 3D model",
-                    suggestedCubes: c => c.tag === "Wood"
-                });
-            } else if (isMetal) {
-                prompts.push({
-                    name: "metal_generic",
-                    prompt: "A square seamless metal plate texture with brushed finish and slight wear, cool grey steel color, game-ready texture",
-                    suggestedCubes: c => c.tag === "Metal"
-                });
-            } else {
-                prompts.push({
-                    name: "surface_detail",
-                    prompt: "A square seamless weathered surface texture with subtle detail and color variation, suitable for a 3D game object, realistic style",
-                    suggestedCubes: () => false
-                });
-            }
+            prompts.push({
+                name: "surface_detail",
+                prompt: `Professional neutral building material for the theme "${userTheme}". Subtle weathered surface detail, restrained color variation and realistic micro-roughness, flat orthographic material view, no object, no scene, no perspective, no text, no border, no cast shadow.`,
+                seamless: true,
+                preferredTileMode: 0,
+                suggestedCubes: () => false
+            });
         }
 
-        // Native image generation is quota-limited. One coherent texture per
-        // build is enough to texture many cubes and avoids a burst of 1–3
-        // image requests that immediately trips RPM/IPM limits. The SVG and
-        // local fallbacks make this path reliable even when native image quota
-        // is unavailable.
+        // One coherent texture per build avoids both quota bursts and a visual
+        // style mix. It is assigned selectively; standard materials remain on
+        // cubes that are not appropriate for the generated texture.
         return prompts.slice(0, this.MAX_CUSTOM_TEXTURES_PER_BUILD || 1);
     },
 
@@ -15337,7 +15511,7 @@ Requirements:
             this._log("Texture " + (i + 1) + "/" + total + ": \"" + tp.name + "\"", "info");
 
             try {
-                const result = await this._requestImageGeneration(tp.prompt, tp.name);
+                const result = await this._requestImageGeneration(tp.prompt, tp.name, tp);
                 // Find which cubes to assign this texture to
                 const assignedCubes = [];
                 cubes.forEach((c, idx) => {
@@ -15351,6 +15525,10 @@ Requirements:
                     dataUrl: result.dataUrl,
                     mimeType: result.mimeType,
                     source: result.source || "native-image",
+                    role: tp.role || "material",
+                    aspectRatio: tp.aspectRatio || "1:1",
+                    seamless: tp.seamless !== false,
+                    preferredTileMode: tp.preferredTileMode ?? (tp.seamless === false ? 2 : 0),
                     assignedCubes: assignedCubes
                 });
                 this._log("Texture \"" + tp.name + "\" generated successfully (" + assignedCubes.length + " cubes matched).", "ok");
@@ -15391,31 +15569,50 @@ Requirements:
                     const sx = cube.scale.x, sy = cube.scale.y, sz = cube.scale.z;
                     const minDim = Math.min(sx, sy, sz);
                     const maxDim = Math.max(sx, sy, sz);
-                    // Thin flat faces → stretch; chunky cubes → tile
-                    if (maxDim / Math.max(minDim, 0.01) > 4) {
-                        cube.tileMode = 2; // stretch for thin panels
+                    // Decals/signs are never repeated. True material textures
+                    // tile only on chunky surfaces; this prevents a poster from
+                    // becoming black bands across a wall.
+                    if (tex.seamless === false || tex.preferredTileMode === 2) {
+                        cube.tileMode = 2;
+                    } else if (maxDim / Math.max(minDim, 0.01) > 4) {
+                        cube.tileMode = 2;
                     } else {
-                        cube.tileMode = 0; // xy tiling for chunky parts
+                        cube.tileMode = tex.preferredTileMode ?? 0;
                     }
                     cube.materialName = matKey;
                     assigned++;
                 }
             }
 
+            // Screen content must never be assigned to a random flat cube: if
+            // the geometry model failed to create/name a screen panel, leave the
+            // normal material in place instead of corrupting the build.
+            if (tex.role === "screen" && assigned === 0) {
+                this._log("No semantic TV/monitor screen panel found for \"" + tex.name + "\" — kept standard materials.", "warn");
+                continue;
+            }
+
             // If no cubes were matched by the heuristic, assign to the largest flat surfaces
             if (assigned === 0 && cubes.length > 0) {
                 // Sort cubes by face area descending and pick the top ones
-                const scored = cubes.map((c, i) => {
-                    const area = Math.max(c.scale.x * c.scale.y, c.scale.x * c.scale.z, c.scale.y * c.scale.z);
-                    return { idx: i, area };
-                }).sort((a, b) => b.area - a.area);
-                const count = Math.min(Math.ceil(cubes.length * 0.3), 5);
+                const candidateCubes = tex.seamless === false ? cubes.filter(c => {
+                    const dims = [Math.abs(+c?.scale?.x || 0), Math.abs(+c?.scale?.y || 0), Math.abs(+c?.scale?.z || 0)].sort((a, b) => a - b);
+                    return dims[0] > 0 && dims[0] <= 0.38 && dims[2] / Math.max(dims[0], 0.01) >= 3.2;
+                }) : cubes;
+                if (tex.seamless === false && !candidateCubes.length) {
+                    this._log("No flat panel found for \"" + tex.name + "\" — leaving standard materials unchanged.", "warn");
+                    continue;
+                }
+                const sourceCubes = candidateCubes.length ? candidateCubes : cubes;
+                const scored = sourceCubes.map(c => ({ idx: cubes.indexOf(c), area: Math.max(c.scale.x * c.scale.y, c.scale.x * c.scale.z, c.scale.y * c.scale.z) }))
+                    .sort((a, b) => b.area - a.area);
+                const count = Math.min(Math.max(1, Math.ceil(sourceCubes.length * 0.3)), 5);
                 for (let j = 0; j < count && j < scored.length; j++) {
                     const cube = cubes[scored[j].idx];
                     cube.materialName = matKey;
                     const minDim = Math.min(cube.scale.x, cube.scale.y, cube.scale.z);
                     const maxDim = Math.max(cube.scale.x, cube.scale.y, cube.scale.z);
-                    cube.tileMode = (maxDim / Math.max(minDim, 0.01) > 4) ? 2 : 0;
+                    cube.tileMode = tex.seamless === false ? 2 : ((maxDim / Math.max(minDim, 0.01) > 4) ? 2 : (tex.preferredTileMode ?? 0));
                 }
                 this._log("No auto-matched cubes for \"" + tex.name + "\" — assigned to largest faces.", "info");
             }
@@ -15623,7 +15820,9 @@ Requirements:
     _sanitizeCubes: function(arr) {
         if (!Array.isArray(arr)) return [];
         return arr.filter(c => c && typeof c === "object").map(c => ({
-            name: "MapCube",
+            // Keep the semantic part name so texture planning can target
+            // TV_Screen / Monitor_Display instead of guessing from materials.
+            name: typeof c.name === "string" && c.name.trim() ? c.name.trim().slice(0, 64) : "MapCube",
             tag: typeof c.tag === "string" ? c.tag : "Concrete",
             tileMode: typeof c.tileMode === "number" ? c.tileMode : 2,
             materialName: typeof c.materialName === "string" ? c.materialName : "grid",
@@ -18975,5 +19174,5 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>
             </div>
         </div>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a265ae47ac7da0ba',t:'MTc4NTkzMTYzOA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
