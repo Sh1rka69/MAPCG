@@ -156,6 +156,21 @@ function getApiKeys() {
   return keys;
 }
 
+// Отдельный пул ключей для image-генерации (GEMINI_IMAGE_KEY_1..10).
+// Если не заданы — fallback на общие ключи. Рекомендуется задать хотя бы
+// один отдельный image-ключ чтобы build и image не делили одну квоту.
+function getImageApiKeys() {
+  const keys = [];
+  for (let i = 1; i <= 10; i++) {
+    const k = process.env[`GEMINI_IMAGE_KEY_${i}`];
+    if (k && k.trim()) keys.push(k.trim());
+  }
+  if (!keys.length && process.env.GEMINI_IMAGE_KEY?.trim())
+    keys.push(process.env.GEMINI_IMAGE_KEY.trim());
+  if (!keys.length) return getApiKeys();
+  return keys;
+}
+
 function getAllowedOrigins() {
   const raw = process.env.ALLOWED_ORIGINS;
   if (!raw) return [];
@@ -355,6 +370,11 @@ module.exports = async (req, res) => {
       );
     return;
   }
+  // Image-генерация использует отдельный пул ключей (если задан).
+  // Переменная определяется после парсинга body (isImage известен позже),
+  // поэтому объявляем lazy-геттер который разрезолвится ниже.
+  let _imageApiKeys = null;
+  const getEffectiveKeys = () => _imageApiKeys || apiKeys;
 
   const chunks = [];
   await new Promise((resolve, reject) => {
@@ -393,6 +413,9 @@ module.exports = async (req, res) => {
   const isImage = body.mode === "image";
   const model = isImage ? MODEL_IMAGE : (isVision ? MODEL_VISION : MODEL_BUILD);
   const highEffort = !isVision && !isImage;
+
+  // Для image-запросов — выбираем выделенный пул ключей.
+  if (isImage) _imageApiKeys = getImageApiKeys();
 
   const maxOutputTokens = Math.min(
     Math.max(
@@ -467,14 +490,16 @@ module.exports = async (req, res) => {
     let lastResult = null;
     let minRetryMs = null;
     let usedModel = modelName;
+    // Для image-режима используем выделенный пул ключей; для text — общий.
+    const keys = getEffectiveKeys();
 
     // Проход 1: основная модель, все ключи
-    for (let i = 0; i < apiKeys.length; i++) {
-      let result = await callGemini(usedModel, apiKeys[i]);
+    for (let i = 0; i < keys.length; i++) {
+      let result = await callGemini(usedModel, keys[i]);
 
       if (result.resp.status === 404 && usedModel !== fallbackModel) {
         usedModel = fallbackModel;
-        result = await callGemini(usedModel, apiKeys[i]);
+        result = await callGemini(usedModel, keys[i]);
       }
 
       const { status } = result.resp;
@@ -490,26 +515,26 @@ module.exports = async (req, res) => {
 
       lastResult = { ...result, usedModel };
 
-      if (OVERLOADED.includes(status) && i < apiKeys.length - 1)
+      if (OVERLOADED.includes(status) && i < keys.length - 1)
         await sleep(600);
     }
 
     // Проход 2: если 502/503 — пробуем FALLBACK немедленно
     if (lastResult && OVERLOADED.includes(lastResult.resp.status) && usedModel !== fallbackModel) {
-      for (let i = 0; i < apiKeys.length; i++) {
-        const result = await callGemini(fallbackModel, apiKeys[i]);
+      for (let i = 0; i < keys.length; i++) {
+        const result = await callGemini(fallbackModel, keys[i]);
         if (result.resp.status !== 429 && !OVERLOADED.includes(result.resp.status))
           return { ...result, usedModel: fallbackModel };
         lastResult = { ...result, usedModel: fallbackModel };
-        if (i < apiKeys.length - 1) await sleep(600);
+        if (i < keys.length - 1) await sleep(600);
       }
     }
 
     // Проход 3: все ключи на 429 — пробуем FALLBACK_MODEL
     if (usedModel !== fallbackModel) {
       let fallbackMinRetryMs = null;
-      for (let i = 0; i < apiKeys.length; i++) {
-        const result = await callGemini(fallbackModel, apiKeys[i]);
+      for (let i = 0; i < keys.length; i++) {
+        const result = await callGemini(fallbackModel, keys[i]);
         const { status } = result.resp;
         if (status !== 429 && !OVERLOADED.includes(status))
           return { ...result, usedModel: fallbackModel };
@@ -524,14 +549,18 @@ module.exports = async (req, res) => {
         minRetryMs = fallbackMinRetryMs;
     }
 
-    // Проход 4: ждём retryDelay, финальный проход
-    // Fail fast on overloaded keys/models instead of sleeping up to 90s.
-    const waitMs = Math.min(minRetryMs ?? 12000, 15000);
+    // Проход 4: ждём retryDelay, финальный проход.
+    // Для image-модели НЕ обрезаем wait по 15 сек — реальный rate-limit
+    // у Gemini image составляет 60–90 сек; обрезание приводит к тому что
+    // финальная попытка тоже получает 429 и текстура не генерируется.
+    // Для text-модели оставляем 15 сек (fail-fast приоритет).
+    const maxWaitMs = isImage ? 95000 : 15000;
+    const waitMs = Math.min(minRetryMs ?? (isImage ? 65000 : 12000), maxWaitMs);
     await sleep(waitMs);
 
     for (const tryModel of [modelName, fallbackModel]) {
-      for (let i = 0; i < apiKeys.length; i++) {
-        const result = await callGemini(tryModel, apiKeys[i]);
+      for (let i = 0; i < keys.length; i++) {
+        const result = await callGemini(tryModel, keys[i]);
         if (result.resp.status !== 429 && !OVERLOADED.includes(result.resp.status))
           return { ...result, usedModel: tryModel };
         lastResult = { ...result, usedModel: tryModel };
@@ -606,7 +635,8 @@ module.exports = async (req, res) => {
         model: usedModel,
         elapsedMs,
         finishReason: out._gemini_finish_reason,
-        keyCount: apiKeys.length,
+        keyCount: getEffectiveKeys().length,
+        separateImageKeys: getImageApiKeys() !== getApiKeys(),
       };
       res
         .writeHead(200, { "Content-Type": "application/json", ...cors })
