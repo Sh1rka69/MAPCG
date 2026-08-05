@@ -386,6 +386,16 @@ module.exports = async (req, res) => {
     return;
   }
 
+  // Texture generation was intentionally removed from MAPCG. Keep the
+  // legacy branches below inert so an old client cannot silently spend
+  // quota or generate SVG/image assets behind the new UI.
+  if (body.mode === "image" || body.mode === "texture" || body.mode === "texture_svg") {
+    res
+      .writeHead(410, { "Content-Type": "application/json", ...cors })
+      .end(JSON.stringify({ error: "Texture generation is disabled. Use textures already loaded in the project." }));
+    return;
+  }
+
   const messages = Array.isArray(body.messages) ? body.messages : null;
   if (!messages?.length) {
     res
