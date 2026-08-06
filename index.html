@@ -1467,7 +1467,9 @@
         {
             "imports": {
                 "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+                "webm-muxer": "https://cdn.jsdelivr.net/npm/webm-muxer@5.1.4/build/webm-muxer.mjs",
+                "mp4-muxer": "https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.mjs"
             }
         }
     </script>
@@ -2861,6 +2863,21 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+
+// Video-mode Render Studio: WebCodecs-based muxers used to encode the
+// frame-perfect (constant-timestamp) video export. Imported here, at
+// module scope, so a missing/blocked CDN fails once and clearly at load
+// time rather than silently mid-render; renderStudio checks for their
+// presence and falls back to the older MediaRecorder path if unavailable.
+let WebMMuxer = null, Mp4Muxer = null;
+try {
+    WebMMuxer = await import("webm-muxer");
+} catch (e) { console.warn("[renderStudio] webm-muxer failed to load — WebM video export will fall back to MediaRecorder.", e); }
+try {
+    Mp4Muxer = await import("mp4-muxer");
+} catch (e) { console.warn("[renderStudio] mp4-muxer failed to load — MP4 video export will fall back to MediaRecorder.", e); }
+window._rsWebMMuxer = WebMMuxer;
+window._rsMp4Muxer = Mp4Muxer;
 
 window.i18n = {
     lang: "en",
@@ -14722,7 +14739,7 @@ Write in English, concisely, by points, without introduction or conclusion — o
         const clamped = Math.max(0, Math.min(16, score));
         const LOW = 30, HIGH = 210;
         const budget = Math.round(LOW + (HIGH - LOW) * (clamped / 16));
-        const HARD_CAP = 240;                 // absolute ceiling — never exceed
+        const HARD_CAP = 300;                 // absolute ceiling — never exceed
         return {
             budget,
             min: Math.round(budget * 0.75),
@@ -14740,7 +14757,7 @@ Write in English, concisely, by points, without introduction or conclusion — o
      *  Returns a new array; never throws. */
     _normalizeCubesForBuild: function(cubes, budgetInfo) {
         if (!Array.isArray(cubes) || !cubes.length) return cubes;
-        const hardCap = (budgetInfo && budgetInfo.hardCap) || 240;
+        const hardCap = (budgetInfo && budgetInfo.hardCap) || 300;
         let out = cubes.slice();
         const MAX_ABS = 40;          // anything further than 40 m from center is a mistake
         const MAX_SCALE = 12;        // any single axis larger than 12 m is a mistake
@@ -14964,7 +14981,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
     },
     _detailConfig: function() {
         if (this.prefs.detail === "economic")  return { label: "Economic",  mult: 0.6, maxTokens: 14000, chunk: 55 };
-        if (this.prefs.detail === "detailed")  return { label: "Detailed",  mult: 1.5, maxTokens: 32000, chunk: 70 };
+        if (this.prefs.detail === "detailed")  return { label: "Detailed",  mult: 1.5, maxTokens: 32000, chunk: 100 };
         return { label: "Balanced", mult: 1, maxTokens: 24000, chunk: 60 };
     },
     setDetail: function(v) { this.prefs.detail = v; this._savePrefs(); this._syncAgentControls(); },
@@ -17522,7 +17539,20 @@ window.renderStudio = {
         hideGizmo: false,
         hideOutlines: true,
         format: "jpeg",
-        jpegQuality: 0.90
+        jpegQuality: 0.90,
+
+        // ---- video mode ----
+        mode: "image",           // "image" | "video"
+        motionSource: "orbit",   // "orbit" (auto-rotate camera) | "timeline" (scene/keyframe animation)
+        videoDuration: 6,        // seconds
+        videoFps: 30,
+        orbitTurns: 1,
+        videoSsaa: 1,            // per-frame supersampling (lighter than image SSAA options)
+        codec: "vp9",            // "vp9" | "vp8" | "h264"
+        bitrateMode: "auto",     // "auto" | "manual"
+        bitrateQuality: "medium",// low | medium | high | max (used when bitrateMode === "auto")
+        bitrateManualMbps: 12,
+        videoRealtime: false
     },
 
     // -----------------------------------------------------------------
@@ -17598,6 +17628,40 @@ window.renderStudio = {
 .rs-btn:disabled{opacity:.4;pointer-events:none}
 .rs-fmt-row{display:flex;gap:6px}
 .rs-fmt-row .rs-res-btn{flex:1}
+
+/* ---- Mode switcher: Image / Video segmented control, centered in the head ---- */
+.rs-head{position:relative}
+.rs-modeswitch{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:2px;background:var(--td-bg-2);border:1px solid var(--td-border);padding:3px;border-radius:2px}
+.rs-mode-btn{display:flex;align-items:center;gap:6px;padding:6px 16px;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--td-text-dim);background:none;border:none;cursor:pointer;transition:.14s;border-radius:1px;white-space:nowrap}
+.rs-mode-btn svg{width:12px;height:12px;flex:0 0 auto}
+.rs-mode-btn:hover{color:var(--td-text)}
+.rs-mode-btn.is-active{background:rgba(255,138,61,.18);color:var(--td-accent-bright);box-shadow:inset 0 0 0 1px rgba(255,138,61,.5)}
+@media(max-width:820px){.rs-modeswitch{position:static;transform:none;order:3;margin-top:10px;width:100%}.rs-head{flex-wrap:wrap}.rs-mode-btn{flex:1;justify-content:center}}
+
+/* ---- Video-mode specific panel bits ---- */
+.rs-video-only{display:none}
+.rs-mode-video .rs-video-only{display:flex}
+.rs-mode-video .rs-image-only{display:none}
+.rs-time-input{display:flex;align-items:center;gap:6px}
+.rs-time-input .rs-numinput{width:52px}
+.rs-time-input span{color:var(--td-text-muted);font-size:11px}
+.rs-radio-list{display:flex;flex-direction:column;gap:6px}
+.rs-radio-opt{display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:8px;background:var(--td-bg-2);border:1px solid var(--td-border);transition:.12s}
+.rs-radio-opt:hover{border-color:var(--td-border-strong)}
+.rs-radio-opt.is-active{border-color:var(--td-accent);background:rgba(255,138,61,.08)}
+.rs-radio-opt input{margin-top:2px;accent-color:var(--td-accent);flex:0 0 auto}
+.rs-radio-opt-text{display:flex;flex-direction:column;gap:2px}
+.rs-radio-opt-title{font-size:11px;color:var(--td-text);font-weight:600}
+.rs-radio-opt-desc{font-size:9.5px;color:var(--td-text-muted);line-height:1.35}
+.rs-bitrate-mode{display:flex;gap:6px}
+.rs-bitrate-mode .rs-res-btn{flex:1}
+.rs-video-progress{display:flex;flex-direction:column;align-items:center;gap:6px;width:220px}
+.rs-video-progress-bar{width:100%;height:4px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden}
+.rs-video-progress-fill{height:100%;width:0%;background:var(--td-accent);transition:width .12s linear}
+.rs-video-progress-frames{font-size:9.5px;color:var(--td-text-muted);font-family:'JetBrains Mono','SF Mono',monospace;letter-spacing:.02em}
+.rs-preview video{max-width:100%;max-height:100%;object-fit:contain;box-shadow:0 12px 60px rgba(0,0,0,.65)}
+.rs-codec-note{font-size:9.5px;color:var(--td-text-muted);line-height:1.4;display:flex;align-items:flex-start;gap:6px}
+.rs-codec-note svg{flex:0 0 auto;margin-top:1px;opacity:.7}
 @media(max-width:820px){.rs-body{flex-direction:column}.rs-panel{flex:0 0 auto;width:auto;border-left:none;border-top:1px solid var(--td-border);max-height:50vh}.rs-preview{flex:1 1 auto;min-height:200px}}
 `;
             document.head.appendChild(st);
@@ -17626,21 +17690,36 @@ window.renderStudio = {
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15"><circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="2.4" fill="currentColor" stroke="none"/></svg>
       <span>Render</span>
     </div>
+    <div class="rs-modeswitch" id="rs-modeswitch">
+      <button class="rs-mode-btn" id="rs-mode-btn-image" onclick="renderStudio.setMode('image')">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="4" width="15" height="12" rx="1"/><circle cx="7" cy="9" r="1.4"/><path d="M2.5 14l4.5-4 3 2.5 3-3 4.5 4.5"/></svg>
+        <span>Image</span>
+      </button>
+      <button class="rs-mode-btn" id="rs-mode-btn-video" onclick="renderStudio.setMode('video')">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="5" width="11" height="10" rx="1"/><path d="M13 8.2l4.3-2.6a.6.6 0 0 1 .9.5v7.8a.6.6 0 0 1-.9.5L13 11.8"/></svg>
+        <span>Video</span>
+      </button>
+    </div>
     <button class="rs-close" onclick="renderStudio.close()"><span class="ui-icon ui-icon-mask" data-icon="Close" alt="" style="width:13px;height:13px;object-fit:contain;"></span></button>
   </div>
   <div class="rs-body">
     <div class="rs-preview" id="rs-preview">
       <div class="rs-preview-empty" id="rs-preview-empty">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.2" width="30" height="30"><rect x="2.5" y="4" width="15" height="12" rx="1"/><circle cx="7" cy="9" r="1.6"/><path d="M2.5 14l4.5-4 3 2.5 3-3 4.5 4.5"/></svg>
-        <span>No render yet<br>Configure parameters and press Render</span>
+        <span id="rs-preview-empty-text">No render yet<br>Configure parameters and press Render</span>
       </div>
       <img id="rs-preview-img" style="display:none">
+      <video id="rs-preview-video" style="display:none" controls loop muted playsinline></video>
       <div class="rs-progress-wrap" id="rs-progress-wrap">
-        <div class="rs-spinner"></div>
+        <div class="rs-spinner" id="rs-spinner"></div>
+        <div class="rs-video-progress rs-video-only" id="rs-video-progress-ui">
+          <div class="rs-video-progress-bar"><div class="rs-video-progress-fill" id="rs-video-progress-fill"></div></div>
+          <div class="rs-video-progress-frames" id="rs-video-progress-frames">Frame 0 / 0</div>
+        </div>
         <div class="rs-progress-label" id="rs-progress-label">Rendering...</div>
       </div>
     </div>
-    <div class="rs-panel">
+    <div class="rs-panel" id="rs-panel">
 
       <div class="rs-section">
         <div class="rs-section-title">Resolution</div>
@@ -17656,10 +17735,40 @@ window.renderStudio = {
         </label>
       </div>
 
-      <div class="rs-section">
+      <div class="rs-section rs-video-only" id="rs-section-motion">
+        <div class="rs-section-title">Motion Source</div>
+        <div class="rs-radio-list" id="rs-motion-list"></div>
+      </div>
+
+      <div class="rs-section rs-video-only" id="rs-section-duration">
+        <div class="rs-section-title">Duration &amp; Frame Rate</div>
+        <div class="rs-row">
+          <span class="rs-row-label">Duration</span>
+          <div class="rs-time-input">
+            <input type="number" class="rs-numinput" id="rs-video-duration" min="1" max="120" step="1" value="6">
+            <span>sec</span>
+          </div>
+        </div>
+        <div class="rs-fmt-row" id="rs-fps-row"></div>
+        <div class="rs-row" style="margin-top:2px;">
+          <span class="rs-row-label" style="color:var(--td-text-dim);">Orbit turns</span>
+          <div class="rs-time-input" id="rs-orbit-turns-row">
+            <input type="number" class="rs-numinput" id="rs-orbit-turns" min="0.1" max="10" step="0.1" value="1">
+            <span>rev</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="rs-section rs-image-only" id="rs-section-sampling">
         <div class="rs-section-title">Sampling</div>
         <div class="rs-fmt-row" id="rs-ssaa-row"></div>
         <div style="font-size:10px;color:var(--td-text-muted);line-height:1.4;">Renders at N× resolution then downsamples — real anti-aliasing, not a filter.</div>
+      </div>
+
+      <div class="rs-section rs-video-only" id="rs-section-videoquality">
+        <div class="rs-section-title">Frame Quality</div>
+        <div class="rs-fmt-row" id="rs-vssaa-row"></div>
+        <div style="font-size:10px;color:var(--td-text-muted);line-height:1.4;">Per-frame supersampling. Higher = sharper edges but much slower to encode — each frame is a full render pass.</div>
       </div>
 
       <div class="rs-section">
@@ -17752,13 +17861,52 @@ window.renderStudio = {
         <label class="rs-row" style="cursor:pointer;"><span class="rs-row-label" style="color:var(--td-text-dim);">Hide selection outline</span><span class="rs-toggle"><input type="checkbox" id="rs-hide-outlines" checked><span class="rs-toggle-track"></span><span class="rs-toggle-thumb"></span></span></label>
       </div>
 
-      <div class="rs-section">
+      <div class="rs-section rs-image-only" id="rs-section-imgformat">
         <div class="rs-section-title">Output Format</div>
         <div class="rs-fmt-row" id="rs-format-row"></div>
         <div id="rs-jpeg-quality-row" style="display:none;">
           <div class="rs-row"><span class="rs-row-label">JPEG quality</span><span class="rs-row-val" id="rs-jpeg-quality-val">90%</span></div>
           <input type="range" id="rs-jpeg-quality" min="0.5" max="1" step="0.01" value="0.90">
         </div>
+      </div>
+
+      <div class="rs-section rs-video-only" id="rs-section-codec">
+        <div class="rs-section-title">Codec &amp; Container</div>
+        <div class="rs-fmt-row" id="rs-codec-row"></div>
+        <div class="rs-codec-note">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v4.5M10 6.6v.05"/></svg>
+          <span id="rs-codec-note-text">VP9 gives the best quality per bit. Falls back automatically to a supported codec on this browser if needed.</span>
+        </div>
+      </div>
+
+      <div class="rs-section rs-video-only" id="rs-section-bitrate">
+        <div class="rs-section-title">
+          <span>Bitrate</span>
+        </div>
+        <div class="rs-bitrate-mode" id="rs-bitrate-mode-row"></div>
+        <div id="rs-bitrate-auto-row">
+          <div class="rs-row"><span class="rs-row-label">Target quality</span></div>
+          <select class="rs-select" id="rs-bitrate-quality">
+            <option value="low">Low · smaller file</option>
+            <option value="medium" selected>Medium · balanced</option>
+            <option value="high">High · crisp detail</option>
+            <option value="max">Maximum · near-lossless</option>
+          </select>
+        </div>
+        <div id="rs-bitrate-manual-row" style="display:none;">
+          <div class="rs-row"><span class="rs-row-label">Bitrate</span><span class="rs-row-val" id="rs-bitrate-manual-val">12 Mbps</span></div>
+          <input type="range" id="rs-bitrate-manual" min="1" max="80" step="1" value="12">
+        </div>
+        <div style="font-size:10px;color:var(--td-text-muted);line-height:1.4;" id="rs-bitrate-estimate">—</div>
+      </div>
+
+      <div class="rs-section rs-video-only" id="rs-section-encspeed">
+        <div class="rs-section-title">Encoding</div>
+        <label class="rs-row" style="cursor:pointer;">
+          <span class="rs-row-label" style="color:var(--td-text-dim);">Realtime capture (faster, may drop frames on slow GPUs)</span>
+          <span class="rs-toggle"><input type="checkbox" id="rs-video-realtime"><span class="rs-toggle-track"></span><span class="rs-toggle-thumb"></span></span>
+        </label>
+        <div style="font-size:10px;color:var(--td-text-muted);line-height:1.4;">Off (default) renders every frame at its own pace and paces them to the timeline afterward — always smooth, but slower. On captures live at wall-clock speed.</div>
       </div>
 
     </div>
@@ -17770,9 +17918,12 @@ window.renderStudio = {
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="13" height="13"><path d="M10 3v10M6 9l4 4 4-4M4 16.5h12"/></svg>
         Download
       </button>
+      <button class="rs-btn" id="rs-cancel-btn" style="display:none;" onclick="renderStudio.cancelRender()">
+        Cancel
+      </button>
       <button class="rs-btn primary" id="rs-render-btn" onclick="renderStudio.render()">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="13" height="13"><circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="2.4" fill="currentColor" stroke="none"/></svg>
-        Render Image
+        <span id="rs-render-btn-label">Render Image</span>
       </button>
     </div>
   </div>
@@ -17812,8 +17963,14 @@ window.renderStudio = {
         this._buildResGrid();
         this._buildSsaaRow();
         this._buildFormatRow();
+        this._buildMotionList();
+        this._buildFpsRow();
+        this._buildVssaaRow();
+        this._buildCodecRow();
+        this._buildBitrateModeRow();
         this._bindControls();
         this._syncUIFromPrefs();
+        this._applyModeUI();
         this._updateEta();
         overlay.classList.remove("hidden");
         const modal = overlay.querySelector(".rs-modal");
@@ -17821,11 +17978,83 @@ window.renderStudio = {
         this._open = true;
     },
 
+    // -----------------------------------------------------------------
+    // Mode switching (Image / Video) — swaps which settings sections are
+    // visible and repurposes the footer button + ETA line accordingly.
+    // Nothing about the underlying render pipeline changes here; render()
+    // branches on prefs.mode to decide whether to call the still-image
+    // path (_renderStill, the original logic) or the new video path
+    // (_renderVideo).
+    // -----------------------------------------------------------------
+    setMode: function(mode) {
+        if (this._rendering) return; // don't allow switching mid-render
+        if (mode !== "image" && mode !== "video") return;
+        this.prefs.mode = mode;
+        this._applyModeUI();
+        this._updateEta();
+    },
+
+    _applyModeUI: function() {
+        const overlay = document.getElementById("rs-overlay");
+        const modal = overlay ? overlay.querySelector(".rs-modal") : null;
+        const isVideo = this.prefs.mode === "video";
+        if (modal) modal.classList.toggle("rs-mode-video", isVideo);
+
+        const imgBtn = document.getElementById("rs-mode-btn-image");
+        const vidBtn = document.getElementById("rs-mode-btn-video");
+        if (imgBtn) imgBtn.classList.toggle("is-active", !isVideo);
+        if (vidBtn) vidBtn.classList.toggle("is-active", isVideo);
+
+        // Sections tagged .rs-video-only / .rs-image-only are toggled purely
+        // via the .rs-mode-video class on .rs-modal (see CSS), but a couple
+        // of them were created with an inline `display:none` as their
+        // no-JS-yet default — clear that once we're actually managing them.
+        document.querySelectorAll(".rs-video-only, .rs-image-only").forEach(el => {
+            el.style.display = "";
+        });
+
+        const renderBtnLabel = document.getElementById("rs-render-btn-label");
+        if (renderBtnLabel) renderBtnLabel.textContent = isVideo ? "Render Video" : "Render Image";
+
+        const previewImg = document.getElementById("rs-preview-img");
+        const previewVideo = document.getElementById("rs-preview-video");
+        const previewEmpty = document.getElementById("rs-preview-empty");
+        const emptyText = document.getElementById("rs-preview-empty-text");
+        if (emptyText) {
+            emptyText.innerHTML = isVideo
+                ? "No render yet<br>Configure parameters and press Render"
+                : "No render yet<br>Configure parameters and press Render";
+        }
+        // Show whichever medium's last result matches the current mode;
+        // otherwise fall back to the empty state so we never show a stale
+        // image while in video mode or vice-versa.
+        const hasImg = previewImg && previewImg.style.display !== "none" && previewImg.src;
+        const hasVid = previewVideo && previewVideo.style.display !== "none" && previewVideo.src;
+        if (isVideo) {
+            if (previewImg) previewImg.style.display = "none";
+            if (previewVideo) previewVideo.style.display = hasVid ? "block" : "none";
+            if (previewEmpty) previewEmpty.style.display = hasVid ? "none" : "flex";
+        } else {
+            if (previewVideo) { previewVideo.pause(); previewVideo.style.display = "none"; }
+            if (previewImg) previewImg.style.display = hasImg ? "block" : "none";
+            if (previewEmpty) previewEmpty.style.display = hasImg ? "none" : "flex";
+        }
+
+        const downloadBtn = document.getElementById("rs-download-btn");
+        if (downloadBtn) downloadBtn.style.display = (isVideo ? hasVid : hasImg) ? "flex" : "none";
+
+        const videoProgressUI = document.getElementById("rs-video-progress-ui");
+        if (videoProgressUI) videoProgressUI.style.display = "none";
+    },
+
     close: function() {
         if (this._rendering) return; // don't allow closing mid-render (would corrupt restore state)
         const overlay = document.getElementById("rs-overlay");
         if (overlay) overlay.classList.add("hidden");
         this._open = false;
+
+        const video = document.getElementById("rs-preview-video");
+        if (video) video.pause();
 
         // Restore the viewport Render Resolution that was active before
         // the Render Studio window was opened.
@@ -17922,6 +18151,163 @@ window.renderStudio = {
     },
 
     // -----------------------------------------------------------------
+    // Video-mode sub-UI builders
+    // -----------------------------------------------------------------
+    _motionSources: [
+        { key: "orbit", title: "Turntable orbit", desc: "Camera auto-rotates around the current pivot for a smooth 360° product shot. Uses the Orbit turns setting below." },
+        { key: "timeline", title: "Scene animation", desc: "Plays back whatever keyframe/timeline animation is already active in the scene, from its current position." }
+    ],
+    _buildMotionList: function() {
+        const list = document.getElementById("rs-motion-list");
+        if (!list) return;
+        list.innerHTML = "";
+        this._motionSources.forEach(m => {
+            const label = document.createElement("label");
+            label.className = "rs-radio-opt";
+            label.dataset.key = m.key;
+            label.innerHTML = `
+                <input type="radio" name="rs-motion-source" value="${m.key}">
+                <span class="rs-radio-opt-text">
+                    <span class="rs-radio-opt-title">${m.title}</span>
+                    <span class="rs-radio-opt-desc">${m.desc}</span>
+                </span>`;
+            label.onclick = () => {
+                this.prefs.motionSource = m.key;
+                this._refreshMotionList();
+                const turnsRow = document.getElementById("rs-orbit-turns-row");
+                if (turnsRow) turnsRow.style.opacity = m.key === "orbit" ? "1" : ".35";
+                const turnsInput = document.getElementById("rs-orbit-turns");
+                if (turnsInput) turnsInput.disabled = m.key !== "orbit";
+            };
+            list.appendChild(label);
+        });
+        this._refreshMotionList();
+    },
+    _refreshMotionList: function() {
+        document.querySelectorAll("#rs-motion-list .rs-radio-opt").forEach(el => {
+            const active = el.dataset.key === this.prefs.motionSource;
+            el.classList.toggle("is-active", active);
+            const input = el.querySelector("input");
+            if (input) input.checked = active;
+        });
+    },
+
+    _buildFpsRow: function() {
+        const row = document.getElementById("rs-fps-row");
+        if (!row) return;
+        row.innerHTML = "";
+        [24, 30, 60].forEach(fps => {
+            const b = document.createElement("button");
+            b.className = "rs-res-btn";
+            b.textContent = fps + " fps";
+            b.dataset.val = fps;
+            b.onclick = () => { this.prefs.videoFps = fps; this._refreshFpsButtons(); this._updateEta(); this._updateBitrateEstimate(); };
+            row.appendChild(b);
+        });
+        this._refreshFpsButtons();
+    },
+    _refreshFpsButtons: function() {
+        document.querySelectorAll("#rs-fps-row .rs-res-btn").forEach(b => {
+            b.classList.toggle("is-active", Number(b.dataset.val) === this.prefs.videoFps);
+        });
+    },
+
+    _buildVssaaRow: function() {
+        const row = document.getElementById("rs-vssaa-row");
+        if (!row) return;
+        row.innerHTML = "";
+        [ [1, "Standard"], [2, "2× Sharp"] ].forEach(([val, label]) => {
+            const b = document.createElement("button");
+            b.className = "rs-res-btn";
+            b.textContent = label;
+            b.dataset.val = val;
+            b.onclick = () => { this.prefs.videoSsaa = val; this._refreshVssaaButtons(); this._updateEta(); };
+            row.appendChild(b);
+        });
+        this._refreshVssaaButtons();
+    },
+    _refreshVssaaButtons: function() {
+        document.querySelectorAll("#rs-vssaa-row .rs-res-btn").forEach(b => {
+            b.classList.toggle("is-active", Number(b.dataset.val) === this.prefs.videoSsaa);
+        });
+    },
+
+    _codecs: [
+        { key: "vp9", label: "VP9 (.webm)", mimes: ["video/webm;codecs=vp9", "video/webm"], note: "VP9 gives the best quality per bit. Falls back automatically to a supported codec on this browser if needed." },
+        { key: "vp8", label: "VP8 (.webm)", mimes: ["video/webm;codecs=vp8", "video/webm"], note: "Faster to encode than VP9, slightly larger files at the same quality. Widely supported." },
+        { key: "h264", label: "H.264 (.mp4)", mimes: ["video/mp4;codecs=avc1", "video/mp4"], note: "Most compatible with editing software and older devices. Support depends on your browser." }
+    ],
+    _buildCodecRow: function() {
+        const row = document.getElementById("rs-codec-row");
+        if (!row) return;
+        row.innerHTML = "";
+        this._codecs.forEach(c => {
+            const b = document.createElement("button");
+            b.className = "rs-res-btn";
+            b.textContent = c.label;
+            b.dataset.key = c.key;
+            b.onclick = () => { this.prefs.codec = c.key; this._refreshCodecButtons(); };
+            row.appendChild(b);
+        });
+        this._refreshCodecButtons();
+    },
+    _refreshCodecButtons: function() {
+        document.querySelectorAll("#rs-codec-row .rs-res-btn").forEach(b => {
+            b.classList.toggle("is-active", b.dataset.key === this.prefs.codec);
+        });
+        const noteEl = document.getElementById("rs-codec-note-text");
+        const c = this._codecs.find(c => c.key === this.prefs.codec);
+        if (noteEl && c) noteEl.textContent = c.note;
+    },
+
+    _buildBitrateModeRow: function() {
+        const row = document.getElementById("rs-bitrate-mode-row");
+        if (!row) return;
+        row.innerHTML = "";
+        [ ["auto", "Auto (by quality)"], ["manual", "Manual"] ].forEach(([val, label]) => {
+            const b = document.createElement("button");
+            b.className = "rs-res-btn";
+            b.textContent = label;
+            b.dataset.val = val;
+            b.onclick = () => {
+                this.prefs.bitrateMode = val;
+                this._refreshBitrateModeButtons();
+                document.getElementById("rs-bitrate-auto-row").style.display = val === "auto" ? "block" : "none";
+                document.getElementById("rs-bitrate-manual-row").style.display = val === "manual" ? "block" : "none";
+                this._updateBitrateEstimate();
+            };
+            row.appendChild(b);
+        });
+        this._refreshBitrateModeButtons();
+    },
+    _refreshBitrateModeButtons: function() {
+        document.querySelectorAll("#rs-bitrate-mode-row .rs-res-btn").forEach(b => {
+            b.classList.toggle("is-active", b.dataset.val === this.prefs.bitrateMode);
+        });
+    },
+
+    // Quality presets -> bits-per-pixel-per-frame multipliers, the same
+    // rule of thumb encoders like x264/libvpx use internally to size a
+    // CRF-ish auto bitrate off resolution × fps.
+    _bppTable: { low: 0.045, medium: 0.09, high: 0.16, max: 0.28 },
+    _resolveBitrateMbps: function() {
+        const p = this.prefs;
+        if (p.bitrateMode === "manual") return p.bitrateManualMbps;
+        const { w, h } = this._resolveTargetSize();
+        const bpp = this._bppTable[p.bitrateQuality] || this._bppTable.medium;
+        const bps = w * h * p.videoFps * bpp;
+        return Math.max(1, Math.round(bps / 1e6));
+    },
+    _updateBitrateEstimate: function() {
+        const el = document.getElementById("rs-bitrate-estimate");
+        if (!el) return;
+        const mbps = this._resolveBitrateMbps();
+        const seconds = this.prefs.videoDuration || 0;
+        const sizeMB = (mbps * seconds) / 8;
+        el.innerText = `≈ ${mbps} Mbps · estimated file size ≈ ${sizeMB.toFixed(1)} MB for ${seconds}s`;
+    },
+
+    // -----------------------------------------------------------------
     // Wire up all inputs <-> prefs
     // -----------------------------------------------------------------
     _bound: false,
@@ -17981,6 +18367,22 @@ window.renderStudio = {
         on("rs-hide-outlines", "onchange", e => { this.prefs.hideOutlines = e.target.checked; });
 
         on("rs-jpeg-quality", "oninput", e => { this.prefs.jpegQuality = parseFloat(e.target.value); const l = $("rs-jpeg-quality-val"); if (l) l.innerText = Math.round(this.prefs.jpegQuality * 100) + "%"; });
+
+        // ---- video mode controls ----
+        on("rs-video-duration", "oninput", e => {
+            this.prefs.videoDuration = Math.max(1, Math.min(120, parseInt(e.target.value) || 6));
+            this._updateEta(); this._updateBitrateEstimate();
+        });
+        on("rs-orbit-turns", "oninput", e => {
+            this.prefs.orbitTurns = Math.max(0.1, parseFloat(e.target.value) || 1);
+        });
+        on("rs-bitrate-quality", "onchange", e => { this.prefs.bitrateQuality = e.target.value; this._updateBitrateEstimate(); });
+        on("rs-bitrate-manual", "oninput", e => {
+            this.prefs.bitrateManualMbps = parseInt(e.target.value, 10);
+            const l = $("rs-bitrate-manual-val"); if (l) l.innerText = this.prefs.bitrateManualMbps + " Mbps";
+            this._updateBitrateEstimate();
+        });
+        on("rs-video-realtime", "onchange", e => { this.prefs.videoRealtime = e.target.checked; });
     },
 
     _syncUIFromPrefs: function() {
@@ -18043,6 +18445,23 @@ window.renderStudio = {
         setVal("rs-jpeg-quality", p.jpegQuality);
         setText("rs-jpeg-quality-val", Math.round(p.jpegQuality * 100) + "%");
         setDisplay("rs-jpeg-quality-row", p.format === "jpeg" ? "block" : "none");
+
+        // ---- video mode ----
+        setVal("rs-video-duration", p.videoDuration);
+        setVal("rs-orbit-turns", p.orbitTurns);
+        setDisabled("rs-orbit-turns", p.motionSource !== "orbit");
+        setVal("rs-bitrate-quality", p.bitrateQuality);
+        setVal("rs-bitrate-manual", p.bitrateManualMbps);
+        setText("rs-bitrate-manual-val", p.bitrateManualMbps + " Mbps");
+        setDisplay("rs-bitrate-auto-row", p.bitrateMode === "auto" ? "block" : "none");
+        setDisplay("rs-bitrate-manual-row", p.bitrateMode === "manual" ? "block" : "none");
+        setChecked("rs-video-realtime", p.videoRealtime);
+        this._refreshFpsButtons();
+        this._refreshVssaaButtons();
+        this._refreshCodecButtons();
+        this._refreshBitrateModeButtons();
+        this._refreshMotionList();
+        this._updateBitrateEstimate();
     },
 
     // -----------------------------------------------------------------
@@ -18076,6 +18495,17 @@ window.renderStudio = {
         const el = document.getElementById("rs-eta");
         if (!el) return;
         const { w, h } = this._resolveTargetSize();
+        if (this.prefs.mode === "video") {
+            const fps = this.prefs.videoFps || 30;
+            const dur = this.prefs.videoDuration || 1;
+            const frames = Math.round(fps * dur);
+            const ssaa = this.prefs.videoSsaa || 1;
+            const rw = w * ssaa, rh = h * ssaa;
+            const over = (rw > 2560 || rh > 2560) ? " ⚠ above safe limit — lower resolution/quality" : "";
+            el.innerText = `Output ${w}×${h} @ ${fps}fps · ${dur}s · ${frames} frames (rendering at ${rw}×${rh})${over}`;
+            this._updateBitrateEstimate();
+            return;
+        }
         const ssaa = this.prefs.ssaa || 1;
         const rw = w * ssaa, rh = h * ssaa;
         const mp = (rw * rh / 1e6).toFixed(1);
@@ -18089,6 +18519,11 @@ window.renderStudio = {
     // the pixels, downsamples if SSAA>1, then restores everything.
     // -----------------------------------------------------------------
     render: async function() {
+        if (this.prefs.mode === "video") return this._renderVideo();
+        return this._renderStill();
+    },
+
+    _renderStill: async function() {
         if (this._rendering) return;
         if (typeof engine === "undefined" || !engine.renderer || !engine.composer) {
             alert("Engine not ready.");
@@ -18221,9 +18656,12 @@ window.renderStudio = {
             const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
             this._lastFilenameBase = `${projectName}_${outW}x${outH}_${ts}`;
 
+            const video = document.getElementById("rs-preview-video");
+            if (video) { video.pause(); video.removeAttribute("src"); video.style.display = "none"; }
             const img = document.getElementById("rs-preview-img");
             img.src = this._lastBlobUrl;
             img.style.display = "block";
+            this._lastResultKind = "image";
             if (downloadBtn) downloadBtn.style.display = "flex";
 
         } catch (err) {
@@ -18438,8 +18876,421 @@ window.renderStudio = {
     },
 
     // -----------------------------------------------------------------
-    // State capture / apply / restore
+    // VIDEO RENDER — reuses the same per-frame rendering path as the
+    // still-image renderer (_applyRenderSettings → _renderOneFrame →
+    // read the composer's output canvas), just called once per output
+    // frame while stepping either an orbiting camera or the scene's own
+    // timeline animation.
+    //
+    // ENCODING STRATEGY (why 60fps used to come out choppy):
+    // The previous implementation fed frames into MediaRecorder via
+    // canvas.captureStream(0) + track.requestFrame(). That API has no
+    // concept of "this frame lasts exactly 1/60s" — every requestFrame()
+    // call is timestamped by the *wall-clock moment it happened*, and
+    // MediaRecorder bakes those real, unequal gaps into the encoded
+    // video. Since AO/bloom/DOF/env-reflection frames each take a
+    // different amount of GPU time to render, the gaps between
+    // requestFrame() calls were never actually equal — so even a
+    // "60fps" export played back with uneven frame durations, which
+    // reads as judder/stutter no matter how high the frame *rate* was.
+    //
+    // The fix: skip MediaRecorder's wall-clock timing model entirely.
+    // WebCodecs' VideoEncoder lets us assign each frame an explicit,
+    // hand-picked timestamp (frame index × 1e6/fps, in microseconds) —
+    // completely decoupled from how long that frame actually took to
+    // render. The muxer (webm-muxer or mp4-muxer, both WebCodecs-native)
+    // then writes those exact timestamps into the container. The result
+    // is a container-level guarantee of perfectly even spacing, the same
+    // approach offline renderers (Blender, ffmpeg -r) use, rather than a
+    // best-effort real-time capture.
+    //
+    // Where the browser doesn't support VideoEncoder (older Safari etc.)
+    // we fall back to the previous MediaRecorder path, paced through
+    // _nextFrame() rather than requestFrame() timing, which is close but
+    // not quite as exact — a console warning notes when this happens.
     // -----------------------------------------------------------------
+    _videoCancelled: false,
+    cancelRender: function() {
+        if (!this._rendering) return;
+        this._videoCancelled = true;
+    },
+
+    _codecStrings: {
+        vp9: { webcodecs: "vp09.00.10.08", muxer: "V_VP9" },
+        vp8: { webcodecs: "vp8", muxer: "V_VP8" },
+        h264: { webcodecs: "avc1.640028", muxer: "avc" } // High profile, level 4.0 — safe up to 1080p+
+    },
+
+    _renderVideo: async function() {
+        if (this._rendering) return;
+        if (typeof engine === "undefined" || !engine.renderer || !engine.composer) {
+            alert("Engine not ready.");
+            return;
+        }
+
+        const hasWebCodecs = typeof VideoEncoder !== "undefined" && (window._rsWebMMuxer || window._rsMp4Muxer);
+        const hasMediaRecorderFallback = typeof MediaRecorder !== "undefined" && HTMLCanvasElement.prototype.captureStream;
+        if (!hasWebCodecs && !hasMediaRecorderFallback) {
+            alert("Video rendering isn't supported in this browser (missing WebCodecs and MediaRecorder).");
+            return;
+        }
+        if (!hasWebCodecs) {
+            console.warn("[renderStudio] WebCodecs/muxer unavailable — using MediaRecorder fallback. Frame timing may be slightly less exact.");
+        }
+
+        this._rendering = true;
+        this._videoCancelled = false;
+        const renderBtn = document.getElementById("rs-render-btn");
+        const cancelBtn = document.getElementById("rs-cancel-btn");
+        const downloadBtn = document.getElementById("rs-download-btn");
+        const progressWrap = document.getElementById("rs-progress-wrap");
+        const progressLabel = document.getElementById("rs-progress-label");
+        const videoProgressUI = document.getElementById("rs-video-progress-ui");
+        const videoProgressFill = document.getElementById("rs-video-progress-fill");
+        const videoProgressFrames = document.getElementById("rs-video-progress-frames");
+        const previewEmpty = document.getElementById("rs-preview-empty");
+        const spinner = document.getElementById("rs-spinner");
+
+        if (renderBtn) renderBtn.disabled = true;
+        if (cancelBtn) cancelBtn.style.display = "flex";
+        if (progressWrap) progressWrap.classList.add("show");
+        if (videoProgressUI) videoProgressUI.style.display = "flex";
+        if (spinner) spinner.style.display = "none";
+        if (previewEmpty) previewEmpty.style.display = "none";
+        const setStage = (msg) => { if (progressLabel) progressLabel.innerText = msg; };
+
+        const snap = this._captureState();
+        const camSnap = {
+            position: engine.camera.position.clone(),
+            quaternion: engine.camera.quaternion.clone(),
+            target: engine.orbit ? engine.orbit.target.clone() : null
+        };
+        const orbitWasEnabled = engine.orbit ? engine.orbit.enabled : undefined;
+
+        let recorder, capturedChunks = [], canvasStream; // MediaRecorder-fallback state
+        let videoEncoder, muxer;                          // WebCodecs-path state
+        try {
+            setStage("Preparing scene...");
+            await this._nextFrame();
+
+            if (engine.renderer.getContext().isContextLost()) {
+                throw new Error("Graphics context is currently lost. Wait for it to recover (see the banner) or reload, then try rendering again.");
+            }
+
+            const { w: outW, h: outH } = this._resolveTargetSize();
+            const ssaa = this.prefs.videoSsaa || 1;
+            const rw = Math.max(1, Math.round(outW * ssaa));
+            const rh = Math.max(1, Math.round(outH * ssaa));
+
+            // Video frames are rendered one at a time into a single
+            // full-size buffer (no tiling — tiling per-frame would be far
+            // too slow for anything beyond a couple of seconds), so keep
+            // the internal render size within what most GPUs can safely
+            // allocate for a full AO+bloom+DOF composer chain.
+            const VIDEO_MAX_DIM = 2560;
+            if (rw > VIDEO_MAX_DIM || rh > VIDEO_MAX_DIM) {
+                throw new Error(`This resolution/quality combination renders at ${rw}×${rh} internally, above the ${VIDEO_MAX_DIM}px safe limit for video. Lower the output resolution or turn off 2× Sharp frame quality.`);
+            }
+            // WebCodecs H.264/VP9 hardware encoders require even pixel
+            // dimensions — round down so we never hand an odd width/height
+            // to VideoEncoder.configure() (a silent failure otherwise).
+            const encW = outW - (outW % 2);
+            const encH = outH - (outH % 2);
+
+            this._applyRenderSettings(snap);
+            if (engine.orbit) engine.orbit.enabled = false; // we drive the camera manually per-frame
+            await this._nextFrame();
+
+            engine.camera.aspect = outW / outH;
+            engine.camera.updateProjectionMatrix();
+
+            if (this.prefs.envReflEnabled && engine._envReflectionEnabled !== undefined) {
+                setStage("Capturing environment reflections...");
+                if (typeof engine.setEnvReflectionionQuality === "function") {
+                    engine.setEnvReflectionionQuality(this.prefs.envReflQuality);
+                }
+                if (typeof engine._captureEnvReflection === "function") {
+                    await engine._captureEnvReflection();
+                }
+            }
+
+            setStage("Sizing buffers...");
+            engine.renderer.setPixelRatio(1);
+            engine.renderer.setSize(rw, rh, false);
+            if (engine.composer) engine.composer.setSize(rw, rh);
+            if (engine._depthTarget) engine._depthTarget.setSize(Math.floor(rw / 2), Math.floor(rh / 2));
+            if (engine.ssaoPass && engine.ssaoPass.uniforms) {
+                engine.ssaoPass.uniforms.resolution.value.set(rw, rh);
+                engine.ssaoPass.uniforms.uDepthResolution.value.set(Math.floor(rw / 2), Math.floor(rh / 2));
+                engine.ssaoPass.uniforms.tDepth.value = engine._depthTarget.texture;
+            }
+            if (engine.dofPass && engine.dofPass.uniforms) {
+                engine.dofPass.uniforms.resolution.value.set(rw, rh);
+                engine.dofPass.uniforms.tDepth.value = engine._depthTarget.texture;
+            }
+            if (engine.bloomPass && engine.bloomPass.setSize) engine.bloomPass.setSize(rw, rh);
+            if (engine.updateDepthEncodingUniforms) engine.updateDepthEncodingUniforms();
+
+            // Output compositing canvas that every frame gets drawn into
+            // before being handed to the encoder — kept at exactly
+            // outW×outH (post-SSAA-downsample) so the encoder never has
+            // to deal with the larger internal supersampled buffer.
+            const outCanvas = document.createElement("canvas");
+            outCanvas.width = encW;
+            outCanvas.height = encH;
+            const outCtx = outCanvas.getContext("2d", { willReadFrequently: false });
+            outCtx.imageSmoothingEnabled = true;
+            if ("imageSmoothingQuality" in outCtx) outCtx.imageSmoothingQuality = "high";
+
+            const fps = this.prefs.videoFps || 30;
+            const duration = this.prefs.videoDuration || 6;
+            const totalFrames = Math.max(1, Math.round(fps * duration));
+            if (videoProgressFrames) videoProgressFrames.innerText = `Frame 0 / ${totalFrames}`;
+
+            const bitrateMbps = this._resolveBitrateMbps();
+            const bitrateBps = bitrateMbps * 1e6;
+
+            // ---- pick codec + set up the appropriate encode path ----
+            const chosenCodec = this._codecs.find(c => c.key === this.prefs.codec) || this._codecs[0];
+            const usingMp4 = chosenCodec.key === "h264";
+            let mimeType = null; // only used by the MediaRecorder fallback
+
+            if (hasWebCodecs) {
+                const codecInfo = this._codecStrings[chosenCodec.key] || this._codecStrings.vp9;
+                const MuxerLib = usingMp4 ? window._rsMp4Muxer : window._rsWebMMuxer;
+                if (!MuxerLib) throw new Error(`No muxer available for ${chosenCodec.label} — try a different codec.`);
+
+                if (usingMp4) {
+                    muxer = new MuxerLib.Muxer({
+                        target: new MuxerLib.ArrayBufferTarget(),
+                        video: { codec: "avc", width: encW, height: encH },
+                        fastStart: "in-memory"
+                    });
+                } else {
+                    muxer = new MuxerLib.Muxer({
+                        target: new MuxerLib.ArrayBufferTarget(),
+                        video: { codec: codecInfo.muxer, width: encW, height: encH, frameRate: fps }
+                    });
+                }
+
+                videoEncoder = new VideoEncoder({
+                    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+                    error: (e) => { throw e; }
+                });
+
+                let encoderConfig = { codec: codecInfo.webcodecs, width: encW, height: encH, bitrate: bitrateBps, framerate: fps };
+                // VP8 has no explicit level/profile string beyond "vp8".
+                try {
+                    videoEncoder.configure(encoderConfig);
+                } catch (e) {
+                    // Some browsers reject the exact H.264 profile/level string
+                    // above certain resolutions — retry once with a more
+                    // permissive baseline profile before giving up.
+                    if (chosenCodec.key === "h264") {
+                        encoderConfig.codec = "avc1.42001f"; // Baseline profile, level 3.1
+                        videoEncoder.configure(encoderConfig);
+                    } else {
+                        throw e;
+                    }
+                }
+            } else {
+                // ---- MediaRecorder fallback (older browsers only) ----
+                for (const m of chosenCodec.mimes) {
+                    if (MediaRecorder.isTypeSupported(m)) { mimeType = m; break; }
+                }
+                if (!mimeType) {
+                    outer:
+                    for (const c of this._codecs) {
+                        for (const m of c.mimes) {
+                            if (MediaRecorder.isTypeSupported(m)) { mimeType = m; break outer; }
+                        }
+                    }
+                }
+                if (!mimeType) throw new Error("No supported video codec found in this browser.");
+
+                canvasStream = outCanvas.captureStream(0);
+                const track = canvasStream.getVideoTracks()[0];
+                recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: bitrateBps });
+                recorder.ondataavailable = (ev) => { if (ev.data && ev.data.size > 0) capturedChunks.push(ev.data); };
+                this._fallbackTrack = track;
+            }
+
+            const recordingDonePromise = (!hasWebCodecs) ? new Promise((resolve, reject) => {
+                recorder.onstop = resolve;
+                recorder.onerror = (ev) => reject(ev.error || new Error("MediaRecorder error"));
+            }) : null;
+
+            if (!hasWebCodecs) recorder.start();
+
+            // ---- motion setup ----
+            const useOrbit = this.prefs.motionSource !== "timeline";
+            const orbitCenter = engine.orbit ? engine.orbit.target.clone() : new THREE.Vector3();
+            const startOffset = engine.camera.position.clone().sub(orbitCenter);
+            const startRadius = startOffset.length();
+            const startAngle = Math.atan2(startOffset.z, startOffset.x);
+            const startY = engine.camera.position.y;
+            const turns = this.prefs.orbitTurns || 1;
+
+            const hasTimelineAnim = typeof engine.setAnimationTime === "function" || typeof engine.updateAnimations === "function";
+            if (!useOrbit && !hasTimelineAnim) {
+                console.warn("[renderStudio] No scene timeline animation API found — falling back to orbit motion.");
+            }
+
+            const frameDurationUs = Math.round(1e6 / fps); // microseconds — exact, constant spacing
+
+            setStage("Rendering frames...");
+            for (let f = 0; f < totalFrames; f++) {
+                if (this._videoCancelled) throw new Error("__CANCELLED__");
+
+                const tNorm = totalFrames > 1 ? f / (totalFrames - 1) : 0; // 0..1 across the clip
+
+                if (useOrbit || !hasTimelineAnim) {
+                    const angle = startAngle + tNorm * turns * Math.PI * 2;
+                    engine.camera.position.set(
+                        orbitCenter.x + Math.cos(angle) * startRadius,
+                        startY,
+                        orbitCenter.z + Math.sin(angle) * startRadius
+                    );
+                    engine.camera.lookAt(orbitCenter);
+                } else {
+                    const tSeconds = tNorm * duration;
+                    if (typeof engine.setAnimationTime === "function") engine.setAnimationTime(tSeconds);
+                    else if (typeof engine.updateAnimations === "function") engine.updateAnimations(tSeconds);
+                }
+
+                if (this.prefs.envReflEnabled && useOrbit && typeof engine._captureEnvReflection === "function") {
+                    // Reflections depend on camera position while orbiting —
+                    // recapture every few frames rather than every single
+                    // frame, since a full cubemap render per frame would be
+                    // prohibitively slow for anything past a couple seconds.
+                    if (f % 6 === 0) await engine._captureEnvReflection();
+                }
+
+                this._renderOneFrame();
+                if (engine.renderer.getContext().isContextLost()) {
+                    throw new Error("Graphics context was lost while rendering this frame. Please try again (a lower resolution/fps is more likely to succeed on this device).");
+                }
+
+                outCtx.drawImage(engine.renderer.domElement, 0, 0, rw, rh, 0, 0, encW, encH);
+
+                if (hasWebCodecs) {
+                    // Explicit, hand-assigned timestamp — this is the whole
+                    // fix. Every frame is exactly frameDurationUs apart in
+                    // the encoded stream, regardless of how long it took
+                    // this loop iteration to actually produce the pixels.
+                    const timestampUs = f * frameDurationUs;
+                    const keyFrame = (f === 0) || (f % (fps * 5) === 0); // force a keyframe at least every 5s, per mp4-muxer's own guidance
+                    const videoFrame = new VideoFrame(outCanvas, { timestamp: timestampUs, duration: frameDurationUs });
+                    videoEncoder.encode(videoFrame, { keyFrame });
+                    videoFrame.close();
+
+                    // Keep the encoder's internal queue from growing
+                    // unbounded on fast GPUs / low frame counts — back off
+                    // and let it drain periodically.
+                    if (videoEncoder.encodeQueueSize > 8) {
+                        await new Promise(resolve => {
+                            videoEncoder.ondequeue = () => { if (videoEncoder.encodeQueueSize <= 4) resolve(); };
+                        });
+                        videoEncoder.ondequeue = null;
+                    }
+                } else {
+                    if (this._fallbackTrack && typeof this._fallbackTrack.requestFrame === "function") this._fallbackTrack.requestFrame();
+                }
+
+                if (videoProgressFill) videoProgressFill.style.width = Math.round(((f + 1) / totalFrames) * 100) + "%";
+                if (videoProgressFrames) videoProgressFrames.innerText = `Frame ${f + 1} / ${totalFrames}`;
+
+                // Yield to the event loop so the browser can paint the
+                // progress bar and stay responsive (cancel button, etc).
+                //
+                // WebCodecs path: this pause's length has NO effect on the
+                // exported video's timing — every frame's timestamp was
+                // already fixed explicitly above — so we yield only
+                // occasionally, letting rendering run at full speed
+                // instead of being capped to the display's refresh rate.
+                //
+                // MediaRecorder fallback path: unlike WebCodecs, this path
+                // has no explicit per-frame timestamp — captureStream()
+                // timestamps each frame by the wall-clock moment
+                // requestFrame() was called. So here we still yield once
+                // per frame (a single requestAnimationFrame, not the
+                // double-rAF used elsewhere) to give the browser a real
+                // chance to pull each frame before the next one lands.
+                if (this.prefs.videoRealtime) {
+                    await new Promise(r => setTimeout(r, 1000 / fps));
+                } else if (hasWebCodecs) {
+                    if (f % 4 === 3) await new Promise(r => setTimeout(r, 0));
+                } else {
+                    await new Promise(r => requestAnimationFrame(r));
+                }
+            }
+
+            setStage("Finalizing video...");
+            let blob, ext;
+            if (hasWebCodecs) {
+                await videoEncoder.flush();
+                videoEncoder.close();
+                muxer.finalize();
+                ext = usingMp4 ? "mp4" : "webm";
+                blob = new Blob([muxer.target.buffer], { type: "video/" + ext });
+            } else {
+                recorder.stop();
+                await recordingDonePromise;
+                if (capturedChunks.length === 0) throw new Error("No video data was captured — recording may have failed silently.");
+                blob = new Blob(capturedChunks, { type: mimeType.split(";")[0] });
+                ext = mimeType.startsWith("video/mp4") ? "mp4" : "webm";
+            }
+
+            if (this._lastBlobUrl) URL.revokeObjectURL(this._lastBlobUrl);
+            this._lastBlobUrl = URL.createObjectURL(blob);
+            const projectName = (window.appState?.currentProjectName || "MAPCG_Render").replace(/\s+/g, "_");
+            const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+            this._lastFilenameBase = `${projectName}_${outW}x${outH}_${ts}`;
+            this._lastResultKind = "video";
+            this._lastVideoExt = ext;
+
+            const img = document.getElementById("rs-preview-img");
+            if (img) { img.style.display = "none"; img.removeAttribute("src"); }
+            const video = document.getElementById("rs-preview-video");
+            if (video) {
+                video.src = this._lastBlobUrl;
+                video.style.display = "block";
+                video.currentTime = 0;
+            }
+            if (downloadBtn) downloadBtn.style.display = "flex";
+
+        } catch (err) {
+            if (err && err.message === "__CANCELLED__") {
+                setStage("Cancelled.");
+            } else {
+                console.error("[renderStudio] video render failed:", err);
+                alert("Video render failed: " + (err?.message || err));
+            }
+            try { if (videoEncoder && videoEncoder.state !== "closed") videoEncoder.close(); } catch (e) {}
+            try { if (recorder && recorder.state !== "inactive") recorder.stop(); } catch (e) {}
+        } finally {
+            setStage("Restoring viewport...");
+            if (engine.orbit) {
+                engine.orbit.enabled = orbitWasEnabled;
+                if (camSnap.target) engine.orbit.target.copy(camSnap.target);
+            }
+            engine.camera.position.copy(camSnap.position);
+            engine.camera.quaternion.copy(camSnap.quaternion);
+            this._restoreState(snap);
+            if (canvasStream) canvasStream.getTracks().forEach(t => t.stop());
+            this._fallbackTrack = null;
+            if (progressWrap) progressWrap.classList.remove("show");
+            if (videoProgressUI) videoProgressUI.style.display = "none";
+            if (spinner) spinner.style.display = "";
+            if (videoProgressFill) videoProgressFill.style.width = "0%";
+            if (renderBtn) renderBtn.disabled = false;
+            if (cancelBtn) cancelBtn.style.display = "none";
+            this._rendering = false;
+            this._videoCancelled = false;
+        }
+    },
+
+
     _captureState: function() {
         const e = engine;
         const dom = id => document.getElementById(id);
@@ -18582,7 +19433,12 @@ window.renderStudio = {
         if (!this._lastBlobUrl) return;
         const a = document.createElement("a");
         a.href = this._lastBlobUrl;
-        const ext = this.prefs.format === "jpeg" ? "jpg" : "png";
+        let ext;
+        if (this._lastResultKind === "video") {
+            ext = this._lastVideoExt || "webm";
+        } else {
+            ext = this.prefs.format === "jpeg" ? "jpg" : "png";
+        }
         const filename = `${this._lastFilenameBase}.${ext}`;
         a.download = filename;
         document.body.appendChild(a);
