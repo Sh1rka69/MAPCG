@@ -1929,9 +1929,9 @@
 
                             <div class="grid grid-cols-2 gap-1 mt-1">
                                 <div class="p-2" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
-                                    <label class="td-label block mb-1" style="font-size: 9px;">Letter spacing</label>
+                                    <label class="td-label block mb-1" style="font-size: 9px;">Letter spacing (negative = overlap)</label>
                                     <div class="flex items-center gap-1">
-                                        <input type="range" id="inp-text-spacing" min="0" max="0.6" step="0.02" value="0.15" class="w-full">
+                                        <input type="range" id="inp-text-spacing" min="-1" max="0.6" step="0.01" value="-0.40" class="w-full">
                                         <span id="text-spacing-val" class="mono text-[11px] w-7 text-right" style="color: var(--td-text-dim);">0.15</span>
                                     </div>
                                 </div>
@@ -19718,13 +19718,12 @@ window.textSystem = {
         // Fill style white so tint multiplies correctly; transparent bg
         // Use centered glyph
         const fam = fontFamily || this.currentFontFamily;
-        ctx.font = `400 ${Math.round(SIZE*0.62)}px "${fam}", sans-serif`;
+        ctx.font = `400 ${Math.round(SIZE*0.78)}px "${fam}", sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#ffffff';
-        // Slightly lower to appear vertically centered (fonts have ascender bias)
-        // Measure to adjust? Use fixed offset
-        // For characters like 'g','y','p' need proper baseline – use middle
+        // Letter spacing is applied to the cube advance below. It may be
+        // negative, allowing adjacent letter cubes to overlap intentionally.
         ctx.fillText(ch, SIZE/2, SIZE/2 + SIZE*0.055);
 
         // Keep the source glyph upright. GoreBox's opposite face is handled
@@ -19872,7 +19871,7 @@ window.textSystem = {
 
         const fontFamily = (opts && opts.fontFamily) || groupMeta.fontFamily || this.currentFontFamily;
         const letterSize = (opts && opts.letterSize!=null) ? opts.letterSize : (groupMeta.letterSize!=null ? groupMeta.letterSize : 1);
-        const letterSpacing = (opts && opts.letterSpacing!=null) ? opts.letterSpacing : (groupMeta.letterSpacing!=null ? groupMeta.letterSpacing : 0.15);
+        const letterSpacing = (opts && opts.letterSpacing!=null) ? opts.letterSpacing : (groupMeta.letterSpacing!=null ? groupMeta.letterSpacing : -0.40);
         const spaceWidth = (opts && opts.spaceWidth!=null) ? opts.spaceWidth : (groupMeta.spaceWidth!=null ? groupMeta.spaceWidth : 0.6);
         const thickness = (opts && opts.thickness!=null) ? opts.thickness : (groupMeta.thickness!=null ? groupMeta.thickness : 0.001);
         const materialType = (opts && opts.materialType) || groupMeta.materialType || 'Concrete';
@@ -20187,7 +20186,7 @@ window.textSystem = {
                     text: '[unknown]', // will be inferred?
                     fontFamily: this.currentFontFamily,
                     letterSize: sample ? sample.scale.x : 1,
-                    letterSpacing: 0.15,
+                    letterSpacing: -0.40,
                     spaceWidth: 0.6,
                     thickness: sample ? sample.scale.z : 0.05,
                     materialType: sample ? sample.userData.materialType : 'Concrete',
@@ -20232,7 +20231,7 @@ function initTextEngine(){
         const defaults = {
             fontFamily: textSystem.currentFontFamily,
             letterSize: 1,
-            letterSpacing: 0.15,
+            letterSpacing: -0.40,
             spaceWidth: 0.6,
             thickness: 0.001, // spec says 0.001 but 0.05 more visible; we use 0.05 and allow adjustment
             materialType: (typeof this.getCurrentBrushSettings==='function' ? this.getCurrentBrushSettings().matT : 'Concrete'),
@@ -20468,7 +20467,7 @@ function initTextEngine(){
                             text: txt,
                             fontFamily: sample.userData._fontFamily || textSystem.currentFontFamily,
                             letterSize: sample.scale.x,
-                            letterSpacing: 0.15,
+                            letterSpacing: -0.40,
                             spaceWidth: 0.6,
                             thickness: sample.scale.z,
                             materialType: sample.userData.materialType||'Concrete',
@@ -20609,5 +20608,6 @@ document.addEventListener('DOMContentLoaded', () => {
 window.spawnText = (txt)=> window.engine && window.engine.addText && window.engine.addText(txt);
 
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a26e424b789c2f2b',t:'MTc4NjAyMTU4Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f"}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a270e6a84b91c9ed',t:'MTc4NjA0OTI5MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
