@@ -11820,9 +11820,18 @@ void main(){
             const gbPosX = pos.x;
             const gbPosY = pos.y;
             const gbPosZ = -pos.z;
-            const gbRotX = gbEuler.x;
-            const gbRotY = gbEuler.y;
-            const gbRotZ = gbEuler.z;
+            let gbRotX = gbEuler.x;
+            let gbRotY = gbEuler.y;
+            let gbRotZ = gbEuler.z;
+            // GoreBox displays the opposite face of these ultra-thin XY
+            // glyph cubes. Its face UV winding rotates that face by 180°;
+            // correct only the exported transform, leaving the editor and
+            // saved project orientation unchanged.
+            if (b.userData.shapeType === "text" || b.userData.textGroupId) {
+                gbRotY += 180;
+                while (gbRotY > 180) gbRotY -= 360;
+                while (gbRotY < -180) gbRotY += 360;
+            }
             mapData.cubes.push({
                 name: "MapCube",
                 tag: gbTag,
@@ -19718,7 +19727,9 @@ window.textSystem = {
         // For characters like 'g','y','p' need proper baseline – use middle
         ctx.fillText(ch, SIZE/2, SIZE/2 + SIZE*0.055);
 
-        // Optional: ensure we have some padding – already transparent
+        // Keep the source glyph upright. GoreBox's opposite face is handled
+        // in serializeToGoreBoxFormat() with a 180° export-only correction;
+        // changing the PNG itself would also break already saved textures.
         return canvas.toDataURL('image/png');
     },
 
@@ -20250,27 +20261,9 @@ function initTextEngine(){
         // Create cubes via rebuild logic but without old members
         // Create origin and quat
         const origin = this.getShapeOrigin ? this.getShapeOrigin() : new window.THREE.Vector3(0,1,0);
-        const quat = new window.THREE.Quaternion(); // facing world axes, could face camera? Use camera direction to orient text to camera
-        // Better: orient text to face camera flat (billboard-like): rotate so that text plane faces camera
-        // We'll make text face camera's horizontal direction (yaw only) so it's readable
-        try{
-            if (this.camera){
-                const camPos = this.camera.position.clone();
-                const dir = origin.clone().sub(camPos);
-                dir.y = 0;
-                dir.normalize();
-                // Text forward is Z, we want text plane XY to face camera? The letter cubes thickness along Z, so front face is XY facing Z forward.
-                // To face camera, set quat so that local -Z (or +Z) points to camera.
-                // We'll lookAt from origin towards camera
-                const dummy = new window.THREE.Object3D();
-                dummy.position.copy(origin);
-                dummy.lookAt(camPos);
-                // dummy's -Z points to camera? lookAt makes -Z towards target, but we want front of cube (maybe +Z) towards camera?
-                // Let's use dummy.quaternion as base, then rotate 180 around Y to make front face camera
-                quat.copy(dummy.quaternion);
-                // Box faces both sides, so either is fine
-            }
-        }catch(e){}
+        // Spawn text in world orientation, never inheriting the camera tilt.
+        // The whole text group can still be rotated later with the gizmo.
+        const quat = new window.THREE.Quaternion();
         const scaleVec = new window.THREE.Vector3(1,1,1);
         // For spawning we bypass rebuildGroup (which expects old members), so we directly create cubes
         // Use similar logic to rebuildGroup but with explicit origin/quat
@@ -20616,5 +20609,5 @@ document.addEventListener('DOMContentLoaded', () => {
 window.spawnText = (txt)=> window.engine && window.engine.addText && window.engine.addText(txt);
 
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a26e1303cd8aaca5',t:'MTc4NjAxOTY1MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a26e424b789c2f2b',t:'MTc4NjAyMTU4Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
