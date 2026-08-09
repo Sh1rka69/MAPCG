@@ -5426,6 +5426,15 @@ function getFallbackGoreBoxTag(materialType) {
 
 const PROCEDURAL_TEXTURE_KEYS = new Set([ "grid", "plain", "dark", "Glass", "GBWater" ]);
 
+function extFromDataUrl(dataUrl) {
+    const m = /^data:image\/([a-zA-Z0-9.+-]+);base64,/.exec(dataUrl || "");
+    if (!m) return "png";
+    const mime = m[1].toLowerCase();
+    if (mime === "jpeg" || mime === "jpg") return "jpg";
+    if (mime === "png" || mime === "webp" || mime === "gif" || mime === "bmp") return mime;
+    return "png";
+}
+
 function resolveGoreBoxMaterialName(textureKey, materialType) {
     const tex = canonicalTextureKey(textureKey);
     return PROCEDURAL_TEXTURE_KEYS.has(tex) ? getFallbackGoreBoxMaterialName(materialType || "Concrete") : tex;
@@ -11506,9 +11515,36 @@ void main(){
         }
         let doneFaces = 0;
         const newDecalDefs = [];
+        const bakedEnvMapStates = new Map;
+        const stripEnvMapForBake = mat => {
+            if (!mat || bakedEnvMapStates.has(mat)) return;
+            if (!mat.envMap) return;
+            bakedEnvMapStates.set(mat, {
+                envMap: mat.envMap,
+                envMapIntensity: mat.envMapIntensity
+            });
+            mat.envMap = null;
+            mat.envMapIntensity = 0;
+            mat.needsUpdate = true;
+        };
+        const restoreEnvMapsAfterBake = () => {
+            bakedEnvMapStates.forEach((state, mat) => {
+                mat.envMap = state.envMap;
+                mat.envMapIntensity = state.envMapIntensity;
+                mat.needsUpdate = true;
+            });
+            bakedEnvMapStates.clear();
+        };
         try {
             for (const cube of litCubes) {
                 applyShadowOnlyToOthers(cube);
+                // Reflections (skybox/CubeCamera envMap) blow out the bake:
+                // the ortho camera stares straight at the face, so the
+                // reflection fills the whole texture instead of a subtle
+                // glint. Lighting itself (lights/shadows/AO) is untouched.
+                if (cube.material) {
+                    if (Array.isArray(cube.material)) cube.material.forEach(stripEnvMapForBake); else stripEnvMapForBake(cube.material);
+                }
                 cube.getWorldPosition(tmpPos);
                 cube.getWorldQuaternion(tmpQuat);
                 cube.getWorldScale(tmpScale);
@@ -11615,6 +11651,7 @@ void main(){
                 restoreOtherBlocks();
             }
         } finally {
+            restoreEnvMapsAfterBake();
             renderer.setRenderTarget(prevRenderTarget);
             renderer.shadowMap.autoUpdate = prevShadowAutoUpdate;
             renderer.toneMapping = prevToneMapping;
@@ -13970,7 +14007,12 @@ window.uiManager = {
                 const tex = activeProjectCustomTextures[key];
                 if (tex.userData?.originalDataUrl) {
                     const base64Data = tex.userData.originalDataUrl.split(",")[1];
-                    if (base64Data) customTexFolder.file(tex.userData.originalName, base64Data, {
+                    // GoreBox resolves a cube's texture by looking up the
+                    // file named after MapData.json's "materialName" (== key
+                    // here), not by the human-readable original filename.
+                    // Saving under originalName silently breaks the lookup.
+                    const fileExt = extFromDataUrl(tex.userData.originalDataUrl);
+                    if (base64Data) customTexFolder.file(`${key}.${fileExt}`, base64Data, {
                         base64: true
                     });
                 }
@@ -14033,7 +14075,11 @@ window.uiManager = {
                 const tex = activeProjectCustomTextures[key];
                 if (tex.userData?.originalDataUrl) {
                     const base64Data = tex.userData.originalDataUrl.split(",")[1];
-                    if (base64Data) customTexFolder.file(tex.userData.originalName, base64Data, {
+                    // Same materialName-based lookup as the plain ZIP export;
+                    // any cube not covered by the bake (e.g. water) still
+                    // needs to resolve its texture by key, not filename.
+                    const fileExt = extFromDataUrl(tex.userData.originalDataUrl);
+                    if (base64Data) customTexFolder.file(`${key}.${fileExt}`, base64Data, {
                         base64: true
                     });
                 }
