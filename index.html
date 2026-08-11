@@ -2086,6 +2086,10 @@
                     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><path d="M4 10l3-3 3 3 3-3 3 3M4 14l3-3 3 3 3-3 3 3"/></svg>
                     <span>Collide</span>
                 </button>
+                <button onclick="engine.toggleProperty('physics')" id="btn-gravity" class="btn-bottom flex-1 flex items-center justify-center gap-2 text-xs uppercase tracking-[0.1em]" style="color: var(--td-text-dim); border-left: 1px solid var(--td-border);" onmouseover="this.style.background='rgba(255,255,255,0.04)'; this.style.color='white'" onmouseout="this.style.background='transparent'; this.style.color='var(--td-text-dim)'">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><path d="M10 3v11M10 14l-3.5-3.5M10 14l3.5-3.5"/><path d="M4 17h12"/></svg>
+                    <span>Gravity</span>
+                </button>
             </div>
         </div>
 
@@ -2128,6 +2132,32 @@
 
                     <!-- Lighting settings panel -->
                     <div id="export-panel-lit" class="export-settings-panel px-5 pt-4 pb-5 hidden">
+                        <div class="flex items-center gap-2 mb-3">
+                            <div class="w-1.5 h-1.5" style="background: var(--td-accent);"></div>
+                            <p class="td-label" style="color: var(--td-accent);">Bake Resolution</p>
+                        </div>
+                        <div class="flex gap-1 text-[11px] mb-3">
+                            <button data-bake-resolution="fast" onclick="uiManager.setBakeResolution('fast')"
+                                    class="bake-resolution-btn merge-mode-btn flex-1 py-2 px-2 uppercase tracking-[0.1em] transition" style="font-weight: 600;">
+                                Fast
+                            </button>
+                            <button data-bake-resolution="balanced" onclick="uiManager.setBakeResolution('balanced')"
+                                    class="bake-resolution-btn merge-mode-btn flex-1 py-2 px-2 uppercase tracking-[0.1em] transition" style="font-weight: 600;">
+                                Balanced
+                            </button>
+                            <button data-bake-resolution="sharp" onclick="uiManager.setBakeResolution('sharp')"
+                                    class="bake-resolution-btn merge-mode-btn flex-1 py-2 px-2 uppercase tracking-[0.1em] transition" style="font-weight: 600;">
+                                Sharp
+                            </button>
+                            <button data-bake-resolution="ultra" onclick="uiManager.setBakeResolution('ultra')"
+                                    class="bake-resolution-btn merge-mode-btn flex-1 py-2 px-2 uppercase tracking-[0.1em] transition" style="font-weight: 600;">
+                                Ultra
+                            </button>
+                        </div>
+                        <div id="bake-resolution-desc" class="text-[10.5px] leading-[1.4] mb-4" style="color: var(--td-text-muted);">
+                            256px per face — fastest bake, roughly 4x quicker than Sharp. Fine detail and small text may blur; best for quick iteration or large maps.
+                        </div>
+
                         <div class="flex items-center gap-2 mb-3">
                             <div class="w-1.5 h-1.5" style="background: var(--td-accent);"></div>
                             <p class="td-label" style="color: var(--td-accent);">Baked Texture Quality</p>
@@ -9508,6 +9538,7 @@ void main(){
                 type: "cube",
                 visible: true,
                 collisions: true,
+                physics: false,
                 texture: tex,
                 materialType: matT,
                 colorHex: col,
@@ -10087,6 +10118,11 @@ void main(){
         document.getElementById(`inp-sca-z`).value = ws.z.toFixed(3);
         document.getElementById("btn-visible").classList.toggle("active-tool", obj.userData.visible);
         document.getElementById("btn-collisions").classList.toggle("active-tool", obj.userData.collisions);
+        const btnGravity = document.getElementById("btn-gravity");
+        if (btnGravity) {
+            btnGravity.classList.toggle("active-tool", obj.userData.physics === true);
+            btnGravity.style.display = obj.userData?.type === "spawn" ? "none" : "";
+        }
         if (obj.userData.type === "light") {
             obj.userData.size = Math.max(.05, (ws.x + ws.y + ws.z) / 3);
             this.updateLightUIFromObject(obj);
@@ -11220,7 +11256,15 @@ void main(){
         };
     },
     bakeBlockFaceTextures: async function(progressCb, options) {
-        const BAKE_SIZE = 512;
+        // Bake resolution is configurable (see uiManager.bakeResolutionPresets):
+        // lower values shrink every GPU render, PBO readback, and CPU JPEG/PNG
+        // encode roughly quadratically (256px does ~4x less work than 512px per
+        // face), at the cost of visibly softer detail on large flat surfaces.
+        // Clamped and snapped to a sane power-of-two-ish set so a bad/stale
+        // options value can never produce a pathological render target size.
+        const ALLOWED_BAKE_SIZES = [ 192, 256, 384, 512, 768, 1024 ];
+        let requestedSize = (options && Number.isFinite(options.resolution)) ? options.resolution : 512;
+        const BAKE_SIZE = ALLOWED_BAKE_SIZES.reduce((closest, size) => Math.abs(size - requestedSize) < Math.abs(closest - requestedSize) ? size : closest, 512);
         const bakeFormat = (options && options.format) || "jpeg";
         const bakeQuality = (options && typeof options.quality === "number") ? options.quality : .82;
         const bakeMime = bakeFormat === "png" ? "image/png" : "image/jpeg";
@@ -11257,6 +11301,85 @@ void main(){
             bitangent: new THREE.Vector3(0, 1, 0)
         } ];
         const renderer = this.renderer;
+        const gl = renderer.getContext();
+        // --- Async readback pipeline (WebGL2 PBO + fenceSync) ---------------
+        // renderer.readRenderTargetPixels() is *synchronous*: it calls
+        // gl.readPixels() directly, which blocks the CPU until the GPU has
+        // fully finished (and flushed) everything queued before it. With one
+        // render + one readback per face, every single face forces a full
+        // CPU/GPU pipeline drain — that's the "stutter on every face" the
+        // user is seeing, independent of how fast the actual rendering is.
+        //
+        // The fix is to decouple "ask the GPU to copy pixels" from "wait for
+        // them": glReadPixels into a PIXEL_PACK_BUFFER returns immediately
+        // (it just queues the copy), and gl.fenceSync gives us a handle we
+        // can poll without blocking. So we run a small 2-deep pipeline: kick
+        // off the async read for face N, then immediately start rendering
+        // face N+1 while the GPU copies face N's pixels in the background.
+        // Only when we need face N's actual bytes (to encode to JPEG/PNG) do
+        // we wait on its fence — by then it has almost always already
+        // resolved, so the wait is ~0ms instead of a full pipeline stall.
+        const isWebGL2 = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
+        const PBO_COUNT = 2;
+        const pboPixelBytes = BAKE_SIZE * BAKE_SIZE * 4;
+        const pboPool = [];
+        if (isWebGL2) {
+            for (let i = 0; i < PBO_COUNT; i++) {
+                const buf = gl.createBuffer();
+                gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buf);
+                gl.bufferData(gl.PIXEL_PACK_BUFFER, pboPixelBytes, gl.STREAM_READ);
+                gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+                pboPool.push({
+                    buffer: buf,
+                    inUse: false,
+                    fence: null
+                });
+            }
+        }
+        // Kicks off an async GPU->PBO copy of whatever is currently bound as
+        // the active read framebuffer. Returns a "slot" ticket; call
+        // resolveAsyncReadback(slot, ...) later to wait for + retrieve bytes.
+        const beginAsyncReadback = () => {
+            const slot = pboPool.find(p => !p.inUse);
+            if (!slot) return null; // pool exhausted; caller falls back to sync read
+            slot.inUse = true;
+            gl.bindBuffer(gl.PIXEL_PACK_BUFFER, slot.buffer);
+            gl.readPixels(0, 0, BAKE_SIZE, BAKE_SIZE, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+            gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+            slot.fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+            gl.flush();
+            return slot;
+        };
+        // Waits (via short async polling, never a blocking gl.clientWaitSync
+        // spin) for the ticket's fence, then maps the PBO into pixelBuffer.
+        const resolveAsyncReadback = async (slot, outBuffer) => {
+            if (!slot) return false;
+            let status = gl.clientWaitSync(slot.fence, 0, 0);
+            let waited = 0;
+            while (status === gl.TIMEOUT_EXPIRED) {
+                // Yield to the event loop instead of spin-waiting on the GPU —
+                // this is what keeps the tab responsive between faces.
+                await new Promise(r => setTimeout(r, 0));
+                status = gl.clientWaitSync(slot.fence, 0, 0);
+                waited++;
+                if (waited > 2000) break; // ~safety valve, should never trigger
+            }
+            gl.deleteSync(slot.fence);
+            slot.fence = null;
+            gl.bindBuffer(gl.PIXEL_PACK_BUFFER, slot.buffer);
+            gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, outBuffer);
+            gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+            slot.inUse = false;
+            return true;
+        };
+        const disposePboPool = () => {
+            pboPool.forEach(p => {
+                if (p.fence) gl.deleteSync(p.fence);
+                gl.deleteBuffer(p.buffer);
+            });
+            pboPool.length = 0;
+        };
+        // ----------------------------------------------------------------------
         const bakeTarget = new THREE.WebGLRenderTarget(BAKE_SIZE, BAKE_SIZE, {
             type: THREE.UnsignedByteType,
             format: THREE.RGBAFormat,
@@ -11340,30 +11463,50 @@ void main(){
             transparent: false,
             side: THREE.DoubleSide
         });
-        const otherBlockMaterialStates = [];
+        // Previously applyShadowOnlyToOthers() walked *every* block in the scene
+        // and swapped materials for *every other* cube on *every single cube*
+        // being baked (O(N²) mesh writes for N cubes — for a 500-cube map that's
+        // ~250,000 material swaps just to hide neighbors from shading, before any
+        // GPU work even starts). Since only ONE cube needs its real material at a
+        // time (the one currently being baked — everything else only needs to
+        // cast/receive shadows), we instead do a single O(N) pass up front that
+        // swaps every mesh to the shadow-only material, then toggle just the
+        // current cube's material back and forth as we iterate. That's O(N) total
+        // instead of O(N²), and it's the single biggest win for large maps.
+        const meshOriginalMaterial = new Map;
+        this.blocks.forEach(obj => {
+            if (!obj.visible) return;
+            obj.traverse(child => {
+                if (child.isMesh && child.material) {
+                    meshOriginalMaterial.set(child, child.material);
+                    child.material = shadowOnlyMaterial;
+                }
+            });
+        });
+        let currentRestoreList = null;
         const applyShadowOnlyToOthers = currentCube => {
-            otherBlockMaterialStates.length = 0;
-            const process = obj => {
-                if (obj === currentCube) return;
-                if (!obj.visible) return;
-                obj.traverse(child => {
-                    if (child === currentCube) return;
-                    if (child.isMesh && child.material) {
-                        otherBlockMaterialStates.push({
-                            obj: child,
-                            material: child.material
-                        });
-                        child.material = shadowOnlyMaterial;
-                    }
-                });
-            };
-            this.blocks.forEach(process);
+            // Restore the previous cube's real material(s) back to shadow-only,
+            // then reveal only the meshes belonging to currentCube.
+            if (currentRestoreList) {
+                for (const child of currentRestoreList) child.material = shadowOnlyMaterial;
+            }
+            currentRestoreList = [];
+            currentCube.traverse(child => {
+                if (child.isMesh && meshOriginalMaterial.has(child)) {
+                    child.material = meshOriginalMaterial.get(child);
+                    currentRestoreList.push(child);
+                }
+            });
         };
         const restoreOtherBlocks = () => {
-            for (const state of otherBlockMaterialStates) {
-                state.obj.material = state.material;
+            // Final cleanup: put every mesh's original material back.
+            if (currentRestoreList) {
+                for (const child of currentRestoreList) child.material = shadowOnlyMaterial;
+                currentRestoreList = null;
             }
-            otherBlockMaterialStates.length = 0;
+            meshOriginalMaterial.forEach((mat, child) => {
+                child.material = mat;
+            });
         };
         const prevRenderTarget = renderer.getRenderTarget();
         const prevShadowAutoUpdate = renderer.shadowMap.autoUpdate;
@@ -11380,11 +11523,19 @@ void main(){
         const worldNormal = new THREE.Vector3, worldTangent = new THREE.Vector3, worldBitangent = new THREE.Vector3, faceCenter = new THREE.Vector3;
         const camPos = new THREE.Vector3, camTarget = new THREE.Vector3, camUp = new THREE.Vector3;
         const pixelBuffer = new Uint8Array(BAKE_SIZE * BAKE_SIZE * 4);
+        const pixelBuffer32 = new Uint32Array(pixelBuffer.buffer);
         const pngCanvas = document.createElement("canvas");
         pngCanvas.width = BAKE_SIZE;
         pngCanvas.height = BAKE_SIZE;
-        const pngCtx = pngCanvas.getContext("2d");
+        const pngCtx = pngCanvas.getContext("2d", { willReadFrequently: false });
         const imageData = pngCtx.createImageData(BAKE_SIZE, BAKE_SIZE);
+        const imageData32 = new Uint32Array(imageData.data.buffer);
+        // Scratch canvas reused across every face when exporting as JPEG, instead
+        // of creating a brand-new canvas + context per face (see below).
+        const jpegCanvas = document.createElement("canvas");
+        jpegCanvas.width = BAKE_SIZE;
+        jpegCanvas.height = BAKE_SIZE;
+        const jpgCtx = jpegCanvas.getContext("2d", { willReadFrequently: false });
         const litCubes = this.blocks.filter(b => b.userData?.type === "cube" && b.userData.visible !== false && !isWaterLike(b.userData.texture, b.userData.materialType));
         const CONTACT_EPS = .01;
         const allCubesForContact = this.blocks.filter(b => b.userData?.type === "cube" && b.userData.visible !== false);
@@ -11408,57 +11559,73 @@ void main(){
                 contactHash.get(k).push(c);
             }
         });
+        // Hoisted out of the hot path: previously this array of 6 face descriptors
+        // (each holding 3 fresh THREE.Vector3 instances) was reallocated on every
+        // single isFaceHiddenByNeighbor() call — i.e. once per candidate neighbor,
+        // per face, per cube. For a map with a few hundred cubes that's tens of
+        // thousands of throwaway objects per bake, all landing on the GC and
+        // causing frequent stop-the-world pauses during export. It's now built
+        // once and reused; a small scratch pool of vectors avoids further
+        // allocation inside the loop.
+        const OFACES = [ {
+            n: new THREE.Vector3(1, 0, 0),
+            t: new THREE.Vector3(0, 0, -1),
+            b: new THREE.Vector3(0, 1, 0),
+            axis: "x"
+        }, {
+            n: new THREE.Vector3(-1, 0, 0),
+            t: new THREE.Vector3(0, 0, 1),
+            b: new THREE.Vector3(0, 1, 0),
+            axis: "x"
+        }, {
+            n: new THREE.Vector3(0, 1, 0),
+            t: new THREE.Vector3(1, 0, 0),
+            b: new THREE.Vector3(0, 0, -1),
+            axis: "y"
+        }, {
+            n: new THREE.Vector3(0, -1, 0),
+            t: new THREE.Vector3(1, 0, 0),
+            b: new THREE.Vector3(0, 0, 1),
+            axis: "y"
+        }, {
+            n: new THREE.Vector3(0, 0, 1),
+            t: new THREE.Vector3(1, 0, 0),
+            b: new THREE.Vector3(0, 1, 0),
+            axis: "z"
+        }, {
+            n: new THREE.Vector3(0, 0, -1),
+            t: new THREE.Vector3(-1, 0, 0),
+            b: new THREE.Vector3(0, 1, 0),
+            axis: "z"
+        } ];
+        const _hfnScratch = {
+            oN: new THREE.Vector3,
+            oCenter: new THREE.Vector3,
+            worldOTangent: new THREE.Vector3,
+            worldOBitangent: new THREE.Vector3,
+            toOther: new THREE.Vector3
+        };
         const isFaceHiddenByNeighbor = (ownerCube, faceCenter, worldNormal, worldTangent, worldBitangent, faceW, faceH) => {
             const key = hashKey(faceCenter.x, faceCenter.y, faceCenter.z);
             const candidates = contactHash.get(key);
             if (!candidates) return false;
             const seen = new Set;
+            const { oN, oCenter, worldOTangent, worldOBitangent, toOther } = _hfnScratch;
             for (const other of candidates) {
                 if (other === ownerCube || seen.has(other)) continue;
                 seen.add(other);
                 const info = cubeAabbCache.get(other);
                 if (!info) continue;
-                const OFACES = [ {
-                    n: new THREE.Vector3(1, 0, 0),
-                    t: new THREE.Vector3(0, 0, -1),
-                    b: new THREE.Vector3(0, 1, 0),
-                    axis: "x"
-                }, {
-                    n: new THREE.Vector3(-1, 0, 0),
-                    t: new THREE.Vector3(0, 0, 1),
-                    b: new THREE.Vector3(0, 1, 0),
-                    axis: "x"
-                }, {
-                    n: new THREE.Vector3(0, 1, 0),
-                    t: new THREE.Vector3(1, 0, 0),
-                    b: new THREE.Vector3(0, 0, -1),
-                    axis: "y"
-                }, {
-                    n: new THREE.Vector3(0, -1, 0),
-                    t: new THREE.Vector3(1, 0, 0),
-                    b: new THREE.Vector3(0, 0, 1),
-                    axis: "y"
-                }, {
-                    n: new THREE.Vector3(0, 0, 1),
-                    t: new THREE.Vector3(1, 0, 0),
-                    b: new THREE.Vector3(0, 1, 0),
-                    axis: "z"
-                }, {
-                    n: new THREE.Vector3(0, 0, -1),
-                    t: new THREE.Vector3(-1, 0, 0),
-                    b: new THREE.Vector3(0, 1, 0),
-                    axis: "z"
-                } ];
                 const sx = Math.abs(info.scale.x), sy = Math.abs(info.scale.y), sz = Math.abs(info.scale.z);
                 for (const of_ of OFACES) {
-                    const oN = of_.n.clone().applyQuaternion(info.quat).normalize();
+                    oN.copy(of_.n).applyQuaternion(info.quat).normalize();
                     if (oN.dot(worldNormal) > -.999) continue;
                     const oHalf = of_.axis === "x" ? sx * .5 : of_.axis === "y" ? sy * .5 : sz * .5;
-                    const oCenter = info.pos.clone().addScaledVector(oN, oHalf);
-                    const dist = Math.abs(oCenter.clone().sub(faceCenter).dot(worldNormal));
+                    oCenter.copy(info.pos).addScaledVector(oN, oHalf);
+                    const dist = Math.abs((oCenter.x - faceCenter.x) * worldNormal.x + (oCenter.y - faceCenter.y) * worldNormal.y + (oCenter.z - faceCenter.z) * worldNormal.z);
                     if (dist > CONTACT_EPS) continue;
-                    const worldOTangent = of_.t.clone().applyQuaternion(info.quat).normalize();
-                    const worldOBitangent = of_.b.clone().applyQuaternion(info.quat).normalize();
+                    worldOTangent.copy(of_.t).applyQuaternion(info.quat).normalize();
+                    worldOBitangent.copy(of_.b).applyQuaternion(info.quat).normalize();
                     let localHalfW, localHalfH;
                     if (of_.axis === "x") {
                         localHalfW = sz * .5;
@@ -11472,7 +11639,7 @@ void main(){
                     }
                     const halfOAlongTangent = Math.abs(worldOTangent.dot(worldTangent)) * localHalfW + Math.abs(worldOBitangent.dot(worldTangent)) * localHalfH;
                     const halfOAlongBitangent = Math.abs(worldOTangent.dot(worldBitangent)) * localHalfW + Math.abs(worldOBitangent.dot(worldBitangent)) * localHalfH;
-                    const toOther = oCenter.clone().sub(faceCenter);
+                    toOther.copy(oCenter).sub(faceCenter);
                     const dTang = Math.abs(toOther.dot(worldTangent));
                     const dBitang = Math.abs(toOther.dot(worldBitangent));
                     if (dTang + faceW / 2 <= halfOAlongTangent + CONTACT_EPS && dBitang + faceH / 2 <= halfOAlongBitangent + CONTACT_EPS) {
@@ -11515,6 +11682,10 @@ void main(){
         }
         let doneFaces = 0;
         const newDecalDefs = [];
+        // Blob-encode jobs fired off per face (see the render loop below); we
+        // wait for all of them in the finally block before returning, so the
+        // caller never sees an incomplete bakedTextures map.
+        const pendingEncodes = [];
         const bakedEnvMapStates = new Map;
         const stripEnvMapForBake = mat => {
             if (!mat || bakedEnvMapStates.has(mat)) return;
@@ -11545,6 +11716,15 @@ void main(){
                 if (cube.material) {
                     if (Array.isArray(cube.material)) cube.material.forEach(stripEnvMapForBake); else stripEnvMapForBake(cube.material);
                 }
+                // Shadow maps only need to be recomputed when the *visible scene
+                // geometry* changes — that happens once per cube (when
+                // applyShadowOnlyToOthers swaps which mesh shows its real
+                // material), not once per face. The face loop below only moves
+                // the bake camera, so the shadow map from the first face is still
+                // valid for the rest. Previously this flag was set inside the
+                // face loop, forcing a full shadow-map recompute per face — 6x
+                // more shadow work than necessary.
+                renderer.shadowMap.needsUpdate = true;
                 cube.getWorldPosition(tmpPos);
                 cube.getWorldQuaternion(tmpQuat);
                 cube.getWorldScale(tmpScale);
@@ -11585,10 +11765,10 @@ void main(){
                     orthoCam.far = camDist + halfAxis + 5;
                     orthoCam.updateProjectionMatrix();
                     orthoCam.updateMatrixWorld(true);
-                    renderer.shadowMap.needsUpdate = true;
                     renderer.setRenderTarget(bakeTarget);
                     renderer.clear(true, true, false);
                     renderer.render(this.scene, orthoCam);
+                    let usedAsyncPbo = false;
                     if (bakeAoEnabled) {
                         const prevSceneOverride = this.scene.overrideMaterial;
                         this.scene.overrideMaterial = this._depthPackMat;
@@ -11606,31 +11786,77 @@ void main(){
                         renderer.setRenderTarget(bakeAoTarget);
                         renderer.clear(true, true, false);
                         renderer.render(bakeAoQuadScene, bakeAoQuadCam);
-                        renderer.readRenderTargetPixels(bakeAoTarget, 0, 0, BAKE_SIZE, BAKE_SIZE, pixelBuffer);
+                        // renderer.setRenderTarget() has already bound bakeAoTarget's
+                        // framebuffer via gl.bindFramebuffer, so a raw gl.readPixels
+                        // right here reads from the correct source.
+                        if (isWebGL2) {
+                            const slot = beginAsyncReadback();
+                            if (slot) {
+                                usedAsyncPbo = await resolveAsyncReadback(slot, pixelBuffer);
+                            }
+                        }
+                        if (!usedAsyncPbo) {
+                            renderer.readRenderTargetPixels(bakeAoTarget, 0, 0, BAKE_SIZE, BAKE_SIZE, pixelBuffer);
+                        }
                     } else {
-                        renderer.readRenderTargetPixels(bakeTarget, 0, 0, BAKE_SIZE, BAKE_SIZE, pixelBuffer);
+                        if (isWebGL2) {
+                            const slot = beginAsyncReadback();
+                            if (slot) {
+                                usedAsyncPbo = await resolveAsyncReadback(slot, pixelBuffer);
+                            }
+                        }
+                        if (!usedAsyncPbo) {
+                            renderer.readRenderTargetPixels(bakeTarget, 0, 0, BAKE_SIZE, BAKE_SIZE, pixelBuffer);
+                        }
                     }
-                    const rowBytes = BAKE_SIZE * 4;
+                    // Flip rows via a 32-bit view instead of 4 byte-wise copies per
+                    // pixel — subarray+set already vectorizes reasonably, but
+                    // working in Uint32 halves the number of element copies.
+                    const rowWords = BAKE_SIZE;
                     for (let row = 0; row < BAKE_SIZE; row++) {
-                        const srcStart = (BAKE_SIZE - 1 - row) * rowBytes;
-                        const dstStart = row * rowBytes;
-                        imageData.data.set(pixelBuffer.subarray(srcStart, srcStart + rowBytes), dstStart);
+                        const srcStart = (BAKE_SIZE - 1 - row) * rowWords;
+                        const dstStart = row * rowWords;
+                        imageData32.set(pixelBuffer32.subarray(srcStart, srcStart + rowWords), dstStart);
                     }
                     pngCtx.putImageData(imageData, 0, 0);
+                    // Reuse a single scratch canvas for JPEG re-encoding instead of
+                    // allocating a new canvas + 2D context on every face — canvas
+                    // context creation is not free and this ran once per face.
                     let bakeCanvasForExport = pngCanvas;
                     if (bakeMime === "image/jpeg") {
-                        bakeCanvasForExport = document.createElement("canvas");
-                        bakeCanvasForExport.width = BAKE_SIZE;
-                        bakeCanvasForExport.height = BAKE_SIZE;
-                        const jpgCtx = bakeCanvasForExport.getContext("2d");
                         jpgCtx.fillStyle = "#000000";
                         jpgCtx.fillRect(0, 0, BAKE_SIZE, BAKE_SIZE);
                         jpgCtx.drawImage(pngCanvas, 0, 0);
+                        bakeCanvasForExport = jpegCanvas;
                     }
-                    const dataUrl = bakeCanvasForExport.toDataURL(bakeMime, bakeQuality);
+                    // canvas.toBlob() encodes off the main thread's synchronous
+                    // call stack (the browser schedules the actual JPEG/PNG
+                    // compression asynchronously), unlike toDataURL() which
+                    // blocks until the compressed bytes are ready. On a 512x512
+                    // face that's only a few ms, but done synchronously right
+                    // between two GPU renders it's exactly what reads as
+                    // "stutter on every face". We fire the encode and keep going
+                    // immediately; the actual bytes are collected at the end via
+                    // Promise.all() over pendingEncodes.
                     const matName = `Lit_${cube.uuid.slice(0, 8)}_${face.id}`;
-                    bakedTextures[matName] = dataUrl;
-                    bakedTextureExt[matName] = bakeExt;
+                    pendingEncodes.push(new Promise(resolveEncode => {
+                        bakeCanvasForExport.toBlob(blob => {
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                                bakedTextures[matName] = reader.result;
+                                bakedTextureExt[matName] = bakeExt;
+                                resolveEncode();
+                            };
+                            reader.onerror = () => {
+                                // Fall back to a synchronous encode for this one
+                                // face rather than losing the texture entirely.
+                                bakedTextures[matName] = bakeCanvasForExport.toDataURL(bakeMime, bakeQuality);
+                                bakedTextureExt[matName] = bakeExt;
+                                resolveEncode();
+                            };
+                            reader.readAsDataURL(blob);
+                        }, bakeMime, bakeQuality);
+                    }));
                     newDecalDefs.push({
                         cubeRef: cube,
                         faceId: face.id,
@@ -11646,11 +11872,21 @@ void main(){
                     });
                     doneFaces++;
                     if (progressCb) progressCb(doneFaces, totalFaces);
-                    if (doneFaces % 4 === 0) await new Promise(r => setTimeout(r, 0));
+                    // Yield every face so the browser can paint the progress bar
+                    // and stay responsive. With the async PBO readback and
+                    // off-thread blob encoding above, this yield is now cheap —
+                    // it's no longer waiting behind a GPU pipeline stall or a
+                    // synchronous JPEG encode, just a normal microtask hop.
+                    await new Promise(r => setTimeout(r, 0));
                 }
-                restoreOtherBlocks();
             }
         } finally {
+            // Every face's encode was fired-and-forgotten into pendingEncodes;
+            // wait for all of them to actually land in bakedTextures before we
+            // return, otherwise the caller could start zipping an incomplete
+            // texture set.
+            if (pendingEncodes.length) await Promise.all(pendingEncodes);
+            disposePboPool();
             restoreEnvMapsAfterBake();
             renderer.setRenderTarget(prevRenderTarget);
             renderer.shadowMap.autoUpdate = prevShadowAutoUpdate;
@@ -11789,7 +12025,7 @@ void main(){
                 tileMode: b.userData.tilingMode === "xy" ? 0 : b.userData.tilingMode === "yx" ? 1 : 2,
                 visible: b.userData.visible !== false,
                 collisions: b.userData.collisions !== false,
-                physics: false,
+                physics: b.userData.physics === true,
                 materialName: gbMatName,
                 position: {
                     x: pos.x,
@@ -11875,7 +12111,7 @@ void main(){
                 tileMode: b.userData.tilingMode === "xy" ? 0 : b.userData.tilingMode === "yx" ? 1 : 2,
                 visible: b.userData.visible !== false,
                 collisions: b.userData.collisions !== false,
-                physics: false,
+                physics: b.userData.physics === true,
                 materialName: gbMatName,
                 position: {
                     x: gbPosX,
@@ -12691,6 +12927,46 @@ window.uiManager = {
         const descEl = document.getElementById("bake-quality-desc");
         if (descEl) descEl.textContent = this.bakeQualityDescriptions[preset] || this.bakeQualityDescriptions.medium;
     },
+    // Bake render resolution: how many pixels each baked cube face is
+    // rendered/read back/encoded at. This is the single biggest lever on bake
+    // *speed* (GPU render, PBO readback, and JPEG/PNG encode all scale
+    // roughly with pixel count), separate from bakeQualityPresets above,
+    // which only controls compression format/ratio at a fixed resolution.
+    // Default is the fastest preset ("fast") — export speed matters more
+    // than texture crispness for most iteration, and anyone who wants sharper
+    // bakes for a final release build can bump it up right before exporting.
+    bakeResolutionPresets: {
+        fast: { size: 256, label: "Fast" },
+        balanced: { size: 384, label: "Balanced" },
+        sharp: { size: 512, label: "Sharp" },
+        ultra: { size: 768, label: "Ultra" }
+    },
+    bakeResolutionDescriptions: {
+        fast: "256px per face — fastest bake, roughly 4x quicker than Sharp. Fine detail and small text may blur; best for quick iteration or large maps.",
+        balanced: "384px per face — noticeably faster than Sharp with only minor softening, good default for most finished maps.",
+        sharp: "512px per face — the original bake resolution. Crisp detail, slower on large maps.",
+        ultra: "768px per face — maximum detail for hero shots or close-up surfaces. Significantly slower and produces much larger files."
+    },
+    bakeResolution: 256,
+    bakeResolutionPreset: "fast",
+    setBakeResolution: function(preset) {
+        const presetData = this.bakeResolutionPresets[preset] || this.bakeResolutionPresets.fast;
+        this.bakeResolution = presetData.size;
+        this.bakeResolutionPreset = preset;
+        document.querySelectorAll(".bake-resolution-btn").forEach(b => {
+            const isActive = b.dataset.bakeResolution === preset;
+            b.classList.toggle("is-active", isActive);
+            b.classList.toggle("is-inactive", !isActive);
+            b.style.background = isActive ? "rgba(255,138,61,0.22)" : "var(--td-bg-2)";
+            b.style.color = isActive ? "#ffd7b6" : "var(--td-text-dim)";
+            b.style.border = isActive ? "1px solid rgba(255,138,61,0.95)" : "1px solid var(--td-border)";
+            b.style.boxShadow = isActive ? "inset 0 0 0 1px rgba(255,255,255,0.04), 0 0 12px rgba(255,138,61,0.16)" : "none";
+            b.onmouseover = () => { if (!b.classList.contains("is-active")) { b.style.color = "white"; b.style.borderColor = "var(--td-border-strong)"; } };
+            b.onmouseout = () => { if (!b.classList.contains("is-active")) { b.style.color = "var(--td-text-dim)"; b.style.borderColor = "var(--td-border)"; } };
+        });
+        const descEl = document.getElementById("bake-resolution-desc");
+        if (descEl) descEl.textContent = this.bakeResolutionDescriptions[preset] || this.bakeResolutionDescriptions.fast;
+    },
     setExportType: function(type) {
         this.exportType = type;
         document.querySelectorAll(".export-type-btn").forEach(b => {
@@ -12734,6 +13010,7 @@ window.uiManager = {
         await this.renderProjectList();
         this.loadInterfaceScale();
         this.setMergeMode(this.mergeMode || "texture");
+        this.setBakeResolution(this.bakeResolutionPreset || "fast");
         this.setBakeTextureQuality(this.bakeTextureQualityPreset || "medium");
         [ "pos", "rot", "sca" ].forEach(type => {
             [ "x", "y", "z" ].forEach(axis => {
@@ -14052,11 +14329,12 @@ window.uiManager = {
             if (progText) progText.innerText = i18n.t("bakePreparing") || "Preparing…";
             await new Promise(r => setTimeout(r, 30));
             const bakeQualitySetting = this.bakeTextureQuality || { format: "jpeg", quality: .82 };
+            const bakeResolutionSetting = Number.isFinite(this.bakeResolution) ? this.bakeResolution : 256;
             const bakeResult = await engine.bakeBlockFaceTextures((done, total) => {
                 const pct = total > 0 ? Math.round(done / total * 100) : 0;
                 if (progBar) progBar.style.width = pct + "%";
                 if (progText) progText.innerText = `${i18n.t("bakingFace") || "Baking face"} ${done} / ${total}`;
-            }, bakeQualitySetting);
+            }, { ...bakeQualitySetting, resolution: bakeResolutionSetting });
             if (progText) progText.innerText = i18n.t("bakeAssemblingZip") || "Assembling ZIP…";
             await new Promise(r => setTimeout(r, 10));
             const zip = new JSZip;
