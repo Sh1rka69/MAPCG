@@ -2429,7 +2429,7 @@
                             </div>
                             <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
                                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-warn); flex-shrink:0; margin-top:1px;"><path d="M3 10a7 7 0 0114 0"/><circle cx="10" cy="10" r="2"/></svg>
-                                <div><b style="color: var(--td-text);">Graphics</b><br><span style="color: var(--td-text-dim);">Dynamic shadows, Bloom (glow), Corner Shadows (SSAO), Ray Tracing, water waves, texture/pixel smoothing, and an FPS counter. Quality is automatically reduced on mobile devices.</span></div>
+                                <div><b style="color: var(--td-text);">Graphics</b><br><span style="color: var(--td-text-dim);">Dynamic shadows, Bloom (glow), Corner Shadows (soft volumetric AO — recomputed only when the map changes), Ray Tracing, water waves, texture/pixel smoothing, and an FPS counter. Quality is automatically reduced on mobile devices.</span></div>
                             </div>
                             <div class="flex items-start gap-3 p-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
                                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--td-warn); flex-shrink:0; margin-top:1px;"><path d="M4 12a6 4 0 0112 0M6 15a4 3 0 018 0"/></svg>
@@ -3657,6 +3657,21 @@ window.historyManager = {
         // Skip no-op snapshots (identical state) so Undo never "does nothing".
         if (this.undoStack.length && this.undoStack[this.undoStack.length - 1] === serialized) return;
         this.undoStack.push(serialized);
+        // Corner-shadow (AO) invalidation: recompute the AO cache only when the
+        // geometry actually changed — env-only edits (sun angle, fog, weather)
+        // must not trigger an AO rebuild. A small deterministic hash of the
+        // block list is stored instead of the full JSON so undo memory stays flat.
+        try {
+            if (window.engine && typeof engine.markAODirty === "function") {
+                let _h = 5381;
+                const _blocksJson = JSON.stringify(state.blocks);
+                for (let i = 0; i < _blocksJson.length; i++) _h = ((_h << 5) + _h + _blocksJson.charCodeAt(i)) | 0;
+                if (this._lastAOFingerprint === undefined || _h !== this._lastAOFingerprint) {
+                    this._lastAOFingerprint = _h;
+                    engine.markAODirty();
+                }
+            }
+        } catch (e) {}
         if (this.undoStack.length > 50) this.undoStack.shift();
         this.redoStack = [];
         this.updateButtons();
@@ -6124,6 +6139,26 @@ const engine = {
     bloomPass: null,
     ssaoPass: null,
     dofPass: null,
+    // ── Corner-shadow (AO) cache ─────────────────────────────────────────────
+    // The expensive AO chain (depth → multi-octave sampling → bilateral blur)
+    // runs at HALF resolution into a persistent cache (_aoTargetA). It is
+    // rebuilt ONLY when the view or the scene actually changed:
+    //   • _aoDirty       — set whenever the map geometry changed (block added /
+    //                      removed / moved / retextured, scene loaded, undo/redo)
+    //   • camera motion  — SSAO is view-dependent, so any camera movement must
+    //                      refresh it (checked every frame, cheaply)
+    // Every other frame (idle camera + untouched scene) just composites the
+    // cached occlusion — near-zero per-frame AO cost.
+    _aoTargetA: null,
+    _aoTargetB: null,
+    _aoGenMat: null,
+    _aoGenScene: null,
+    _aoGenCam: null,
+    _aoBlurMat: null,
+    _aoBlurScene: null,
+    _aoBlurCam: null,
+    _aoCacheValid: false,
+    _aoDirty: true,
     _renderSkipFrames: 0,
     orbit: null,
     transformControl: null,
@@ -6717,52 +6752,332 @@ const engine = {
             const tanHalfFovY = 1 / this.camera.projectionMatrix.elements[5];
             const tanHalfFovX = 1 / this.camera.projectionMatrix.elements[0];
             if (this._depthPackMat) this._depthPackMat.uniforms.uFar.value = far;
-            [ this.ssaoPass ].forEach(pass => {
+            [ this.ssaoPass, this._aoGenMat ].forEach(pass => {
                 if (!pass || !pass.uniforms) return;
                 if (pass.uniforms.uFar) pass.uniforms.uFar.value = far;
                 if (pass.uniforms.uTanHalfFovX) pass.uniforms.uTanHalfFovX.value = tanHalfFovX;
                 if (pass.uniforms.uTanHalfFovY) pass.uniforms.uTanHalfFovY.value = tanHalfFovY;
             });
         };
-        const _aoShader = {
+        /* ═══════════════════════════════════════════════════════════════════════
+           CORNER SHADOWS — real-time (editor) path
+           ---------------------------------------------------------------
+           Old approach: one full-resolution pass every frame (6 samples,
+           no blur) — cheap-looking, grainy, hard-edged.
+
+           New approach — "soft volumetric AO" (GTAO/HBAO-style):
+             1. Depth is already packed at half-res (shared with DOF).
+             2. AO is SAMPLED at half-res into _aoTargetA with three octaves
+                (tight contact crease / mid bounce / wide ambient falloff)
+                and a soft exponential response curve.
+             3. A separable bilateral (depth-edge-stopped) Gaussian blur
+                smooths it into buttery, volumetric gradients without
+                halos across silhouettes.
+             4. A cheap full-res pass composites the cached occlusion onto
+                the colour buffer with depth-aware upsampling.
+           Caching: the whole sample+blur chain runs ONLY when the scene
+           changed (_aoDirty) or the camera moved — see updateCornerShadows()
+           and _aoNeedsRebuildNow(). While idle, every frame costs only the
+           lightweight composite pass.                                   */
+        const _aoHalfW = Math.floor(_cw / 2), _aoHalfH = Math.floor(_ch / 2);
+        this._aoTargetA = new THREE.WebGLRenderTarget(_aoHalfW, _aoHalfH, {
+            type: THREE.UnsignedByteType,
+            format: THREE.RGBAFormat,
+            depthBuffer: false,
+            minFilter: THREE.LinearFilter,
+            magFilter: THREE.LinearFilter
+        });
+        this._aoTargetA.texture.name = "AOCacheA";
+        this._aoTargetB = this._aoTargetA.clone();
+        this._aoTargetB.texture.name = "AOCacheB";
+
+        const _aoQuadGeo = new THREE.PlaneGeometry(2, 2);
+        const _aoFullVertex = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+        const _aoUnpackDepth = `
+            float unpackDepth(vec4 rgba){
+                const vec4 s = vec4(1.0/16777216.0, 1.0/65536.0, 1.0/256.0, 1.0);
+                return dot(rgba, s);
+            }
+            vec2 readDepth(vec2 uv){
+                vec4 raw = texture2D(tDepth, uv);
+                if (raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);
+                return vec2(unpackDepth(raw) * uFar, 0.0);
+            }
+        `;
+
+        /* ── Pass A: multi-octave AO sampling (half-res, writes raw occlusion) ── */
+        const _aoGenShader = {
             uniforms: {
-                tDiffuse: {
-                    value: null
-                },
-                tDepth: {
-                    value: null
-                },
-                resolution: {
-                    value: new THREE.Vector2(_cw, _ch)
-                },
-                uDepthResolution: {
-                    value: new THREE.Vector2(Math.floor(_cw / 2), Math.floor(_ch / 2))
-                },
-                intensity: {
-                    value: .55
-                },
-                bias: {
-                    value: .025
-                },
-                uFar: {
-                    value: this.camera.far
-                },
-                uTanHalfFovX: {
-                    value: 1
-                },
-                uTanHalfFovY: {
-                    value: 1
-                }
+                tDepth: { value: null },
+                resolution: { value: new THREE.Vector2(_aoHalfW, _aoHalfH) },
+                uDepthResolution: { value: new THREE.Vector2(_aoHalfW, _aoHalfH) },
+                uFar: { value: this.camera.far },
+                uTanHalfFovX: { value: 1 },
+                uTanHalfFovY: { value: 1 }
             },
-            vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-            fragmentShader: `\n                        precision highp float;\n                        uniform sampler2D tDiffuse;\n                        uniform sampler2D tDepth;\n                        uniform vec2      resolution;       /* full output size — aspect + IGN noise */\n                        uniform vec2      uDepthResolution; /* half-res depth texture — texel offsets */\n                        uniform float     intensity;\n                        uniform float     bias;\n                        uniform float     uFar;\n                        uniform float     uTanHalfFovX;\n                        uniform float     uTanHalfFovY;\n                        varying vec2 vUv;\n\n                        /* Unpacking лandnotйbutй глубandны andз RGBA8 (кросс-платформенbut, without hardware depth-textures) */\n                        float unpackDepth(vec4 rgba) {\n                            const vec4 bitShifts = vec4(1.0/16777216.0, 1.0/65536.0, 1.0/256.0, 1.0);\n                            return dot(rgba, bitShifts);\n                        }\n                        /* .x = лandnotйonя глубandon (view-space -Z, метры), .y = 1.0 if это «notбо» (notт геометрandand) */\n                        vec2 readDepth(vec2 uv) {\n                            vec4 raw = texture2D(tDepth, uv);\n                            if (raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);\n                            return vec2(unpackDepth(raw) * uFar, 0.0);\n                        }\n                        /* Reconstruct view-space position from UV + known linear depth */\n                        vec3 getViewPos(vec2 uv, float linZ) {\n                            vec2 ndc = uv * 2.0 - 1.0;\n                            return vec3(ndc.x * uTanHalfFovX * linZ, ndc.y * uTanHalfFovY * linZ, -linZ);\n                        }\n\n                        /* Interleaved Gradient Noise — temporally stable, no banding */\n                        float IGN(vec2 pix) {\n                            return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));\n                        }\n\n                        void main() {\n                            vec4  col  = texture2D(tDiffuse, vUv);\n                            vec2  centerD = readDepth(vUv);\n                            if (centerD.y > 0.5) { gl_FragColor = col; return; }\n                            \n                            // Safety: if AO intensity is very low, skip to avoid black screen\n                            if (intensity < 0.15) { gl_FragColor = col; return; }\n\n                            vec2  texel  = 1.0 / uDepthResolution; /* depth-tex res for correct neighbor offsets */\n                            float aspect = resolution.x / resolution.y;\n\n                            /* ── View-space position + depth ───────────────────────────────── */\n                            vec3  pos   = getViewPos(vUv, centerD.x);\n                            float depth = max(0.001, centerD.x);\n\n                            /* ── Stable normal reconstruction (view-space) ─────────────────────\n                               Previously used a hard if/else "best neighbour" pick based on which\n                               side had the smaller depth delta. On perfectly flat, coplanar seams\n                               (adjacent unit cubes sharing an edge) the L/R (or U/D) depth deltas\n                               are nearly identical — sub-pixel camera jitter between frames flips\n                               which side "wins" every frame, causing the reconstructed normal to\n                               jump discretely along cube seams. That produced moving dark bands\n                               that were not real corners. Fix: always use a symmetric central\n                               difference, but softly fall back toward the closer sample only when\n                               a real depth discontinuity (edge/corner) is detected, using a smooth\n                               weight instead of a hard branch — no more frame-to-frame flip. */\n                            vec2 dR  = readDepth(vUv + vec2( texel.x, 0.0));\n                            vec2 dL  = readDepth(vUv - vec2( texel.x, 0.0));\n                            vec2 dU  = readDepth(vUv + vec2(0.0,  texel.y));\n                            vec2 dDn = readDepth(vUv - vec2(0.0,  texel.y));\n\n                            vec3 pR = getViewPos(vUv + vec2( texel.x, 0.0), dR.x);\n                            vec3 pL = getViewPos(vUv - vec2( texel.x, 0.0), dL.x);\n                            vec3 pU = getViewPos(vUv + vec2(0.0,  texel.y), dU.x);\n                            vec3 pD = getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);\n\n                            /* Depth-discontinuity weight: 0 = hard edge (use single closer side),\n                               1 = flat / continuous (use symmetric central difference). A smooth\n                               transition between the two removes the per-frame flip entirely. */\n                            float edgeScale = max(0.001, centerD.x) * 0.06;\n                            float wx = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dR.x - dL.x));\n                            float wy = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dU.x - dDn.x));\n\n                            vec3 dXCentral = (pR - pL) * 0.5;\n                            vec3 dYCentral = (pU - pD) * 0.5;\n                            vec3 dXEdge = (abs(dR.x - centerD.x) < abs(centerD.x - dL.x)) ? (pR - pos) : (pos - pL);\n                            vec3 dYEdge = (abs(dU.x - centerD.x) < abs(centerD.x - dDn.x)) ? (pU - pos) : (pos - pD);\n\n                            vec3 dX = mix(dXEdge, dXCentral, wx);\n                            vec3 dY = mix(dYEdge, dYCentral, wy);\n\n                            vec3 N = normalize(cross(dX, dY));\n                            /* Ensure N points toward camera (+z in OpenGL view space) */\n                            if (N.z < 0.0) N = -N;\n\n                            /* ── Per-pixel rotation — IGN gives stable, uncorrelated noise ── */\n                            float rotA = IGN(floor(vUv * resolution)) * 6.28318530;\n\n                            /* ── RTX-style two-scale AO: tight contact pass (crisp corner darkening)\n                               + wide bounce pass (soft broad-range falloff, like GI occlusion in\n                               ray-traced renders). Combining a small tight radius with a larger soft\n                               radius makes corners read as dense, dark creases instead of a uniform\n                               grey haze — the hallmark of screen-space GI/AO in modern engines. */\n                            const float WRAD_TIGHT = 0.55;  /* crisp contact radius (units) — corners, seams */\n                            const float WRAD_WIDE  = 2.6;   /* broad soft radius (units) — room-scale occlusion */\n\n                            float screenRY_T = clamp(WRAD_TIGHT / (depth * uTanHalfFovY * 2.0), 0.003, 0.09);\n                            float screenRX_T = screenRY_T / aspect;\n                            float screenRY_W = clamp(WRAD_WIDE  / (depth * uTanHalfFovY * 2.0), 0.006, 0.16);\n                            float screenRX_W = screenRY_W / aspect;\n\n                            /* ── golden-angle hemisphere sampling, evaluated at two radii per ring ── */\n                            // Reduced from 16→8→6 samples: each pixel does 2 depth reads per sample\n                            // (tight+wide), so this is the AO pass's main cost. 6 is still enough\n                            // for a stable result since the tight/wide combine + smoothstep already\n                            // hides sampling noise.\n                            const int   S  = ${this.isMobile ? 4 : 6};\n                            const float GA = 2.39996322972865332;\n                            float aoTight = 0.0, aoWide = 0.0;\n                            float wTight  = 0.0, wWide  = 0.0;\n\n                            for (int i = 0; i < S; i++) {\n                                float fi    = float(i) + 0.5;\n                                float r     = sqrt(fi / float(S));\n                                float angle = rotA + fi * GA;\n                                vec2  dir  = vec2(cos(angle) * r, sin(angle) * r);\n\n                                if (i == 0 || i == 2 || i == 4) {\n                                    vec2 uvT = clamp(vUv + vec2(dir.x * screenRX_T, dir.y * screenRY_T), vec2(0.001), vec2(0.999));\n                                    vec2 sDT = readDepth(uvT);\n                                    if (sDT.y > 0.5) { wTight += 1.0; } else {\n                                        vec3  sPosT = getViewPos(uvT, sDT.x);\n                                        vec3  sVecT = sPosT - pos;\n                                        float sLenT = length(sVecT);\n                                        if (sLenT < 0.001) { wTight += 1.0; }\n                                        else {\n                                            float nDotT  = dot(N, sVecT / sLenT);\n                                            float rCheckT = 1.0 - smoothstep(0.0, WRAD_TIGHT, sLenT);\n                                            aoTight += max(0.0, nDotT - bias) * rCheckT;\n                                            wTight  += 1.0;\n                                        }\n                                    }\n                                } else {\n                                    vec2 uvW = clamp(vUv + vec2(dir.x * screenRX_W, dir.y * screenRY_W), vec2(0.001), vec2(0.999));\n                                    vec2 sDW = readDepth(uvW);\n                                    if (sDW.y > 0.5) { wWide += 1.0; } else {\n                                        vec3  sPosW = getViewPos(uvW, sDW.x);\n                                        vec3  sVecW = sPosW - pos;\n                                        float sLenW = length(sVecW);\n                                        if (sLenW < 0.001) { wWide += 1.0; }\n                                        else {\n                                            float nDotW  = dot(N, sVecW / sLenW);\n                                            float rCheckW = 1.0 - smoothstep(0.0, WRAD_WIDE, sLenW);\n                                            aoWide += max(0.0, nDotW - bias * 0.5) * rCheckW;\n                                            wWide  += 1.0;\n                                        }\n                                    }\n                                }\n                            }\n\n                            if (wTight > 0.0) aoTight /= wTight;\n                            if (wWide  > 0.0) aoWide  /= wWide;\n\n                            aoTight = clamp(aoTight * intensity * 3.6, 0.0, 0.75);\n                            aoWide  = clamp(aoWide  * intensity * 2.0, 0.0, 0.55);\n                            aoTight = aoTight * aoTight * (3.0 - 2.0 * aoTight);\n                            aoWide  = aoWide  * aoWide  * (3.0 - 2.0 * aoWide);\n\n                            /* Combine: tight dominates in creases, wide fills in the rest. */\n                            float ao = 1.0 - (1.0 - aoTight) * (1.0 - aoWide * 0.6);\n                            ao = clamp(ao, 0.0, 0.88);\n\n                            /* Deep, punchy corner shadows (RTX-like) while still protecting midtones. */\n                            float aoFactor = 1.0 - ao * mix(0.35, 0.62, aoTight);\n                            gl_FragColor = vec4(col.rgb * aoFactor, col.a);\n                        }\n                    `
+            vertexShader: _aoFullVertex,
+            fragmentShader: `
+                precision highp float;
+                uniform sampler2D tDepth;
+                uniform vec2  resolution;        /* AO pass resolution (half-res) */
+                uniform vec2  uDepthResolution;  /* packed-depth texture (half-res) */
+                uniform float uFar;
+                uniform float uTanHalfFovX;
+                uniform float uTanHalfFovY;
+                varying vec2 vUv;
+
+                ${_aoUnpackDepth}
+                vec3 getViewPos(vec2 uv, float linZ){
+                    vec2 ndc = uv * 2.0 - 1.0;
+                    return vec3(ndc.x * uTanHalfFovX * linZ, ndc.y * uTanHalfFovY * linZ, -linZ);
+                }
+                float IGN(vec2 pix){
+                    return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));
+                }
+
+                void main(){
+                    vec2 cD = readDepth(vUv);
+                    if (cD.y > 0.5) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+                    float depth = max(0.001, cD.x);
+                    vec2  texel = 1.0 / uDepthResolution;
+                    float aspect = resolution.x / resolution.y;
+                    vec3  pos = getViewPos(vUv, depth);
+
+                    /* Robust normal reconstruction: symmetric central difference
+                       with a soft fallback toward the closer sample when a real
+                       depth discontinuity is detected (no per-frame flips on
+                       coplanar seams). */
+                    vec2 dR  = readDepth(vUv + vec2( texel.x, 0.0));
+                    vec2 dL  = readDepth(vUv - vec2( texel.x, 0.0));
+                    vec2 dU  = readDepth(vUv + vec2(0.0,  texel.y));
+                    vec2 dDn = readDepth(vUv - vec2(0.0,  texel.y));
+                    vec3 pR = getViewPos(vUv + vec2( texel.x, 0.0), dR.x);
+                    vec3 pL = getViewPos(vUv - vec2( texel.x, 0.0), dL.x);
+                    vec3 pU = getViewPos(vUv + vec2(0.0,  texel.y), dU.x);
+                    vec3 pD = getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);
+                    float edgeScale = max(0.001, depth) * 0.05;
+                    float wx = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dR.x - dL.x));
+                    float wy = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dU.x - dDn.x));
+                    vec3 dX = mix((abs(dR.x - cD.x) < abs(cD.x - dL.x)) ? (pR - pos) : (pos - pL), (pR - pL) * 0.5, wx);
+                    vec3 dY = mix((abs(dU.x - cD.x) < abs(cD.x - dDn.x)) ? (pU - pos) : (pos - pD), (pU - pD) * 0.5, wy);
+                    vec3 N = normalize(cross(dX, dY));
+                    if (N.z < 0.0) N = -N;
+
+                    float rotA = IGN(floor(vUv * resolution)) * 6.28318530;
+
+                    /* Three octaves: tight contact crease / mid bounce / wide
+                       ambient. Screen radii clamp per-depth so distant geometry
+                       can't alias; the bilateral blur smooths everything. */
+                    const float R_TIGHT = 0.50;
+                    const float R_MID   = 2.2;
+                    const float R_WIDE  = 5.5;
+                    float ryT = clamp(R_TIGHT / (depth * uTanHalfFovY * 2.0), 0.0025, 0.050);
+                    float ryM = clamp(R_MID   / (depth * uTanHalfFovY * 2.0), 0.0050, 0.100);
+                    float ryW = clamp(R_WIDE  / (depth * uTanHalfFovY * 2.0), 0.0100, 0.200);
+                    vec2 sT = vec2(ryT / aspect, ryT);
+                    vec2 sM = vec2(ryM / aspect, ryM);
+                    vec2 sW = vec2(ryW / aspect, ryW);
+
+                    const int   S  = ${this.isMobile ? 8 : 12};
+                    const float GA = 2.39996322972865332;
+                    float occT = 0.0, occM = 0.0, occW = 0.0;
+                    float wT = 0.0, wM = 0.0, wW = 0.0;
+
+                    for (int i = 0; i < S; i++) {
+                        float fi = float(i) + 0.5;
+                        float r  = sqrt(fi / float(S));
+                        float a  = rotA + fi * GA;
+                        vec2  dir = vec2(cos(a), sin(a)) * r;
+
+                        if (i % 2 == 0) {
+                            vec2 uvT = clamp(vUv + dir * sT, vec2(0.001), vec2(0.999));
+                            vec2 sDT = readDepth(uvT);
+                            if (sDT.y < 0.5) {
+                                vec3  sPos = getViewPos(uvT, sDT.x);
+                                vec3  sVec = sPos - pos;
+                                float sLen = length(sVec);
+                                if (sLen > 0.001) {
+                                    occT += max(0.0, dot(N, sVec / sLen) - 0.020) * (1.0 - smoothstep(0.0, R_TIGHT, sLen));
+                                    wT   += 1.0;
+                                }
+                            }
+                        } else {
+                            vec2 uvM = clamp(vUv + dir * sM, vec2(0.001), vec2(0.999));
+                            vec2 sDM = readDepth(uvM);
+                            if (sDM.y < 0.5) {
+                                vec3  sPos = getViewPos(uvM, sDM.x);
+                                vec3  sVec = sPos - pos;
+                                float sLen = length(sVec);
+                                if (sLen > 0.001) {
+                                    occM += max(0.0, dot(N, sVec / sLen) - 0.012) * (1.0 - smoothstep(0.0, R_MID, sLen));
+                                    wM   += 1.0;
+                                }
+                            }
+                        }
+                        {
+                            vec2 uvW = clamp(vUv + dir * sW, vec2(0.001), vec2(0.999));
+                            vec2 sDW = readDepth(uvW);
+                            if (sDW.y < 0.5) {
+                                vec3  sPos = getViewPos(uvW, sDW.x);
+                                vec3  sVec = sPos - pos;
+                                float sLen = length(sVec);
+                                if (sLen > 0.001) {
+                                    occW += max(0.0, dot(N, sVec / sLen) - 0.008) * (1.0 - smoothstep(0.0, R_WIDE, sLen));
+                                    wW   += 1.0;
+                                }
+                            }
+                        }
+                    }
+                    if (wT > 0.0) occT /= wT;
+                    if (wM > 0.0) occM /= wM;
+                    if (wW > 0.0) occW /= wW;
+
+                    /* Soft exponential response — gentle onset, saturating
+                       asymptote: dense creases read deep, flat surfaces stay
+                       clean. This is what makes corners look *volumetric*
+                       instead of a uniform grey haze. */
+                    occT = 1.0 - exp(-occT * 3.2);
+                    occM = 1.0 - exp(-occM * 1.9);
+                    occW = 1.0 - exp(-occW * 1.1);
+
+                    float occ = 1.0 - (1.0 - occT) * (1.0 - occM * 0.60) * (1.0 - occW * 0.42);
+                    occ = occ * occ * (3.0 - 2.0 * occ);
+
+                    /* Gentle distance fade — far planes shouldn't accumulate dark
+                       haze. Fades from full strength at the default draw distance
+                       (~350 u) out to nothing at ~1200 u. */
+                    occ *= smoothstep(1200.0, 350.0, depth);
+
+                    gl_FragColor = vec4(vec3(occ), 1.0);
+                }
+            `
         };
-        this.ssaoPass = new ShaderPass(_aoShader);
+        this._aoGenMat = new THREE.ShaderMaterial(_aoGenShader);
+        this._aoGenMat.depthTest = false;
+        this._aoGenMat.depthWrite = false;
+        this._aoGenScene = new THREE.Scene;
+        this._aoGenCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        this._aoGenScene.add(new THREE.Mesh(_aoQuadGeo, this._aoGenMat));
+
+        /* ── Pass B: separable bilateral blur (H then V, half-res) ─────────────
+           Depth-edge-stopped Gaussian: smooths AO into soft gradients while
+           preserving the hard crease at true silhouettes (no halos). */
+        const _aoBlurShader = {
+            uniforms: {
+                tAO: { value: null },
+                tDepth: { value: null },
+                uDir: { value: new THREE.Vector2(1, 0) },
+                uDepthResolution: { value: new THREE.Vector2(_aoHalfW, _aoHalfH) },
+                uFar: { value: this.camera.far }
+            },
+            vertexShader: _aoFullVertex,
+            fragmentShader: `
+                precision highp float;
+                uniform sampler2D tAO;
+                uniform sampler2D tDepth;
+                uniform vec2  uDir;              /* (1,0) or (0,1) in texel units */
+                uniform vec2  uDepthResolution;
+                uniform float uFar;
+                varying vec2 vUv;
+
+                ${_aoUnpackDepth}
+                void main(){
+                    vec2  texel = uDir / uDepthResolution;
+                    float zc    = readDepth(vUv).x;
+                    float occ   = texture2D(tAO, vUv).r;
+                    float wsum  = 1.0;
+                    float acc   = occ;
+                    /* separable Gaussian σ≈1.7, 4 taps per side, edge-stopped */
+                    for (int d = 1; d <= 4; d++) {
+                        float dd = float(d);
+                        float w  = exp(-dd * dd / 5.8);
+                        vec2  uvP = clamp(vUv + texel * dd, vec2(0.001), vec2(0.999));
+                        vec2  uvN = clamp(vUv - texel * dd, vec2(0.001), vec2(0.999));
+                        float zP  = readDepth(uvP).x;
+                        float zN  = readDepth(uvN).x;
+                        float eP  = exp(-abs(zP - zc) / max(0.001, zc * 0.055));
+                        float eN  = exp(-abs(zN - zc) / max(0.001, zc * 0.055));
+                        float wP  = w * eP;
+                        float wN  = w * eN;
+                        wsum += wP + wN;
+                        acc  += texture2D(tAO, uvP).r * wP + texture2D(tAO, uvN).r * wN;
+                    }
+                    occ = acc / wsum;
+                    gl_FragColor = vec4(vec3(occ), 1.0);
+                }
+            `
+        };
+        this._aoBlurMat = new THREE.ShaderMaterial(_aoBlurShader);
+        this._aoBlurMat.depthTest = false;
+        this._aoBlurMat.depthWrite = false;
+        this._aoBlurScene = new THREE.Scene;
+        this._aoBlurCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        this._aoBlurScene.add(new THREE.Mesh(_aoQuadGeo, this._aoBlurMat));
+
+        /* ── Pass C: composite cached AO onto colour (full-res, depth-aware
+              upsampling so the low-res occlusion never bleeds across edges). ── */
+        const _aoApplyShader = {
+            uniforms: {
+                tDiffuse: { value: null },
+                tDepth: { value: null },
+                tAO: { value: null },
+                resolution: { value: new THREE.Vector2(_cw, _ch) },
+                uDepthResolution: { value: new THREE.Vector2(_aoHalfW, _aoHalfH) },
+                intensity: { value: 1.2 },
+                uFar: { value: this.camera.far }
+            },
+            vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+            fragmentShader: `
+                precision highp float;
+                uniform sampler2D tDiffuse;
+                uniform sampler2D tDepth;
+                uniform sampler2D tAO;
+                uniform vec2  resolution;
+                uniform vec2  uDepthResolution;
+                uniform float intensity;
+                uniform float uFar;
+                varying vec2 vUv;
+
+                ${_aoUnpackDepth}
+                /* depth-aware AO fetch: returns (occlusion*weight, weight) */
+                vec2 occTap(vec2 uv, float zc){
+                    float z = readDepth(uv).x;
+                    float w = exp(-abs(z - zc) / max(0.001, zc * 0.09));
+                    return vec2(texture2D(tAO, uv).r * w, w);
+                }
+                void main(){
+                    vec4 col = texture2D(tDiffuse, vUv);
+                    if (intensity <= 0.02) { gl_FragColor = col; return; }
+                    float zc = readDepth(vUv).x;
+                    if (zc >= uFar * 0.9995) { gl_FragColor = col; return; }
+
+                    /* 2x2 depth-aware upsampling of the half-res AO cache */
+                    vec2 texel = 1.0 / uDepthResolution;
+                    vec2 t = vUv * uDepthResolution - 0.5;
+                    vec2 f = fract(t);
+                    vec2 b = (floor(t) + 0.5) * texel;
+                    vec2 o00 = occTap(b, zc);
+                    vec2 o10 = occTap(b + vec2(texel.x, 0.0), zc);
+                    vec2 o01 = occTap(b + vec2(0.0, texel.y), zc);
+                    vec2 o11 = occTap(b + vec2(texel.x, texel.y), zc);
+                    vec2 h0 = mix(o00, o10, f.x);
+                    vec2 h1 = mix(o01, o11, f.x);
+                    vec2 r  = mix(h0, h1, f.y);
+                    float occ = clamp(r.x / max(r.y, 1e-4), 0.0, 1.0);
+
+                    float aoFactor = 1.0 - occ * clamp(intensity, 0.0, 2.5) * 0.44;
+                    gl_FragColor = vec4(col.rgb * aoFactor, col.a);
+                }
+            `
+        };
+        this.ssaoPass = new ShaderPass(_aoApplyShader);
         this.ssaoPass.material.depthTest = false;
         this.ssaoPass.material.depthWrite = false;
         this.ssaoPass.uniforms.tDepth.value = this._depthTarget.texture;
+        this.ssaoPass.uniforms.tAO.value = this._aoTargetA.texture;
         this.ssaoPass.uniforms.resolution.value.set(_cw, _ch);
-        this.ssaoPass.uniforms.uDepthResolution.value.set(Math.floor(_cw / 2), Math.floor(_ch / 2));
+        this.ssaoPass.uniforms.uDepthResolution.value.set(_aoHalfW, _aoHalfH);
+        this.ssaoPass.uniforms.intensity.value = 1.2;
         this.ssaoPass.enabled = false;
         this.composer.addPass(this.ssaoPass);
         this.bloomPass = new UnrealBloomPass(new THREE.Vector2(_cw, _ch), .65, .22, .92);
@@ -7035,6 +7350,8 @@ void main(){
         });
         this.transformControl.addEventListener("change", () => {
             if (this.selectedBlocks.length > 0) {
+                // Geometry is moving/rotating/scaling — the AO cache must follow.
+                if (this.markAODirty) this.markAODirty();
                 this.requestCustomLightsShadowUpdate();
                 this.updateUIFromObject();
                 if (this.transformControl.getMode() === "scale") {
@@ -7197,6 +7514,7 @@ void main(){
             this.dofPass.uniforms.tDepth.value = this._depthTarget.texture;
         }
         if (this._depthTarget) this._depthTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
+        if (this._aoTargetA) { this._aoTargetA.setSize(Math.floor(w / 2), Math.floor(h / 2)); this._aoTargetB.setSize(Math.floor(w / 2), Math.floor(h / 2)); this._aoCacheValid = false; this._aoDirty = true; }
         if (this._frozenTarget) {
             this._frozenTarget.setSize(w, h);
             if (this.worldPaused) this._pauseNeedsCapture = true;
@@ -7228,6 +7546,9 @@ void main(){
             this.camera.fov = safe;
             this.camera.updateProjectionMatrix();
             if (this.worldPaused) this._pauseNeedsCapture = true;
+            // FOV changes re-project every view-space position even though the
+            // camera itself didn't move — the corner-shadow cache must refresh.
+            if (this.markAODirty) this.markAODirty();
         }
         return safe;
     },
@@ -7253,6 +7574,7 @@ void main(){
             this.renderer.setSize(w, h, false);
             if (this.composer) this.composer.setSize(w, h);
             if (this._depthTarget) this._depthTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
+        if (this._aoTargetA) { this._aoTargetA.setSize(Math.floor(w / 2), Math.floor(h / 2)); this._aoTargetB.setSize(Math.floor(w / 2), Math.floor(h / 2)); this._aoCacheValid = false; this._aoDirty = true; }
             if (this.ssaoPass?.uniforms) {
                 this.ssaoPass.uniforms.resolution.value.set(w, h);
                 this.ssaoPass.uniforms.uDepthResolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
@@ -7317,6 +7639,7 @@ void main(){
         this.renderer.setSize(w, h, false);
         if (this.composer) this.composer.setSize(w, h);
         if (this._depthTarget) this._depthTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
+        if (this._aoTargetA) { this._aoTargetA.setSize(Math.floor(w / 2), Math.floor(h / 2)); this._aoTargetB.setSize(Math.floor(w / 2), Math.floor(h / 2)); this._aoCacheValid = false; this._aoDirty = true; }
         if (this.ssaoPass?.uniforms) {
             this.ssaoPass.uniforms.resolution.value.set(w, h);
             this.ssaoPass.uniforms.uDepthResolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
@@ -10324,6 +10647,14 @@ void main(){
             this._depthTarget.dispose();
             this._depthTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
         }
+        if (this._aoTargetA) {
+            this._aoTargetA.dispose();
+            this._aoTargetB.dispose();
+            this._aoTargetA.setSize(Math.floor(w / 2), Math.floor(h / 2));
+            this._aoTargetB.setSize(Math.floor(w / 2), Math.floor(h / 2));
+            this._aoCacheValid = false;
+            this._aoDirty = true;
+        }
         if (this.bloomPass && this.bloomPass.setSize) this.bloomPass.setSize(w, h);
         if (this.pmremGenerator) {
             try { this.pmremGenerator.dispose(); } catch (e) {}
@@ -10423,6 +10754,85 @@ void main(){
     _occGetQuery: function() {
         const gl = this._occGl;
         return this._occQueryPool.pop() || gl.createQuery();
+    },
+    /* ── Corner-shadow (AO) cache control ────────────────────────────────────
+       The AO chain (depth → multi-octave sampling → bilateral blur) is the
+       most expensive post effect in the editor. It is now cached: it only
+       re-runs when something that actually matters changed:
+         • _aoDirty  — map geometry changed (block added / removed / moved /
+                       retextured, scene loaded, undo/redo, AO settings)
+         • camera moved — SSAO is view-dependent; a moving camera must refresh
+                       it (checked per frame, near-free)
+       While the camera is still and the scene is untouched, every frame only
+       composites the cached occlusion (one cheap full-res pass). */
+    markAODirty: function() {
+        this._aoDirty = true;
+    },
+    /* Camera-motion probe for the AO cache. Deliberately independent of
+       _cameraMovedThisFrame(): that helper is consumed by
+       updatePerformanceGovernor() earlier in the same frame (it updates the
+       stored position), so reusing it here would silently skip rebuilds
+       while orbiting. We track the camera against the position of the LAST
+       AO rebuild instead — rebuilds happen exactly when the camera has
+       actually moved since then. */
+    _aoCameraMoved: function() {
+        if (!this._aoLastCamPos) {
+            this._aoLastCamPos = this.camera.position.clone();
+            this._aoLastCamQuat = this.camera.quaternion.clone();
+            return true;
+        }
+        return this.camera.position.distanceToSquared(this._aoLastCamPos) > 0.0009 ||
+            this._aoLastCamQuat.angleTo(this.camera.quaternion) > 0.0025;
+    },
+    _aoNeedsRebuildNow: function() {
+        if (!this._aoCacheValid) return true;
+        if (this._aoDirty) return true;
+        if (this._aoCameraMoved()) return true;
+        return false;
+    },
+    _renderAOCache: function() {
+        if (!this._aoTargetA || !this._depthTarget || !this._aoGenMat) return;
+        const w = this._aoTargetA.width, h = this._aoTargetA.height;
+        if (!w || !h) return;
+        const renderer = this.renderer;
+        const e = this.camera.projectionMatrix.elements;
+        // 1) Multi-octave AO sampling (half-res)
+        this._aoGenMat.uniforms.tDepth.value = this._depthTarget.texture;
+        this._aoGenMat.uniforms.uDepthResolution.value.set(w, h);
+        this._aoGenMat.uniforms.resolution.value.set(w, h);
+        this._aoGenMat.uniforms.uTanHalfFovX.value = 1 / e[0];
+        this._aoGenMat.uniforms.uTanHalfFovY.value = 1 / e[5];
+        this._aoGenMat.uniforms.uFar.value = this.camera.far;
+        renderer.setRenderTarget(this._aoTargetA);
+        renderer.clear(true, true, false);
+        renderer.render(this._aoGenScene, this._aoGenCam);
+        // 2) Bilateral blur — horizontal → B
+        this._aoBlurMat.uniforms.tAO.value = this._aoTargetA.texture;
+        this._aoBlurMat.uniforms.tDepth.value = this._depthTarget.texture;
+        this._aoBlurMat.uniforms.uDepthResolution.value.set(w, h);
+        this._aoBlurMat.uniforms.uDir.value.set(1, 0);
+        this._aoBlurMat.uniforms.uFar.value = this.camera.far;
+        renderer.setRenderTarget(this._aoTargetB);
+        renderer.clear(true, true, false);
+        renderer.render(this._aoBlurScene, this._aoBlurCam);
+        // 3) Bilateral blur — vertical → A (final cache)
+        this._aoBlurMat.uniforms.tAO.value = this._aoTargetB.texture;
+        this._aoBlurMat.uniforms.uDir.value.set(0, 1);
+        renderer.setRenderTarget(this._aoTargetA);
+        renderer.clear(true, true, false);
+        renderer.render(this._aoBlurScene, this._aoBlurCam);
+        renderer.setRenderTarget(null);
+    },
+    updateCornerShadows: function() {
+        if (!this.ssaoPass || !this.ssaoPass.enabled) return;
+        if (!this._aoNeedsRebuildNow()) return;
+        this._renderAOCache();
+        this._aoCacheValid = true;
+        this._aoDirty = false;
+        if (this._aoLastCamPos) {
+            this._aoLastCamPos.copy(this.camera.position);
+            this._aoLastCamQuat.copy(this.camera.quaternion);
+        }
     },
     updateOcclusionCulling: function() {
         if (!this._occlusionSupported || !this.occlusionCullingEnabled || !this.blocks || !this.camera) return;
@@ -11390,7 +11800,10 @@ void main(){
         const orthoCam = new THREE.OrthographicCamera(-.5, .5, .5, -.5, -10, 10);
         const bakeAoEnabled = !!(this.ssaoPass && this.ssaoPass.enabled);
         const bakeAoIntensity = this.ssaoPass?.uniforms?.intensity?.value ?? .55;
-        let bakeDepthTarget = null, bakeAoTarget = null, bakeAoQuadScene = null, bakeAoQuadCam = null, bakeAoMesh = null;
+        let bakeDepthTarget = null, bakeAoTarget = null;
+        let bakeAoGenScene = null, bakeAoBlurScene = null, bakeAoApplyScene = null;
+        let bakeAoQuadCam = null, bakeAoGenMesh = null, bakeAoBlurMesh = null, bakeAoApplyMesh = null;
+        let bakeAoRawTarget = null, bakeAoBlurTarget = null;
         if (bakeAoEnabled) {
             bakeDepthTarget = new THREE.WebGLRenderTarget(BAKE_SIZE, BAKE_SIZE, {
                 type: THREE.UnsignedByteType,
@@ -11403,21 +11816,46 @@ void main(){
                 colorSpace: THREE.SRGBColorSpace,
                 depthBuffer: false
             });
-            bakeAoQuadScene = new THREE.Scene;
+            bakeAoRawTarget = new THREE.WebGLRenderTarget(BAKE_SIZE, BAKE_SIZE, {
+                type: THREE.UnsignedByteType,
+                format: THREE.RGBAFormat,
+                depthBuffer: false,
+                minFilter: THREE.LinearFilter,
+                magFilter: THREE.LinearFilter
+            });
+            bakeAoBlurTarget = bakeAoRawTarget.clone();
             bakeAoQuadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-            const bakeAoShader = {
+            const _bakeVertex = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`;
+            const _bakeReadDepth = `
+                float unpackDepth(vec4 rgba){ const vec4 s=vec4(1.0/16777216.0,1.0/65536.0,1.0/256.0,1.0); return dot(rgba,s); }
+                vec2 readDepth(vec2 uv){
+                    vec4 raw = texture2D(tDepth, uv);
+                    if (raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);
+                    return vec2(unpackDepth(raw) * uFar, 0.0);
+                }
+            `;
+            /* Orthographic reconstruction + noise — used only where the
+               matching uniforms (uHalfW/uHalfH) are actually declared. */
+            const _bakeViewPos = `
+                vec3 getViewPos(vec2 uv, float linZ){
+                    vec2 ndc = uv * 2.0 - 1.0;
+                    return vec3(ndc.x * uHalfW, ndc.y * uHalfH, -linZ);
+                }
+                float IGN(vec2 pix){
+                    return fract(52.9829189 * fract(0.06711056 * pix.x + 0.00583715 * pix.y));
+                }
+            `;
+            /* Bake AO now matches the editor's real-time quality: three-octave
+               sampling (tight contact crease / mid bounce / wide ambient),
+               soft exponential response, then a separable bilateral denoise
+               so exported face textures are smooth — no grain, no halos. */
+            const bakeAoGenShader = {
                 uniforms: {
-                    tDiffuse: {
-                        value: null
-                    },
                     tDepth: {
                         value: null
                     },
                     resolution: {
                         value: new THREE.Vector2(BAKE_SIZE, BAKE_SIZE)
-                    },
-                    intensity: {
-                        value: bakeAoIntensity
                     },
                     uFar: {
                         value: 1
@@ -11429,11 +11867,198 @@ void main(){
                         value: .5
                     }
                 },
-                vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`,
-                fragmentShader: `\n                            precision highp float;\n                            uniform sampler2D tDiffuse, tDepth;\n                            uniform vec2 resolution;\n                            uniform float intensity, uFar, uHalfW, uHalfH;\n                            varying vec2 vUv;\n                            float unpackDepth(vec4 rgba){ const vec4 s=vec4(1.0/16777216.0,1.0/65536.0,1.0/256.0,1.0); return dot(rgba,s); }\n                            vec2 readDepth(vec2 uv){\n                                vec4 raw = texture2D(tDepth, uv);\n                                if (raw.r > 0.999 && raw.g > 0.999 && raw.b > 0.999) return vec2(uFar, 1.0);\n                                return vec2(unpackDepth(raw) * uFar, 0.0);\n                            }\n                            /* Orthographic reconstruction: XY scales linearly with UV (no perspective divide),\n                               Z is the linear view-space depth we stored ourselves. */\n                            vec3 getViewPos(vec2 uv, float linZ){\n                                vec2 ndc = uv * 2.0 - 1.0;\n                                return vec3(ndc.x * uHalfW, ndc.y * uHalfH, -linZ);\n                            }\n                            void main(){\n                                vec4 col = texture2D(tDiffuse, vUv);\n                                vec2 centerD = readDepth(vUv);\n                                if (centerD.y > 0.5 || intensity < 0.15) { gl_FragColor = col; return; }\n                                vec2 texel = 1.0 / resolution;\n                                vec3 pos = getViewPos(vUv, centerD.x);\n                                vec2 dR = readDepth(vUv + vec2(texel.x, 0.0));\n                                vec2 dL = readDepth(vUv - vec2(texel.x, 0.0));\n                                vec2 dU = readDepth(vUv + vec2(0.0, texel.y));\n                                vec2 dDn= readDepth(vUv - vec2(0.0, texel.y));\n                                vec3 dX = abs(dR.x-centerD.x) < abs(centerD.x-dL.x)\n                                    ? getViewPos(vUv+vec2(texel.x,0.0), dR.x) - pos\n                                    : pos - getViewPos(vUv-vec2(texel.x,0.0), dL.x);\n                                vec3 dY = abs(dU.x-centerD.x) < abs(centerD.x-dDn.x)\n                                    ? getViewPos(vUv+vec2(0.0,texel.y), dU.x) - pos\n                                    : pos - getViewPos(vUv-vec2(0.0,texel.y), dDn.x);\n                                vec3 N = normalize(cross(dX, dY));\n                                if (N.z < 0.0) N = -N;\n                                float rotA = fract(52.9829189 * fract(0.06711056*floor(vUv*resolution).x + 0.00583715*floor(vUv*resolution).y)) * 6.28318530;\n                                const float WRAD_TIGHT = 0.5, WRAD_WIDE = 2.4;\n                                float sRT = clamp(WRAD_TIGHT / max(uHalfW,uHalfH), 0.003, 0.35);\n                                float sRW = clamp(WRAD_WIDE  / max(uHalfW,uHalfH), 0.006, 0.6);\n                                const int S = 16; const float GA = 2.39996322972865332;\n                                float aoTight=0.0, aoWide=0.0, wTight=0.0, wWide=0.0;\n                                for (int i=0; i<S; i++){\n                                    float fi = float(i)+0.5; float r = sqrt(fi/float(S)); float ang = rotA + fi*GA;\n                                    vec2 dir = vec2(cos(ang)*r, sin(ang)*r);\n                                    vec2 uvT = clamp(vUv + dir*sRT, vec2(0.001), vec2(0.999));\n                                    vec2 sDT = readDepth(uvT);\n                                    if (sDT.y > 0.5) { wTight += 1.0; } else {\n                                        vec3 sPos = getViewPos(uvT, sDT.x); vec3 sVec = sPos - pos; float sLen = length(sVec);\n                                        if (sLen < 0.001) { wTight += 1.0; } else {\n                                            float nDotS = dot(N, sVec/sLen);\n                                            float rCheck = 1.0 - smoothstep(0.0, WRAD_TIGHT, sLen);\n                                            aoTight += max(0.0, nDotS - 0.02) * rCheck; wTight += 1.0;\n                                        }\n                                    }\n                                    vec2 uvW = clamp(vUv + dir*sRW, vec2(0.001), vec2(0.999));\n                                    vec2 sDW = readDepth(uvW);\n                                    if (sDW.y > 0.5) { wWide += 1.0; } else {\n                                        vec3 sPos = getViewPos(uvW, sDW.x); vec3 sVec = sPos - pos; float sLen = length(sVec);\n                                        if (sLen < 0.001) { wWide += 1.0; } else {\n                                            float nDotS = dot(N, sVec/sLen);\n                                            float rCheck = 1.0 - smoothstep(0.0, WRAD_WIDE, sLen);\n                                            aoWide += max(0.0, nDotS - 0.01) * rCheck; wWide += 1.0;\n                                        }\n                                    }\n                                }\n                                if (wTight>0.0) aoTight/=wTight; if (wWide>0.0) aoWide/=wWide;\n                                aoTight = clamp(aoTight*intensity*3.6, 0.0, 0.75);\n                                aoWide  = clamp(aoWide*intensity*2.0, 0.0, 0.55);\n                                aoTight = aoTight*aoTight*(3.0-2.0*aoTight);\n                                aoWide  = aoWide*aoWide*(3.0-2.0*aoWide);\n                                float ao = 1.0 - (1.0-aoTight) * (1.0 - aoWide*0.6);\n                                ao = clamp(ao, 0.0, 0.88);\n                                float aoFactor = 1.0 - ao * mix(0.35, 0.62, aoTight);\n                                gl_FragColor = vec4(col.rgb * aoFactor, col.a);\n                            }\n                        `
+                vertexShader: _bakeVertex,
+                fragmentShader: `
+                    precision highp float;
+                    uniform sampler2D tDepth;
+                    uniform vec2  resolution;
+                    uniform float uFar, uHalfW, uHalfH;
+                    varying vec2 vUv;
+                    ${_bakeReadDepth}
+                    ${_bakeViewPos}
+                    void main(){
+                        vec2 cD = readDepth(vUv);
+                        if (cD.y > 0.5) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+                        float depth = max(0.001, cD.x);
+                        vec2  texel = 1.0 / resolution;
+                        vec3  pos = getViewPos(vUv, depth);
+                        vec2  dR  = readDepth(vUv + vec2( texel.x, 0.0));
+                        vec2  dL  = readDepth(vUv - vec2( texel.x, 0.0));
+                        vec2  dU  = readDepth(vUv + vec2(0.0,  texel.y));
+                        vec2  dDn = readDepth(vUv - vec2(0.0,  texel.y));
+                        vec3  pR  = getViewPos(vUv + vec2( texel.x, 0.0), dR.x);
+                        vec3  pL  = getViewPos(vUv - vec2( texel.x, 0.0), dL.x);
+                        vec3  pU  = getViewPos(vUv + vec2(0.0,  texel.y), dU.x);
+                        vec3  pD  = getViewPos(vUv - vec2(0.0,  texel.y), dDn.x);
+                        float edgeScale = max(0.001, depth) * 0.05;
+                        float wx = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dR.x - dL.x));
+                        float wy = 1.0 - smoothstep(edgeScale, edgeScale * 3.0, abs(dU.x - dDn.x));
+                        vec3 dX = mix((abs(dR.x - cD.x) < abs(cD.x - dL.x)) ? (pR - pos) : (pos - pL), (pR - pL) * 0.5, wx);
+                        vec3 dY = mix((abs(dU.x - cD.x) < abs(cD.x - dDn.x)) ? (pU - pos) : (pos - pD), (pU - pD) * 0.5, wy);
+                        vec3 N = normalize(cross(dX, dY));
+                        if (N.z < 0.0) N = -N;
+                        float rotA = IGN(floor(vUv * resolution)) * 6.28318530;
+                        /* Three octaves (world units). Ortho: world→UV scale is
+                           per-axis (R / (2*half)), clamped to sane texel ranges. */
+                        const float R_TIGHT = 0.50;
+                        const float R_MID   = 2.2;
+                        const float R_WIDE  = 5.5;
+                        vec2 sT = clamp(vec2(R_TIGHT / (2.0 * uHalfW), R_TIGHT / (2.0 * uHalfH)), vec2(0.002), vec2(0.30));
+                        vec2 sM = clamp(vec2(R_MID   / (2.0 * uHalfW), R_MID   / (2.0 * uHalfH)), vec2(0.004), vec2(0.45));
+                        vec2 sW = clamp(vec2(R_WIDE  / (2.0 * uHalfW), R_WIDE  / (2.0 * uHalfH)), vec2(0.008), vec2(0.60));
+                        const int S = 24; const float GA = 2.39996322972865332;
+                        float occT = 0.0, occM = 0.0, occW = 0.0;
+                        float wT = 0.0, wM = 0.0, wW = 0.0;
+                        for (int i = 0; i < S; i++) {
+                            float fi = float(i) + 0.5;
+                            float r  = sqrt(fi / float(S));
+                            float a  = rotA + fi * GA;
+                            vec2  dir = vec2(cos(a), sin(a)) * r;
+                            if (i % 2 == 0) {
+                                vec2 uvT = clamp(vUv + dir * sT, vec2(0.001), vec2(0.999));
+                                vec2 sDT = readDepth(uvT);
+                                if (sDT.y < 0.5) {
+                                    vec3  sPos = getViewPos(uvT, sDT.x);
+                                    vec3  sVec = sPos - pos;
+                                    float sLen = length(sVec);
+                                    if (sLen > 0.001) {
+                                        occT += max(0.0, dot(N, sVec / sLen) - 0.020) * (1.0 - smoothstep(0.0, R_TIGHT, sLen));
+                                        wT   += 1.0;
+                                    }
+                                }
+                            } else {
+                                vec2 uvM = clamp(vUv + dir * sM, vec2(0.001), vec2(0.999));
+                                vec2 sDM = readDepth(uvM);
+                                if (sDM.y < 0.5) {
+                                    vec3  sPos = getViewPos(uvM, sDM.x);
+                                    vec3  sVec = sPos - pos;
+                                    float sLen = length(sVec);
+                                    if (sLen > 0.001) {
+                                        occM += max(0.0, dot(N, sVec / sLen) - 0.012) * (1.0 - smoothstep(0.0, R_MID, sLen));
+                                        wM   += 1.0;
+                                    }
+                                }
+                            }
+                            {
+                                vec2 uvW = clamp(vUv + dir * sW, vec2(0.001), vec2(0.999));
+                                vec2 sDW = readDepth(uvW);
+                                if (sDW.y < 0.5) {
+                                    vec3  sPos = getViewPos(uvW, sDW.x);
+                                    vec3  sVec = sPos - pos;
+                                    float sLen = length(sVec);
+                                    if (sLen > 0.001) {
+                                        occW += max(0.0, dot(N, sVec / sLen) - 0.008) * (1.0 - smoothstep(0.0, R_WIDE, sLen));
+                                        wW   += 1.0;
+                                    }
+                                }
+                            }
+                        }
+                        if (wT > 0.0) occT /= wT;
+                        if (wM > 0.0) occM /= wM;
+                        if (wW > 0.0) occW /= wW;
+                        occT = 1.0 - exp(-occT * 3.2);
+                        occM = 1.0 - exp(-occM * 1.9);
+                        occW = 1.0 - exp(-occW * 1.1);
+                        float occ = 1.0 - (1.0 - occT) * (1.0 - occM * 0.60) * (1.0 - occW * 0.42);
+                        occ = occ * occ * (3.0 - 2.0 * occ);
+                        gl_FragColor = vec4(vec3(occ), 1.0);
+                    }
+                `
             };
-            bakeAoMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial(bakeAoShader));
-            bakeAoQuadScene.add(bakeAoMesh);
+            bakeAoGenMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial(bakeAoGenShader));
+
+            /* Separable bilateral denoise (H then V) — smooth, no halos */
+            const bakeAoBlurShader = {
+                uniforms: {
+                    tAO: {
+                        value: null
+                    },
+                    tDepth: {
+                        value: null
+                    },
+                    uDir: {
+                        value: new THREE.Vector2(1, 0)
+                    },
+                    uTexel: {
+                        value: new THREE.Vector2(1 / BAKE_SIZE, 1 / BAKE_SIZE)
+                    },
+                    uFar: {
+                        value: 1
+                    }
+                },
+                vertexShader: _bakeVertex,
+                fragmentShader: `
+                    precision highp float;
+                    uniform sampler2D tAO;
+                    uniform sampler2D tDepth;
+                    uniform vec2  uDir;
+                    uniform vec2  uTexel;
+                    uniform float uFar;
+                    varying vec2 vUv;
+                    ${_bakeReadDepth}
+                    void main(){
+                        vec2  texel = uDir * uTexel;
+                        float zc    = readDepth(vUv).x;
+                        float occ   = texture2D(tAO, vUv).r;
+                        float wsum  = 1.0;
+                        float acc   = occ;
+                        for (int d = 1; d <= 4; d++) {
+                            float dd = float(d);
+                            float w  = exp(-dd * dd / 5.8);
+                            vec2  uvP = clamp(vUv + texel * dd, vec2(0.001), vec2(0.999));
+                            vec2  uvN = clamp(vUv - texel * dd, vec2(0.001), vec2(0.999));
+                            float zP  = readDepth(uvP).x;
+                            float zN  = readDepth(uvN).x;
+                            float eP  = exp(-abs(zP - zc) / max(0.001, zc * 0.055));
+                            float eN  = exp(-abs(zN - zc) / max(0.001, zc * 0.055));
+                            float wP  = w * eP;
+                            float wN  = w * eN;
+                            wsum += wP + wN;
+                            acc  += texture2D(tAO, uvP).r * wP + texture2D(tAO, uvN).r * wN;
+                        }
+                        occ = acc / wsum;
+                        gl_FragColor = vec4(vec3(occ), 1.0);
+                    }
+                `
+            };
+            bakeAoBlurMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial(bakeAoBlurShader));
+
+            /* Final composite: multiply the lit face colour by the denoised AO */
+            const bakeAoApplyShader = {
+                uniforms: {
+                    tDiffuse: {
+                        value: null
+                    },
+                    tAO: {
+                        value: null
+                    },
+                    intensity: {
+                        value: bakeAoIntensity
+                    }
+                },
+                vertexShader: _bakeVertex,
+                fragmentShader: `
+                    precision highp float;
+                    uniform sampler2D tDiffuse;
+                    uniform sampler2D tAO;
+                    uniform float intensity;
+                    varying vec2 vUv;
+                    void main(){
+                        vec4 col = texture2D(tDiffuse, vUv);
+                        float occ = clamp(texture2D(tAO, vUv).r, 0.0, 1.0);
+                        float aoFactor = 1.0 - occ * clamp(intensity, 0.0, 2.5) * 0.44;
+                        gl_FragColor = vec4(col.rgb * aoFactor, col.a);
+                    }
+                `
+            };
+            bakeAoApplyMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial(bakeAoApplyShader));
+
+            bakeAoGenScene = new THREE.Scene;
+            bakeAoGenScene.add(bakeAoGenMesh);
+            bakeAoBlurScene = new THREE.Scene;
+            bakeAoBlurScene.add(bakeAoBlurMesh);
+            bakeAoApplyScene = new THREE.Scene;
+            bakeAoApplyScene.add(bakeAoApplyMesh);
         }
         const hidden = [];
         const hide = obj => {
@@ -11777,15 +12402,36 @@ void main(){
                         renderer.clear(true, true, false);
                         renderer.render(this.scene, orthoCam);
                         this.scene.overrideMaterial = prevSceneOverride;
-                        bakeAoMesh.material.uniforms.tDiffuse.value = bakeTarget.texture;
-                        bakeAoMesh.material.uniforms.tDepth.value = bakeDepthTarget.texture;
-                        bakeAoMesh.material.uniforms.uFar.value = orthoCam.far;
-                        bakeAoMesh.material.uniforms.uHalfW.value = faceW / 2;
-                        bakeAoMesh.material.uniforms.uHalfH.value = faceH / 2;
-                        bakeAoMesh.material.uniforms.intensity.value = bakeAoIntensity;
+                        // 1) multi-octave AO sampling → raw occlusion buffer
+                        bakeAoGenMesh.material.uniforms.tDepth.value = bakeDepthTarget.texture;
+                        bakeAoGenMesh.material.uniforms.uFar.value = orthoCam.far;
+                        bakeAoGenMesh.material.uniforms.uHalfW.value = faceW / 2;
+                        bakeAoGenMesh.material.uniforms.uHalfH.value = faceH / 2;
+                        renderer.setRenderTarget(bakeAoRawTarget);
+                        renderer.clear(true, true, false);
+                        renderer.render(bakeAoGenScene, bakeAoQuadCam);
+                        // 2) bilateral denoise — horizontal
+                        bakeAoBlurMesh.material.uniforms.tAO.value = bakeAoRawTarget.texture;
+                        bakeAoBlurMesh.material.uniforms.tDepth.value = bakeDepthTarget.texture;
+                        bakeAoBlurMesh.material.uniforms.uDir.value.set(1, 0);
+                        bakeAoBlurMesh.material.uniforms.uTexel.value.set(1 / BAKE_SIZE, 1 / BAKE_SIZE);
+                        bakeAoBlurMesh.material.uniforms.uFar.value = orthoCam.far;
+                        renderer.setRenderTarget(bakeAoBlurTarget);
+                        renderer.clear(true, true, false);
+                        renderer.render(bakeAoBlurScene, bakeAoQuadCam);
+                        // 3) bilateral denoise — vertical
+                        bakeAoBlurMesh.material.uniforms.tAO.value = bakeAoBlurTarget.texture;
+                        bakeAoBlurMesh.material.uniforms.uDir.value.set(0, 1);
+                        renderer.setRenderTarget(bakeAoRawTarget);
+                        renderer.clear(true, true, false);
+                        renderer.render(bakeAoBlurScene, bakeAoQuadCam);
+                        // 4) composite the denoised AO onto the lit face colour
+                        bakeAoApplyMesh.material.uniforms.tDiffuse.value = bakeTarget.texture;
+                        bakeAoApplyMesh.material.uniforms.tAO.value = bakeAoRawTarget.texture;
+                        bakeAoApplyMesh.material.uniforms.intensity.value = bakeAoIntensity;
                         renderer.setRenderTarget(bakeAoTarget);
                         renderer.clear(true, true, false);
-                        renderer.render(bakeAoQuadScene, bakeAoQuadCam);
+                        renderer.render(bakeAoApplyScene, bakeAoQuadCam);
                         // renderer.setRenderTarget() has already bound bakeAoTarget's
                         // framebuffer via gl.bindFramebuffer, so a raw gl.readPixels
                         // right here reads from the correct source.
@@ -11895,10 +12541,14 @@ void main(){
             bakeTarget.dispose();
             if (bakeDepthTarget) bakeDepthTarget.dispose();
             if (bakeAoTarget) bakeAoTarget.dispose();
-            if (bakeAoMesh) {
-                bakeAoMesh.material.dispose();
-                bakeAoMesh.geometry.dispose();
-            }
+            if (bakeAoRawTarget) bakeAoRawTarget.dispose();
+            if (bakeAoBlurTarget) bakeAoBlurTarget.dispose();
+            [ bakeAoGenMesh, bakeAoBlurMesh, bakeAoApplyMesh ].forEach(m => {
+                if (m) {
+                    m.material.dispose();
+                    m.geometry.dispose();
+                }
+            });
             hidden.forEach(o => o.visible = true);
             lightIconStates.forEach(([mat, vis]) => mat.visible = vis);
             restoreOtherBlocks();
@@ -12457,6 +13107,8 @@ void main(){
         this.syncAllObjectMaterials(true);
         this.deselect();
         this.updateSelectionPanels();
+        // A full scene was (re)built — the corner-shadow cache is stale.
+        if (this.markAODirty) this.markAODirty();
     },
     updateCamCoordsUI: function(dt) {
         this._camUiTimer = (this._camUiTimer || 0) + (dt || 0);
@@ -12722,6 +13374,9 @@ void main(){
                             this.renderer.setRenderTarget(null);
                             this.renderer.setClearColor(this._tmpClearColor, _prevClearAlpha);
                         }
+                        // Ensure the cached corner-shadow buffer exists before
+                        // the frozen frame composites it (first pause, resize…).
+                        if (this.ssaoPass?.enabled && this.updateCornerShadows) this.updateCornerShadows();
                         this.composer.render();
                         this._frozenBlit.mat.map = this.composer.readBuffer.texture;
                         this.renderer.setRenderTarget(target);
@@ -12774,7 +13429,13 @@ void main(){
             }
         });
         try {
-            if ((this.ssaoPass.enabled || this.dofPass?.enabled) && this._depthTarget) {
+            const _aoEnabled = !!(this.ssaoPass && this.ssaoPass.enabled);
+            const _dofEnabled = !!(this.dofPass && this.dofPass.enabled);
+            // Depth is only re-packed when a consumer actually needs a fresh
+            // buffer: DOF (every frame) or a corner-shadow rebuild (scene
+            // changed or camera moved). Idle frames skip it entirely.
+            const _aoRebuild = _aoEnabled && this._aoNeedsRebuildNow();
+            if ((_dofEnabled || _aoRebuild) && this._depthTarget) {
                 const _prevOverride = this.scene.overrideMaterial;
                 this.scene.overrideMaterial = this._depthPackMat;
                 const _savedSkyVis = this._hideSkyForDepthPass();
@@ -12790,7 +13451,10 @@ void main(){
                 this.renderer.setRenderTarget(null);
                 this.renderer.setClearColor(this._tmpClearColor, _prevClearAlpha);
             }
-            const _useComposer = this.bloomPass.enabled || this.ssaoPass.enabled || this.dofPass?.enabled;
+            // Corner shadows: refresh the cached AO only when the scene changed
+            // or the camera moved; otherwise just composite the cached result.
+            if (_aoEnabled && this.updateCornerShadows) this.updateCornerShadows();
+            const _useComposer = this.bloomPass.enabled || _aoEnabled || _dofEnabled;
             this._lastFrameUsedComposer = _useComposer;
             if (_useComposer) {
                 this.composer.render();
@@ -19143,6 +19807,21 @@ window.renderStudio = {
                 e.renderer.setRenderTarget(null);
                 e.renderer.setClearColor(e._tmpClearColor, prevClearAlpha);
             }
+            // Corner shadows on offscreen/export frames: the buffers were just
+            // resized to the output (or tile) size and the view may use a
+            // setViewOffset frustum — force the AO cache to match the depth
+            // target and rebuild it for this exact frame before compositing.
+            if (e.ssaoPass && e.ssaoPass.enabled && e.updateCornerShadows) {
+                if (e._aoTargetA && e._depthTarget) {
+                    if (e._aoTargetA.width !== e._depthTarget.width || e._aoTargetA.height !== e._depthTarget.height) {
+                        e._aoTargetA.setSize(e._depthTarget.width, e._depthTarget.height);
+                        e._aoTargetB.setSize(e._depthTarget.width, e._depthTarget.height);
+                    }
+                }
+                e._aoCacheValid = false;
+                e._aoDirty = true;
+                e.updateCornerShadows();
+            }
             const useComposer = e.bloomPass.enabled || e.ssaoPass.enabled || (e.dofPass && e.dofPass.enabled);
             if (useComposer) {
                 e.composer.render();
@@ -20933,5 +21612,5 @@ window.spawnText = (txt)=> window.engine && window.engine.addText && window.engi
 
 </script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f"}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a270e6a84b91c9ed',t:'MTc4NjA0OTI5MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a270e6a84b91c9ed',t:'MTc4NjA0OTI5MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2a0b3883a981e66',t:'MTc4NjU1MDUxMw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
