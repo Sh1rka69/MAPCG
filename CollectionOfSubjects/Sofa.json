@@ -1,6 +1,3 @@
-{
-  "version": 4,
-  "cubes": [
     {"name":"MapCube","tag":"Carpet","tileMode":1,"visible":true,"collisions":true,"physics":false,"materialName":"Red Bricks","position":{"x":0.0,"y":0.33799999952316286,"z":-0.027000000700354577},"rotation":{"x":0.0,"y":0.0,"z":0.0},"scale":{"x":3.0,"y":0.3240000009536743,"z":1.1490000486373902}},
     {"name":"MapCube","tag":"Carpet","tileMode":1,"visible":true,"collisions":true,"physics":false,"materialName":"Red Bricks","position":{"x":-1.5440000295639039,"y":0.4880000054836273,"z":0.0},"rotation":{"x":0.0,"y":0.0,"z":90.0},"scale":{"x":0.6990000009536743,"y":0.0949999988079071,"z":1.1019999980926514}},
     {"name":"MapCube","tag":"Carpet","tileMode":0,"visible":true,"collisions":true,"physics":false,"materialName":"Red Bricks","position":{"x":0.0,"y":0.49000000953674319,"z":0.49300000071525576},"rotation":{"x":0.0,"y":90.0,"z":90.0},"scale":{"x":0.6990000009536743,"y":0.12800000607967378,"z":3.1700000762939455}},
@@ -20,6 +17,4 @@
     {"name":"MapCube","tag":"Concrete","tileMode":0,"visible":true,"collisions":true,"physics":false,"materialName":"Fur","position":{"x":-1.5440000295639039,"y":0.8240000009536743,"z":-0.5490000247955322},"rotation":{"x":45.00000762939453,"y":180.0,"z":90.0},"scale":{"x":0.029999999329447748,"y":0.1599999964237213,"z":0.07000000029802323}},
     {"name":"MapCube","tag":"Concrete","tileMode":1,"visible":true,"collisions":true,"physics":false,"materialName":"Fur","position":{"x":1.5440000295639039,"y":0.4749999940395355,"z":-0.5699999928474426},"rotation":{"x":90.0,"y":90.0,"z":0.0},"scale":{"x":0.029999999329447748,"y":0.1599999964237213,"z":0.671999990940094}},
     {"name":"MapCube","tag":"Concrete","tileMode":0,"visible":true,"collisions":true,"physics":false,"materialName":"Fur","position":{"x":1.5440000295639039,"y":0.8240000009536743,"z":-0.5490000247955322},"rotation":{"x":45.00000762939453,"y":180.0,"z":90.0},"scale":{"x":0.029999999329447748,"y":0.1599999964237213,"z":0.07000000029802323}},
-    {"name":"MapCube","tag":"Concrete","tileMode":1,"visible":true,"collisions":true,"physics":false,"materialName":"Fur","position":{"x":1.5440000295639039,"y":0.8429999947547913,"z":0.020999999716877939},"rotation":{"x":0.0,"y":180.0,"z":90.0},"scale":{"x":0.029999999329447748,"y":0.1599999964237213,"z":1.1080000400543213}}
-  ]
-}
+    {"name":"MapCube","tag":"Concrete","tileMode":1,"visible":true,"collisions":true,"physics":false,"materialName":"Fur","position":{"x":1.5440000295639039,"y":0.8429999947547913,"z":0.020999999716877939},"rotation":{"x":0.0,"y":180.0,"z":90.0},"scale":{"x":0.029999999329447748,"y":0.1599999964237213,"z":1.1080000400543213}},
