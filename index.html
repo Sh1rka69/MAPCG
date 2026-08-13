@@ -2025,14 +2025,14 @@
                                     <label class="td-label block mb-1" style="font-size: 9px;">Distance</label>
                                     <div class="flex items-center gap-1">
                                         <input type="range" id="inp-light-distance" min="1" max="80" step="1" value="18" class="w-full" oninput="document.getElementById('light-distance-val').innerText=this.value+'m'; engine.updateLightFromUI(false);" onchange="engine.updateLightFromUI(true)">
-                                        <span id="light-distance-val" class="mono text-[11px] w-8 text-right" style="color: var(--td-warn);">18m</span>
+                                        <button type="button" id="light-distance-val" class="mono text-[11px] w-8 text-right editable-value-btn" style="color: var(--td-warn); background: transparent; border: none; cursor: text; padding: 0;" onclick="makeValueEditable(this, 'inp-light-distance', {suffix:'m', decimals:0})">18m</button>
                                     </div>
                                 </div>
                                 <div class="p-2" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                                     <label class="td-label block mb-1" style="font-size: 9px;">Size</label>
                                     <div class="flex items-center gap-1">
                                         <input type="range" id="inp-light-size" min="0.2" max="6" step="0.1" value="0.8" class="w-full" oninput="document.getElementById('light-size-val').innerText=Number(this.value).toFixed(1); engine.updateLightFromUI(false);" onchange="engine.updateLightFromUI(true)">
-                                        <span id="light-size-val" class="mono text-[11px] w-8 text-right" style="color: var(--td-warn);">0.8</span>
+                                        <button type="button" id="light-size-val" class="mono text-[11px] w-8 text-right editable-value-btn" style="color: var(--td-warn); background: transparent; border: none; cursor: text; padding: 0;" onclick="makeValueEditable(this, 'inp-light-size', {suffix:'', decimals:1})">0.8</button>
                                     </div>
                                 </div>
                             </div>
@@ -2041,15 +2041,15 @@
                                 <div class="p-2" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                                     <label class="td-label block mb-1" style="font-size: 9px;">Power</label>
                                     <div class="flex items-center gap-1">
-                                        <input type="range" id="inp-light-intensity" min="0" max="20" step="0.1" value="4" class="w-full" oninput="document.getElementById('light-intensity-val').innerText=Number(this.value).toFixed(1); engine.updateLightFromUI(false);" onchange="engine.updateLightFromUI(true)">
-                                        <span id="light-intensity-val" class="mono text-[11px] w-8 text-right" style="color: var(--td-warn);">4.0</span>
+                                        <input type="range" id="inp-light-intensity" min="0" max="100" step="0.1" value="4" class="w-full" oninput="document.getElementById('light-intensity-val').innerText=Number(this.value).toFixed(1); engine.updateLightFromUI(false);" onchange="engine.updateLightFromUI(true)">
+                                        <button type="button" id="light-intensity-val" class="mono text-[11px] w-8 text-right editable-value-btn" style="color: var(--td-warn); background: transparent; border: none; cursor: text; padding: 0;" onclick="makeValueEditable(this, 'inp-light-intensity', {suffix:'', decimals:1})">4.0</button>
                                     </div>
                                 </div>
                                 <div class="p-2" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                                     <label class="td-label block mb-1" style="font-size: 9px;">Cube Glare</label>
                                     <div class="flex items-center gap-1">
                                         <input type="range" id="inp-light-specular" min="0" max="1" step="0.05" value="0.45" class="w-full" oninput="document.getElementById('light-specular-val').innerText=Number(this.value).toFixed(2); engine.updateLightFromUI(false);" onchange="engine.updateLightFromUI(true)">
-                                        <span id="light-specular-val" class="mono text-[11px] w-8 text-right" style="color: var(--td-warn);">0.45</span>
+                                        <button type="button" id="light-specular-val" class="mono text-[11px] w-8 text-right editable-value-btn" style="color: var(--td-warn); background: transparent; border: none; cursor: text; padding: 0;" onclick="makeValueEditable(this, 'inp-light-specular', {suffix:'', decimals:2})">0.45</button>
                                     </div>
                                 </div>
                             </div>
@@ -2561,13 +2561,13 @@
                         <label data-i18n="sunAngleLabel" class="td-label block mt-3 mb-1">Sun Angle (Horizontal)</label>
                         <div class="flex items-center gap-2">
                             <input type="range" id="setting-sun-angle" min="0" max="360" value="180" class="flex-1" oninput="document.getElementById('sun-angle-val').innerText=this.value+'°'; engine.updateEnvironment();" onchange="window.historyManager.takeSnapshot();">
-                            <span id="sun-angle-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">180°</span>
+                            <button type="button" id="sun-angle-val" class="mono text-xs w-10 text-right editable-value-btn" style="color: var(--td-accent); background: transparent; border: none; cursor: text; padding: 0;" onclick="makeValueEditable(this, 'setting-sun-angle', {suffix:'°', decimals:0, onCommit:function(){window.historyManager.takeSnapshot();}})">180°</button>
                         </div>
 
                         <label data-i18n="sunVerticalLabel" class="td-label block mt-3 mb-1">Sun Angle (Vertical)</label>
                         <div class="flex items-center gap-2">
                             <input type="range" id="setting-sun-vertical" min="0" max="180" value="60" class="flex-1" oninput="document.getElementById('sun-vertical-val').innerText=this.value+'°'; engine.updateEnvironment();" onchange="window.historyManager.takeSnapshot();">
-                            <span id="sun-vertical-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">60°</span>
+                            <button type="button" id="sun-vertical-val" class="mono text-xs w-10 text-right editable-value-btn" style="color: var(--td-accent); background: transparent; border: none; cursor: text; padding: 0;" onclick="makeValueEditable(this, 'setting-sun-vertical', {suffix:'°', decimals:0, onCommit:function(){window.historyManager.takeSnapshot();}})">60°</button>
                         </div>
 
                         <p class="text-[10px] mt-1 leading-tight" style="color: var(--td-text-muted);">Sun position is fixed — it no longer moves on its own.</p>
@@ -2575,7 +2575,7 @@
                         <label data-i18n="sceneBrightnessLabel" class="td-label block mt-3 mb-1">Scene Brightness</label>
                         <div class="flex items-center gap-2">
                             <input type="range" id="setting-scene-brightness" min="0.2" max="2.5" step="0.05" value="1" class="flex-1" oninput="document.getElementById('scene-brightness-val').innerText=Number(this.value).toFixed(2)+'x'; engine.applySceneBrightness(this.value);">
-                            <span id="scene-brightness-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">1.00x</span>
+                            <button type="button" id="scene-brightness-val" class="mono text-xs w-10 text-right editable-value-btn" style="color: var(--td-accent); background: transparent; border: none; cursor: text; padding: 0;" onclick="makeValueEditable(this, 'setting-scene-brightness', {suffix:'x', decimals:2, onCommit:function(){engine.applySceneBrightness(document.getElementById('setting-scene-brightness').value);}})">1.00x</button>
                         </div>
                         <p class="text-[10px] mt-1 leading-tight" style="color: var(--td-text-muted);">This changes scene lighting only. The skybox itself stays the same brightness.</p>
 
@@ -2812,6 +2812,15 @@
                                 <input type="range" id="setting-texture-quality" min="0" max="4" step="1" value="2" class="flex-1" oninput="engine.previewTextureQualityLabel?.(parseInt(this.value,10));" onchange="engine.applyTextureQualitySetting?.(parseInt(this.value,10)); window.historyManager.takeSnapshot();">
                                 <span id="texture-quality-val" class="mono text-xs w-12 text-right" style="color: var(--td-accent);">564p</span>
                             </div>
+                        </div>
+
+                        <div class="p-2 mb-2" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
+                            <label class="td-label block mb-1" style="font-size: 9px;">Anisotropic Filtering</label>
+                            <div class="flex items-center gap-2">
+                                <input type="range" id="setting-anisotropy" min="0" max="4" step="1" value="3" class="flex-1" oninput="document.getElementById('anisotropy-val').innerText = [1,2,4,8,16][parseInt(this.value,10)] + 'x';" onchange="engine.applyAnisotropySetting?.(parseInt(this.value,10)); window.historyManager.takeSnapshot();">
+                                <span id="anisotropy-val" class="mono text-xs w-10 text-right" style="color: var(--td-accent);">8x</span>
+                            </div>
+                            <p class="text-[10px] mt-1 leading-tight" style="color: var(--td-text-muted);">Keeps textures sharp on angled and distant faces. Lower for better performance on big maps.</p>
                         </div>
 
                         <div class="p-2 mt-1" style="background: var(--td-bg-1); border: 1px solid var(--td-border);">
@@ -5195,6 +5204,28 @@ function getTextureQualityIndexFromUI() {
     return Math.max(0, Math.min(TEXTURE_QUALITY_LEVELS.length - 1, Number.isFinite(idx) ? idx : 3));
 }
 
+// Anisotropic filtering strength for the live viewport. Discrete steps that
+// mirror real GPU anisotropy levels (1x = off, up to 16x = max most hardware
+// exposes). Persisted like pixel ratio / texture quality so it survives a
+// reload. Render Studio (the high-quality still/video renderer) keeps its
+// OWN separate value in renderStudio.prefs.anisotropy, defaulted to max —
+// see that module below — so cranking this live-viewport slider down for
+// performance never quietly downgrades an exported render.
+const ANISOTROPY_LEVELS = [ 1, 2, 4, 8, 16 ];
+
+let currentAnisotropyLevel = (() => {
+    const saved = parseInt(localStorage.getItem("mmcg_anisotropy_55") || "8", 10);
+    return ANISOTROPY_LEVELS.includes(saved) ? saved : 8;
+})();
+
+function getAnisotropyFromUI() {
+    const el = document.getElementById("setting-anisotropy");
+    if (!el) return currentAnisotropyLevel;
+    const idx = parseInt(el.value ?? "3", 10);
+    const safeIdx = Math.max(0, Math.min(ANISOTROPY_LEVELS.length - 1, Number.isFinite(idx) ? idx : 3));
+    return ANISOTROPY_LEVELS[safeIdx];
+}
+
 function optimizeCanvasToMaxSize(source, maxRes = currentTextureMaxResolution) {
     const srcW = Math.max(1, source.naturalWidth || source.videoWidth || source.width || 1);
     const srcH = Math.max(1, source.naturalHeight || source.videoHeight || source.height || 1);
@@ -5248,16 +5279,44 @@ function applyCanvasToExistingTexture(texture, canvas) {
 function applyGlobalTextureFiltering(texture) {
     if (!texture) return;
     const aiTexture = texture.userData?.isAITexture === true;
+    // "Texture Smoothing" is a look/style toggle: it only decides how a texel looks
+    // up close (crisp pixel-art edges vs. blended edges). It must NOT gate mipmaps —
+    // mipmapping/anisotropy is a distance/angle LOD mechanism, not a style choice.
+    // Leaving it tied to an opt-in checkbox (and to AI textures only) meant every
+    // ordinary library texture (Concrete, Metal, Wood, ...) was sampled at full
+    // resolution with no LOD at any viewing distance or angle — that's both the
+    // shimmering/aliasing on distant or grazing-angle faces and a real perf cost
+    // (GPUs do far more texture work per pixel without mip LOD, which is why large
+    // cubes — more minified/foreshortened texels per triangle — hurt more than small
+    // ones). Mipmaps + anisotropy are therefore always on for every real image
+    // texture below; only magFilter (the up-close look) stays user-controlled.
     const smooth = aiTexture || (document.getElementById("setting-texture-smoothing")?.checked ?? false);
     const tw = texture.image?.width || texture.image?.naturalWidth || 0;
     const th = texture.image?.height || texture.image?.naturalHeight || 0;
-    const isPowerOfTwo = n => n > 0 && (n & (n - 1)) === 0;
-    const canMipmap = isPowerOfTwo(tw) && isPowerOfTwo(th);
+    // Three.js r136+ always requests a WebGL2 context when available (see engine.init:
+    // no explicit context flag needed), and WebGL2 removed the old WebGL1 restriction
+    // that only power-of-two textures could mipmap. So the only real requirement left
+    // is "is this an actual bitmap", not "is it a power-of-two size" — the old
+    // isPowerOfTwo gate was silently disabling mipmaps for most of the
+    // TEXTURE_QUALITY_LEVELS presets (144/564/1080 are not powers of two) even on
+    // capable hardware.
+    const canMipmap = tw > 0 && th > 0;
     texture.magFilter = smooth ? THREE.LinearFilter : THREE.NearestFilter;
-    texture.minFilter = aiTexture ? (canMipmap ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter) : (smooth ? THREE.LinearFilter : THREE.NearestFilter);
-    texture.generateMipmaps = aiTexture && canMipmap;
+    texture.minFilter = canMipmap ? THREE.LinearMipmapLinearFilter : (smooth ? THREE.LinearFilter : THREE.NearestFilter);
+    texture.generateMipmaps = canMipmap;
+    // Anisotropic filtering is what keeps a texture sharp when a face is viewed at a
+    // steep angle (a floor stretching to the horizon, a wall seen edge-on) instead of
+    // washing out to its lowest mip early. Strength is user-adjustable (Settings →
+    // Graphics → Anisotropic Filtering) so lower-end devices can trade sharpness for
+    // performance — anisotropy cost scales with both the sample count and how many
+    // textured faces are on screen. While Render Studio is actively producing a
+    // still/video frame it overrides this with its own value (defaulted to the
+    // device max — see renderStudio.prefs.anisotropy) via
+    // window.__renderStudioAnisotropyOverride, so a low live-viewport setting picked
+    // for editor performance never quietly softens an exported render.
     const maxAnisotropy = window.engine?.renderer?.capabilities?.getMaxAnisotropy?.() || 1;
-    texture.anisotropy = aiTexture ? Math.min(4, maxAnisotropy) : 1;
+    const requestedAnisotropy = window.__renderStudioAnisotropyOverride ?? getAnisotropyFromUI();
+    texture.anisotropy = canMipmap ? Math.min(requestedAnisotropy, maxAnisotropy) : 1;
     texture.needsUpdate = true;
 }
 
@@ -7390,6 +7449,7 @@ void main(){
         this.applyCameraMoveSpeed(parseFloat(localStorage.getItem("mmcg_camera_move_55") || "1"));
         this.applyPixelRatio(parseFloat(localStorage.getItem("mmcg_pixel_ratio_55") || "0.8"));
         this.applyAdaptiveResolution(localStorage.getItem("mmcg_adaptive_res_55") !== "0");
+        this.applyAnisotropySetting(Math.max(0, ANISOTROPY_LEVELS.indexOf(currentAnisotropyLevel)));
         this.applyOcclusionCulling(localStorage.getItem("mmcg_occlusion_culling_55") !== "0");
         this.applyFpsCounterVisibility(localStorage.getItem("mmcg_show_fps_55") === "1");
         this.applyPixelSmoothing(localStorage.getItem("mmcg_pixel_smoothing_55") === "1");
@@ -7589,6 +7649,24 @@ void main(){
         this._adaptiveResBaseRatio = safe;
         this._adaptiveResCurrentScale = 1;
         return safe;
+    },
+    applyAnisotropySetting: function(index = null) {
+        const idx = index !== null && index !== undefined
+            ? parseInt(index, 10)
+            : parseInt(document.getElementById("setting-anisotropy")?.value ?? "3", 10);
+        const safeIdx = Math.max(0, Math.min(ANISOTROPY_LEVELS.length - 1, Number.isFinite(idx) ? idx : 3));
+        currentAnisotropyLevel = ANISOTROPY_LEVELS[safeIdx];
+        localStorage.setItem("mmcg_anisotropy_55", String(currentAnisotropyLevel));
+        const slider = document.getElementById("setting-anisotropy");
+        if (slider) slider.value = String(safeIdx);
+        const label = document.getElementById("anisotropy-val");
+        if (label) label.innerText = currentAnisotropyLevel + "x";
+        // Re-run through the same texture-filtering pass updateGraphics() already
+        // does for every other live-viewport quality setting, so the new strength
+        // takes effect on every already-loaded map/library/AI texture immediately —
+        // no reload, no re-selecting blocks.
+        if (typeof this.updateGraphics === "function") this.updateGraphics();
+        return currentAnisotropyLevel;
     },
     applyAdaptiveResolution: function(value = null) {
         const enabled = value !== null && value !== undefined ? !!value : localStorage.getItem("mmcg_adaptive_res_55") !== "0";
@@ -10009,7 +10087,22 @@ void main(){
         if (mesh.material) mesh.material.visible = this.lightContourVisible;
         if (light) {
             const brightness = this.getSceneBrightness?.() ?? 1;
-            const baseIntensity = ud._sceneBrightnessBase != null ? parseFloat(ud._sceneBrightnessBase) : parseFloat(ud.intensity ?? 4);
+            // ud.intensity (set by the intensity slider / updateLightFromUI) is the
+            // single source of truth for "how bright the user asked this light to
+            // be". _sceneBrightnessBase used to be cached here and only ever
+            // computed from ud.intensity the FIRST time this ran on a given
+            // userData object — every later call reused that stale cached value,
+            // so moving the Light Intensity slider silently did nothing to
+            // light.intensity on an existing light (it only updated ud.intensity,
+            // which nothing read anymore). Duplicating the light produced a fresh
+            // userData object with no cached _sceneBrightnessBase yet, so the very
+            // first apply on the copy picked up ud.intensity correctly — which is
+            // why "copy the light" looked like the only way to make a change stick.
+            // Always deriving the base from ud.intensity keeps it a plain
+            // convenience alias (used elsewhere so Scene Brightness can scale
+            // multiple lights from one shared multiplier) without it ever
+            // overriding a value the user just changed.
+            const baseIntensity = parseFloat(ud.intensity ?? 4);
             ud._sceneBrightnessBase = Number.isFinite(baseIntensity) ? baseIntensity : 4;
             light.color.copy(color);
             light.intensity = Math.max(0, ud._sceneBrightnessBase) * brightness;
@@ -12060,6 +12153,27 @@ void main(){
             bakeAoApplyScene = new THREE.Scene;
             bakeAoApplyScene.add(bakeAoApplyMesh);
         }
+        // Distance/occlusion culling (see updateDistanceCulling / updateOcclusionCulling)
+        // sets the real three.js `obj.visible` to false for cubes that were far
+        // from or hidden behind other geometry from the *editor* camera's last
+        // known position — completely independent of userData.visible (the
+        // user-facing "Visible" toggle). If a bake starts while some in-map
+        // cubes are sitting in that culled state, applyShadowOnlyToOthers()
+        // below skips them entirely (it only swaps materials on obj.visible
+        // meshes), so the bake camera aims at a real cube position but the
+        // cube itself never gets its material restored — it stays invisible
+        // and the face renders whatever is behind it (sky/void), producing the
+        // holes described as "photographing empty sky". Force every
+        // user-visible cube to be actually visible for the duration of the
+        // bake, and suspend culling so it can't re-hide them mid-bake, then
+        // restore both in the finally block below.
+        const prevOcclusionCullingEnabled = this.occlusionCullingEnabled;
+        this.occlusionCullingEnabled = false;
+        this.blocks.forEach(obj => {
+            if (obj && obj.userData?.type === "cube" && obj.userData.visible !== false && !obj.visible) {
+                obj.visible = true;
+            }
+        });
         const hidden = [];
         const hide = obj => {
             if (obj && obj.visible) {
@@ -12553,6 +12667,13 @@ void main(){
             lightIconStates.forEach(([mat, vis]) => mat.visible = vis);
             restoreOtherBlocks();
             shadowOnlyMaterial.dispose();
+            // Restore culling state: put back the pre-bake occlusion-culling
+            // toggle, and let the next updateDistanceCulling/updateOcclusionCulling
+            // pass naturally re-cull anything we force-revealed above (we don't
+            // hard-reset obj.visible here since some of these cubes may since
+            // have been legitimately toggled during the async bake).
+            this.occlusionCullingEnabled = prevOcclusionCullingEnabled;
+            this.updateDistanceCulling(true);
         }
         return {
             bakedTextures: bakedTextures,
@@ -14869,6 +14990,13 @@ window.uiManager = {
             pixRatio.value = localStorage.getItem("mmcg_pixel_ratio_55") || "1";
             const lbl = document.getElementById("pixel-ratio-val");
             if (lbl) lbl.innerText = Number(pixRatio.value).toFixed(2) + "x";
+        }
+        const anisoSlider = document.getElementById("setting-anisotropy");
+        if (anisoSlider) {
+            const idx = Math.max(0, ANISOTROPY_LEVELS.indexOf(currentAnisotropyLevel));
+            anisoSlider.value = String(idx);
+            const lbl = document.getElementById("anisotropy-val");
+            if (lbl) lbl.innerText = ANISOTROPY_LEVELS[idx] + "x";
         }
         const showFps = document.getElementById("setting-show-fps");
         if (showFps) {
@@ -18189,6 +18317,63 @@ setTimeout(() => window.multiplayerClient && multiplayerClient.init(), 1500);
 
 <script>
 /* =====================================================
+   EDITABLE RANGE VALUE (click number -> type with keyboard)
+   ===================================================== */
+function makeValueEditable(btn, rangeId, opts) {
+    opts = opts || {};
+    const suffix = opts.suffix || '';
+    const decimals = (opts.decimals === undefined) ? 1 : opts.decimals;
+    const rangeEl = document.getElementById(rangeId);
+    if (!rangeEl || btn.tagName === 'INPUT') return;
+
+    const min = rangeEl.min !== '' ? Number(rangeEl.min) : undefined;
+    const step = rangeEl.step && rangeEl.step !== '' ? Number(rangeEl.step) : (decimals > 0 ? Math.pow(10, -decimals) : 1);
+    const currentVal = Number(rangeEl.value);
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.value = decimals > 0 ? currentVal.toFixed(decimals) : String(currentVal);
+    // No max attribute here on purpose: typed values are allowed to exceed the slider's max.
+    if (min !== undefined) input.min = min;
+    input.step = step;
+    input.className = btn.className.replace('editable-value-btn', '') + ' editable-value-input';
+    input.style.cssText = 'color: inherit; background: var(--td-bg-0); border: 1px solid var(--td-warn); padding: 0 2px; width: 48px; text-align: right; font: inherit;';
+
+    const commit = () => {
+        let v = parseFloat(input.value);
+        if (isNaN(v)) v = currentVal;
+        if (min !== undefined) v = Math.max(min, v);
+        // Intentionally no upper clamp: manual entry can exceed the slider's max attribute.
+        // If the typed value is above the slider's max, raise the slider's max so the
+        // native range input doesn't silently clamp rangeEl.value back down.
+        const sliderMax = rangeEl.max !== '' ? Number(rangeEl.max) : undefined;
+        if (sliderMax !== undefined && v > sliderMax) {
+            rangeEl.max = v;
+        }
+        rangeEl.value = v;
+        rangeEl.dispatchEvent(new Event('input', { bubbles: true }));
+        rangeEl.dispatchEvent(new Event('change', { bubbles: true }));
+        if (typeof opts.onCommit === 'function') opts.onCommit(v);
+        if (input.parentNode) input.parentNode.replaceChild(btn, input);
+    };
+    const cancel = () => {
+        if (input.parentNode) input.parentNode.replaceChild(btn, input);
+    };
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+        e.stopPropagation();
+    });
+    input.addEventListener('blur', commit);
+    input.addEventListener('click', (e) => e.stopPropagation());
+
+    btn.parentNode.replaceChild(input, btn);
+    input.focus();
+    input.select();
+}
+
+/* =====================================================
    FOG COLOR PICKER
    ===================================================== */
 window.fogColorPicker = (function() {
@@ -18643,6 +18828,14 @@ window.renderStudio = {
         dofBgBlur: false,   // false = classic foreground-only look ("как раньше")
         envReflEnabled: true,
         envReflQuality: 1024,
+        // Anisotropic filtering strength for the exported still/video frame.
+        // Deliberately independent from the live-viewport slider in Settings →
+        // Graphics (which users often lower for editor framerate) and defaulted to
+        // the device's real maximum — a final render should never inherit an
+        // editor-performance compromise. 16 is clamped down to whatever
+        // getMaxAnisotropy() actually reports at apply-time (see
+        // _applyRenderSettings), so this is "always max", not "always 16".
+        anisotropy: 16,
         exposure: 1,
         hideGrid: true,
         hideGizmo: false,
@@ -18890,6 +19083,17 @@ window.renderStudio = {
             <input type="range" id="rs-shadow-quality" min="0" max="4" step="1" value="1">
             <span class="rs-row-val" id="rs-shadow-quality-val">256</span>
           </div>
+        </div>
+      </div>
+
+      <div class="rs-section">
+        <div class="rs-section-title">
+          <span>Texture Sharpness</span>
+        </div>
+        <div class="rs-subgroup" id="rs-anisotropy-group">
+          <div class="rs-row"><span class="rs-row-label">Anisotropic filtering</span><span class="rs-row-val" id="rs-anisotropy-val">16x</span></div>
+          <input type="range" id="rs-anisotropy" min="0" max="4" step="1" value="4">
+          <div style="font-size:10px;color:var(--td-text-muted);line-height:1.4;">Defaults to your device's maximum, independent of the live-viewport setting in Settings → Graphics — a final render should never inherit an editor performance compromise. Lower only for a quick draft render.</div>
         </div>
       </div>
 
@@ -19449,6 +19653,15 @@ window.renderStudio = {
             if (lbl) lbl.innerText = sizes[this.prefs.shadowQuality];
         });
 
+        on("rs-anisotropy", "oninput", e => {
+            const levels = [1, 2, 4, 8, 16];
+            const idx = Math.max(0, Math.min(levels.length - 1, parseInt(e.target.value, 10) || 0));
+            this.prefs.anisotropy = levels[idx];
+            const lbl = $("rs-anisotropy-val");
+            const maxAniso = window.engine?.renderer?.capabilities?.getMaxAnisotropy?.() || 16;
+            if (lbl) lbl.innerText = Math.min(this.prefs.anisotropy, maxAniso) + "x";
+        });
+
         on("rs-ao-enabled", "onchange", e => { this.prefs.aoEnabled = e.target.checked; $("rs-ao-group")?.classList.toggle("dim", !e.target.checked); });
         on("rs-ao-intensity", "oninput", e => { this.prefs.aoIntensity = parseFloat(e.target.value); const l = $("rs-ao-intensity-val"); if (l) l.innerText = this.prefs.aoIntensity.toFixed(2); });
 
@@ -19517,6 +19730,12 @@ window.renderStudio = {
         setVal("rs-shadow-quality", p.shadowQuality);
         const sizes = [128, 256, 512, 1024, 4096];
         setText("rs-shadow-quality-val", sizes[p.shadowQuality]);
+
+        const anisoLevels = [1, 2, 4, 8, 16];
+        const anisoIdx = Math.max(0, anisoLevels.indexOf(p.anisotropy));
+        setVal("rs-anisotropy", anisoIdx);
+        const maxAniso = window.engine?.renderer?.capabilities?.getMaxAnisotropy?.() || 16;
+        setText("rs-anisotropy-val", Math.min(p.anisotropy, maxAniso) + "x");
 
         setChecked("rs-ao-enabled", p.aoEnabled);
         setDim("rs-ao-group", !p.aoEnabled);
@@ -20441,6 +20660,7 @@ window.renderStudio = {
             domDofBgBlur: domChecked("setting-dof-bgblur"),
 
             envReflQuality: e._envReflectionQuality,
+            anisotropyOverride: window.__renderStudioAnisotropyOverride,
 
             gridVisible: e.gridHelper ? e.gridHelper.visible : undefined,
             gizmoVisible: e.transformControl ? e.transformControl.visible : undefined,
@@ -20463,6 +20683,13 @@ window.renderStudio = {
         // Temporarily disable adaptive/performance resolution scaling so it
         // can't silently shrink our render mid-frame.
         e.adaptiveResEnabled = false;
+
+        // Override anisotropic filtering for the duration of the render, regardless
+        // of what the live-viewport slider (Settings → Graphics) is currently set
+        // to — see applyGlobalTextureFiltering(), which checks this global first.
+        // Defaults to prefs.anisotropy (16, i.e. "max"), clamped to whatever the
+        // device actually supports.
+        window.__renderStudioAnisotropyOverride = p.anisotropy;
 
         // Push render-quality values into the SAME DOM inputs the live
         // graphics settings panel uses, then call the engine's own
@@ -20518,6 +20745,11 @@ window.renderStudio = {
             setVal("setting-dof-range", snap.domDofRange);
             setVal("setting-dof-blur", snap.domDofBlur);
             setChecked("setting-dof-bgblur", snap.domDofBgBlur);
+            // Release the render's anisotropy override BEFORE the updateGraphics()
+            // call below, so that call re-filters every texture back to whatever
+            // the live-viewport slider says — not one extra frame still holding the
+            // render's (usually higher) value.
+            window.__renderStudioAnisotropyOverride = snap.anisotropyOverride;
             if (typeof e.updateGraphics === "function") e.updateGraphics();
             e.renderer.toneMappingExposure = snap.exposure;
 
