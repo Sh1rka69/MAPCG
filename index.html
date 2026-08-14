@@ -16067,7 +16067,7 @@ Write in English, concisely, by points, without introduction or conclusion — o
     /** Estimate a sensible cube budget from the prompt text so the model
      *  spends its token/vertex allowance wisely instead of overshooting and
      *  getting its whole answer truncated (the #1 cause of broken builds). */
-    _estimateCubeBudget: function(promptText) {
+    _estimateCubeBudget: function(promptText, detail) {
         const t = " " + String(promptText || "").toLowerCase() + " ";
         const heavy = ["house","building","bunker","castle","tower","bridge","fortress",
             "mansion","cathedral","temple","city","compound","palace","mountain","pyramid",
@@ -16086,7 +16086,11 @@ Write in English, concisely, by points, without introduction or conclusion — o
         const clamped = Math.max(0, Math.min(16, score));
         const LOW = 30, HIGH = 210;
         const budget = Math.round(LOW + (HIGH - LOW) * (clamped / 16));
-        const HARD_CAP = 300;                 // absolute ceiling — never exceed
+        // Absolute ceiling — never exceed. Detailed mode gets a much higher
+        // ceiling (was flat 300 for every preset, which silently discarded
+        // the extra cubes a "Detailed" build asked for once the model went
+        // over budget — see _normalizeCubesForBuild's largest-first trim).
+        const HARD_CAP = (detail && detail.hardCap) || 300;
         return {
             budget,
             min: Math.round(budget * 0.75),
@@ -16106,8 +16110,14 @@ Write in English, concisely, by points, without introduction or conclusion — o
         if (!Array.isArray(cubes) || !cubes.length) return cubes;
         const hardCap = (budgetInfo && budgetInfo.hardCap) || 300;
         let out = cubes.slice();
-        const MAX_ABS = 40;          // anything further than 40 m from center is a mistake
-        const MAX_SCALE = 12;        // any single axis larger than 12 m is a mistake
+        // Sanity envelope, not a design limit: it only exists to catch
+        // genuinely broken model output (e.g. a stray 500m cube), not to cap
+        // how big an intentional build can be. Scaled up for Detailed mode
+        // so large/ambitious builds (ships, towers, compounds) aren't
+        // clamped back down to the same modest envelope as Economic/Balanced.
+        const isDetailed = hardCap > 300;
+        const MAX_ABS = isDetailed ? 90 : 40;    // anything further than this from center is a mistake
+        const MAX_SCALE = isDetailed ? 20 : 12;  // any single axis larger than this is a mistake
 
         let clamped = false;
         for (const c of out) {
@@ -16327,9 +16337,9 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
         if (texStep) texStep.style.display = this.prefs.customTextures ? "" : "none";
     },
     _detailConfig: function() {
-        if (this.prefs.detail === "economic")  return { label: "Economic",  mult: 0.6, maxTokens: 14000, chunk: 55 };
-        if (this.prefs.detail === "detailed")  return { label: "Detailed",  mult: 1.5, maxTokens: 32000, chunk: 100 };
-        return { label: "Balanced", mult: 1, maxTokens: 24000, chunk: 60 };
+        if (this.prefs.detail === "economic")  return { label: "Economic",  mult: 0.6, maxTokens: 14000, chunk: 55,  hardCap: 300 };
+        if (this.prefs.detail === "detailed")  return { label: "Detailed",  mult: 1.5, maxTokens: 55000, chunk: 180, hardCap: 900 };
+        return { label: "Balanced", mult: 1, maxTokens: 24000, chunk: 60, hardCap: 300 };
     },
     setDetail: function(v) { this.prefs.detail = v; this._savePrefs(); this._syncAgentControls(); },
     setCustomTextures: function(v) {
@@ -16740,7 +16750,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
             const resp = await this._requestGeneration([
                 { role: "system", content: systemPrompt + (attempt > 1 ? "\n\nIMPORTANT: previous response was truncated or too large. Be more compact, keep the main structure." : "") },
                 { role: "user", content: userContent }
-            ], budget.max <= 80 ? 16000 : 24000, null);
+            ], budget.max <= 80 ? 16000 : budget.max <= 130 ? 24000 : 34000, null);
             if (!resp.content) throw new Error("Model returned empty response. Try again.");
             const parsed = this._parseCubesFromRaw(resp.content);
             if (!planText && parsed.planText) planText = parsed.planText;
@@ -16781,7 +16791,7 @@ ANSWER: return ONLY a valid JSON object of form {"plan": "brief reasoning text",
     _runChunked: async function(ctx) {
         const { promptText, imageDescription, systemPrompt, budget, detail } = ctx;
         const CHUNK = (detail && detail.chunk) || 26;
-        const MAX_CHUNKS = 9;
+        const MAX_CHUNKS = 14;
         const all = [];
         let planText = null, total = 0, chunks = 0, done = false, nextHint = "";
         const prompt = imageDescription
@@ -16879,12 +16889,12 @@ Return ONLY JSON: {"cubes":[ ... ], "done": true|false, "next":"one short line"}
 
             const customTextureCatalog = this.prefs.customTextures ? this._getProjectCustomTextureCatalog() : [];
             const availableTextures = this._getAvailableTextureNames();
-            const base = this._estimateCubeBudget(promptText);
             const detail = this._detailConfig();
+            const base = this._estimateCubeBudget(promptText, detail);
             const budget = {
                 budget: Math.max(20, Math.round(base.budget * detail.mult)),
                 min: Math.round(base.budget * detail.mult * 0.75),
-                max: Math.min(Math.round(base.max * detail.mult), 300),
+                max: Math.min(Math.round(base.max * detail.mult), base.hardCap),
                 hardCap: base.hardCap
             };
             this._log("Agent preset: " + detail.label + " (target ~" + budget.budget + " cubes, max " + budget.max + ").", "ok");
