@@ -2721,6 +2721,27 @@
 
                         <div class="mb-2 p-2" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
                             <label class="flex items-center gap-2 mb-2 cursor-pointer">
+                                <input type="checkbox" id="setting-normal-maps" onchange="uiManager.toggleGlobalNormalMaps(this.checked)">
+                                <span class="text-xs font-semibold" style="color: #b9a0ff;">Normal Maps (PBR)</span>
+                            </label>
+                            <div id="normal-maps-controls" style="display:none;">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <label class="td-label" style="font-size:9px; width:62px;">Strength</label>
+                                    <input type="range" id="setting-nm-strength" min="0.1" max="1.0" step="0.1" value="0.1" class="flex-1" oninput="document.getElementById('nm-strength-val').innerText=Number(this.value).toFixed(1)">
+                                    <span id="nm-strength-val" class="mono text-xs w-10 text-right" style="color:#b9a0ff;">0.1</span>
+                                </div>
+                                <div id="nm-progress-wrap" style="display:none; margin-bottom:6px;">
+                                    <div style="font-size:9px; color:var(--td-text-dim); margin-bottom:3px;" id="nm-progress-label">Generating…</div>
+                                    <div style="height:3px; background:var(--td-bg-1); border-radius:2px; overflow:hidden;">
+                                        <div id="nm-progress-bar" style="height:100%; width:0%; background:#b9a0ff; transition:width 0.15s;"></div>
+                                    </div>
+                                </div>
+                                <p class="text-[10px] leading-tight" style="color:var(--td-text-muted);">Auto-generates normal maps for all cube textures (except Glass, GBWater, Plasma, text). Applied instantly — no AI needed.</p>
+                            </div>
+                        </div>
+
+                        <div class="mb-2 p-2" style="background: var(--td-bg-2); border: 1px solid var(--td-border);">
+                            <label class="flex items-center gap-2 mb-2 cursor-pointer">
                                 <input type="checkbox" id="setting-env-reflections" checked onchange="engine.toggleEnvReflections(this.checked)">
                                 <span class="text-xs font-semibold" style="color: var(--td-info);">Environment Reflections</span>
                             </label>
@@ -5245,6 +5266,111 @@ function optimizeCanvasToMaxSize(source, maxRes = currentTextureMaxResolution) {
     ctx.drawImage(source, 0, 0, w, h);
     return canvas;
 }
+
+// ── Normal Map Generation ────────────────────────────────────────────────────
+// Fast Sobel-based normal map from diffuse. Max 256px — normal maps don't
+// need high resolution; detail comes from the filter, not pixel density.
+const NM_MAX_RES = 256;
+
+function generateNormalMapFromDiffuse(sourceCanvas, strength) {
+    const s = strength || 0.1;
+    // Downsample to NM_MAX_RES — fast and sufficient for normal maps
+    const scale = Math.min(1, NM_MAX_RES / Math.max(sourceCanvas.width, sourceCanvas.height));
+    const w = Math.max(1, Math.round(sourceCanvas.width  * scale));
+    const h = Math.max(1, Math.round(sourceCanvas.height * scale));
+
+    // Reuse a single offscreen canvas to avoid GC pressure
+    const tmp = document.createElement("canvas");
+    tmp.width = w; tmp.height = h;
+    const tmpCtx = tmp.getContext("2d", { willReadFrequently: true });
+    tmpCtx.imageSmoothingEnabled = true;
+    tmpCtx.imageSmoothingQuality = "high";
+    tmpCtx.drawImage(sourceCanvas, 0, 0, w, h);
+    const srcData = tmpCtx.getImageData(0, 0, w, h).data;
+
+    // Build luminance height-field
+    const hf = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+        const b = i * 4;
+        hf[i] = 0.2126 * srcData[b] / 255 + 0.7152 * srcData[b+1] / 255 + 0.0722 * srcData[b+2] / 255;
+    }
+
+    // Sobel → normal map (output directly to existing canvas)
+    const out = document.createElement("canvas");
+    out.width = w; out.height = h;
+    const outCtx = out.getContext("2d");
+    const img = outCtx.createImageData(w, h);
+    const od = img.data;
+    const sc = s / Math.max(w, h) * 512;
+
+    const px = (x, y) => hf[Math.min(h-1, Math.max(0, y)) * w + Math.min(w-1, Math.max(0, x))];
+
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const tl=px(x-1,y-1), tc=px(x,y-1), tr=px(x+1,y-1);
+            const ml=px(x-1,y  ),              mr=px(x+1,y  );
+            const bl=px(x-1,y+1), bc=px(x,y+1), br=px(x+1,y+1);
+            const dX = (tr + 2*mr + br) - (tl + 2*ml + bl);
+            const dY = (bl + 2*bc + br) - (tl + 2*tc + tr);
+            const nx = -dX * sc, ny = -dY * sc, nz = 1;
+            const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+            const i = (y * w + x) * 4;
+            od[i  ] = ((nx/len) * 0.5 + 0.5) * 255 | 0;
+            od[i+1] = ((ny/len) * 0.5 + 0.5) * 255 | 0;
+            od[i+2] = ((nz/len) * 0.5 + 0.5) * 255 | 0;
+            od[i+3] = 255;
+        }
+    }
+    outCtx.putImageData(img, 0, 0);
+    return out;
+}
+
+// Returns true if texture should never get a normal map
+function isNormalMapExcluded(tk) {
+    if (!tk) return true;
+    const EXACT = new Set(["Glass", "GBWater", "Plasma", "grid"]);
+    const PREFIX = /^(text_|sign_text|label_|caption_)/i;
+    return EXACT.has(tk) || PREFIX.test(tk);
+}
+
+// Collect all unique non-excluded texture keys currently used by blocks
+function collectDiffuseTextureKeys() {
+    const seen = new Set();
+    (engine.blocks || []).forEach(obj => {
+        const tk = obj?.userData?.texture;
+        if (tk && !isNormalMapExcluded(tk)) seen.add(tk);
+    });
+    return [...seen];
+}
+
+// Apply a normal-map canvas directly — skips the slow Image decode path
+// used by applyNormalMapToTexture(dataUrl). Returns a Promise.
+function applyNormalMapCanvas(texKey, nmName, nmCanvas) {
+    return new Promise(resolve => {
+        const tex = new THREE.CanvasTexture(nmCanvas);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.colorSpace = THREE.LinearSRGBColorSpace;
+        tex.userData = { originalName: nmName, isNormalMap: true, isAutoGenerated: true };
+        applyGlobalTextureFiltering(tex);
+        // dataUrl only needed for save/export — generate lazily at low cost
+        const dataUrl = nmCanvas.toDataURL("image/png");
+        const nmVaultId = projectAssetVault.register("normal", texKey, tex, nmName, dataUrl);
+        activeProjectNormalMaps[texKey] = { texture: tex, name: nmName, dataUrl, vaultId: nmVaultId };
+        // Rebuild materials for all cubes that use this texture
+        (engine.blocks || []).forEach(obj => {
+            if (obj.userData.texture !== texKey) return;
+            try {
+                const old = obj.material;
+                obj.material = engine.acquireCubeMaterialFor(obj);
+                engine.releaseCubeMaterial(old);
+            } catch (e) {}
+        });
+        if (window.multiplayerClient) multiplayerClient.sendAssetUpdate("normal", texKey, nmName, dataUrl);
+        resolve();
+    });
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function getCanvasAlphaFlag(canvas) {
     try {
@@ -10636,6 +10762,11 @@ void main(){
                 this.refreshObjectMaterial(obj, true);
             }
         });
+        // Auto normal map on texture change
+        if (this.selectedBlocks.length) {
+            const tk = this.selectedBlocks[0]?.userData?.texture;
+            if (tk) uiManager._autoNormalMapForKey(tk);
+        }
         if (materialBlurSnapped) {
             // Reflect the snapped default in the panel slider + its label so the
             // UI never shows a stale blur value after a material switch.
@@ -14627,6 +14758,103 @@ window.uiManager = {
         if (label) label.innerText = "No normal map";
         if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
     },
+    // Generate + apply normal map for one texture key. Fully synchronous
+    // after getting the source image — no toBlob, no FileReader round-trip.
+    _generateNormalMapForKey: function(texKey, strength) {
+        if (isNormalMapExcluded(texKey)) return Promise.resolve();
+        if (activeProjectNormalMaps[texKey]) return Promise.resolve();
+        const srcTex = activeProjectCustomTextures[texKey] || baseTextures[texKey];
+        if (!srcTex) return Promise.resolve();
+
+        const doGen = (srcImg) => {
+            try {
+                const srcCanvas = optimizeCanvasToMaxSize(srcImg, NM_MAX_RES);
+                const nmCanvas  = generateNormalMapFromDiffuse(srcCanvas, strength || 0.1);
+                const nmName    = (srcTex.userData?.originalName || texKey) + "_nm";
+                return applyNormalMapCanvas(texKey, nmName, nmCanvas);
+            } catch (e) { console.warn("[NM]", texKey, e); return Promise.resolve(); }
+        };
+
+        const img = srcTex.image;
+        if (img && (img.naturalWidth || img.width)) return doGen(img);
+
+        // Fallback: decode from stored dataUrl
+        const dataUrl = srcTex.userData?.sourceDataUrl || srcTex.userData?.originalDataUrl;
+        if (!dataUrl) return Promise.resolve();
+        return new Promise(resolve => {
+            const tmp = new Image();
+            tmp.onload  = () => doGen(tmp).then(resolve);
+            tmp.onerror = () => resolve();
+            tmp.src = dataUrl;
+        });
+    },
+
+    // Enable: generate normal maps for all scene textures (parallel batches of 6).
+    // Disable: remove all auto-generated normal maps.
+    toggleGlobalNormalMaps: async function(enabled) {
+        const checkbox    = document.getElementById("setting-normal-maps");
+        const controls    = document.getElementById("normal-maps-controls");
+        const progressWrap= document.getElementById("nm-progress-wrap");
+        const progressBar = document.getElementById("nm-progress-bar");
+        const progressLbl = document.getElementById("nm-progress-label");
+        if (controls) controls.style.display = enabled ? "block" : "none";
+
+        if (!enabled) {
+            // Remove only auto-generated maps (name ends with _nm)
+            Object.keys(activeProjectNormalMaps).forEach(k => {
+                const nm = activeProjectNormalMaps[k];
+                if (nm?.name?.endsWith("_nm") || nm?.texture?.userData?.isAutoGenerated) {
+                    delete activeProjectNormalMaps[k];
+                    if (window.multiplayerClient) multiplayerClient.sendAssetRemove("normal", k);
+                }
+            });
+            engine.syncAllObjectMaterials(true);
+            if (engine.selectedBlocks.length) engine.updateUIFromObject();
+            if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
+            return;
+        }
+
+        const keys = collectDiffuseTextureKeys().filter(k => !activeProjectNormalMaps[k]);
+        if (!keys.length) return;
+
+        const strength = parseFloat(document.getElementById("setting-nm-strength")?.value || "0.1");
+        if (progressWrap) progressWrap.style.display = "block";
+        if (checkbox) checkbox.disabled = true;
+
+        // Process in parallel batches of 6 for maximum speed
+        const BATCH = 6;
+        for (let i = 0; i < keys.length; i += BATCH) {
+            const batch = keys.slice(i, i + BATCH);
+            const pct = Math.round((i / keys.length) * 100);
+            if (progressBar) progressBar.style.width = pct + "%";
+            if (progressLbl) progressLbl.innerText =
+                "Generating: " + batch[0] + (batch.length > 1 ? " +" + (batch.length-1) + " more" : "") +
+                " (" + Math.min(i + BATCH, keys.length) + "/" + keys.length + ")";
+            await Promise.all(batch.map(k => this._generateNormalMapForKey(k, strength)));
+            // Yield to browser between batches so UI stays responsive
+            await new Promise(r => setTimeout(r, 0));
+        }
+
+        if (progressBar) progressBar.style.width = "100%";
+        if (progressLbl) progressLbl.innerText = "Done — " + keys.length + " normal map(s) generated.";
+        setTimeout(() => { if (progressWrap) progressWrap.style.display = "none"; }, 2000);
+        if (checkbox) checkbox.disabled = false;
+        engine.syncAllObjectMaterials(true);
+        if (engine.selectedBlocks.length) engine.updateUIFromObject();
+        if (!window.historyManager.isRestoring) window.historyManager.takeSnapshot();
+    },
+
+    // Auto-generate for a single key when texture changes on a cube
+    _autoNormalMapForKey: function(texKey) {
+        if (!document.getElementById("setting-normal-maps")?.checked) return;
+        if (isNormalMapExcluded(texKey) || activeProjectNormalMaps[texKey]) return;
+        const strength = parseFloat(document.getElementById("setting-nm-strength")?.value || "0.1");
+        this._generateNormalMapForKey(texKey, strength).then(() => {
+            engine.syncAllObjectMaterials(true);
+            if (engine.selectedBlocks.length) engine.updateUIFromObject();
+        });
+    },
+
     addTextureToEngine: function(matKey, texName, dataUrl, autoSelect, persist = true) {
         return new Promise((resolve, reject) => {
             const img = new Image;
