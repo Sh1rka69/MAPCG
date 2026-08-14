@@ -266,7 +266,13 @@ function httpsFetch(url, options, body) {
         path: urlObj.pathname + urlObj.search,
         method: options.method || "GET",
         headers: options.headers || {},
-        timeout: 120000,
+        // 120s was tight for large Detailed builds: maxOutputTokens up to
+        // 65536 combined with thinkingLevel "high" can legitimately take
+        // longer than that to finish generating a big cube array. Raised so
+        // the proxy doesn't abort a request that Gemini would have completed
+        // — the real ceiling is still whatever the serverless platform's own
+        // function timeout is set to (e.g. vercel.json maxDuration).
+        timeout: 280000,
       },
       (res) => {
         const chunks = [];
@@ -417,10 +423,17 @@ module.exports = async (req, res) => {
     Math.max(
       typeof body.max_tokens === "number"
         ? body.max_tokens
-        : isVision ? 1200 : isImage ? 4096 : isTextureSvg ? 7000 : 24000,
+        : isVision ? 1200 : isImage ? 4096 : isTextureSvg ? 7000 : 48000,
       500
     ),
-    isVision ? 2000 : isImage ? 8192 : isTextureSvg ? 9000 : 32000
+    // Build responses scale directly with cube count (each cube is ~15-25
+    // tokens of JSON: position/rotation/scale/materialName/tag). The old
+    // 32000 ceiling capped a "Detailed" build at roughly 1000-1500 cubes
+    // before Gemini hit MAX_TOKENS and truncated the JSON mid-array. Raised
+    // well above that so large/detailed structures aren't cut off; vision,
+    // image, and texture_svg modes are untouched since their output size
+    // doesn't depend on how many cubes the build needs.
+    isVision ? 2000 : isImage ? 8192 : isTextureSvg ? 9000 : 65536
   );
 
   const { systemText, contents } = toGeminiRequest(messages);
