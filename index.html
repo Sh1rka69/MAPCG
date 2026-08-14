@@ -14811,6 +14811,23 @@ window.uiManager = {
         }
     },
     loadProject: async function(id, name) {
+        // Enter fullscreen as the first thing this click handler does, while
+        // we're still inside the user-activation window the Fullscreen API
+        // requires — doing this later (e.g. after the map finishes loading)
+        // risks the browser having already dropped that activation across
+        // the awaits below, silently failing on Chrome. A rejected/blocked
+        // request is swallowed on purpose: fullscreen is a nice-to-have and
+        // must never stop a project from loading.
+        if (!this.isFullscreenActive()) {
+            const el = document.documentElement;
+            const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+            if (req) {
+                try {
+                    const result = req.call(el);
+                    if (result && result.catch) result.catch(() => {});
+                } catch (_) {}
+            }
+        }
         // Opening another project is the only moment where the previous
         // project's GPU textures may be safely released.
         projectAssetVault.resetFor(id);
