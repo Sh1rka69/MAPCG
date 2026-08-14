@@ -5528,7 +5528,7 @@ function getFallbackGoreBoxTag(materialType) {
     return GOREBOX_FALLBACK_TAGS[materialType] || GOREBOX_FALLBACK_TAGS.Concrete;
 }
 
-const PROCEDURAL_TEXTURE_KEYS = new Set([ "grid", "plain", "dark", "Glass", "GBWater" ]);
+const PROCEDURAL_TEXTURE_KEYS = new Set([ "grid", "plain", "dark" ]);
 
 function extFromDataUrl(dataUrl) {
     const m = /^data:image\/([a-zA-Z0-9.+-]+);base64,/.exec(dataUrl || "");
@@ -11768,6 +11768,29 @@ void main(){
         const ALLOWED_BAKE_SIZES = [ 192, 256, 384, 512, 768, 1024 ];
         let requestedSize = (options && Number.isFinite(options.resolution)) ? options.resolution : 512;
         const BAKE_SIZE = ALLOWED_BAKE_SIZES.reduce((closest, size) => Math.abs(size - requestedSize) < Math.abs(closest - requestedSize) ? size : closest, 512);
+        // Faces are baked at a resolution that matches their real aspect ratio
+        // instead of always being squeezed into a BAKE_SIZE x BAKE_SIZE square.
+        // A long thin face (e.g. a 6x0.3 strip) baked as a square texture gets
+        // stretched non-uniformly by GoreBox at runtime — the short axis ends
+        // up with far fewer texels per world-unit than the long axis, and
+        // GoreBox's own texture filtering smears that thin axis even further.
+        // Instead we keep roughly the same *total* pixel budget as a square
+        // BAKE_SIZE bake (so file size/VRAM stays comparable) but distribute
+        // those pixels along the face's actual W:H ratio, clamped to the same
+        // render-target size we already allocate so no buffers need to grow.
+        const BAKE_MIN_DIM = 32; // never bake a face texture smaller than this on either axis
+        const computeFaceBakeSize = (faceW, faceH) => {
+            const aspect = faceW / Math.max(faceH, 1e-6);
+            // Solve w*h = BAKE_SIZE*BAKE_SIZE, w/h = aspect
+            let w = Math.round(Math.sqrt(BAKE_SIZE * BAKE_SIZE * aspect));
+            let h = Math.round(Math.sqrt(BAKE_SIZE * BAKE_SIZE / aspect));
+            // Never exceed the actual allocated render target on either axis.
+            w = Math.min(w, BAKE_SIZE);
+            h = Math.min(h, BAKE_SIZE);
+            w = Math.max(w, BAKE_MIN_DIM);
+            h = Math.max(h, BAKE_MIN_DIM);
+            return { w, h };
+        };
         const bakeFormat = (options && options.format) || "jpeg";
         const bakeQuality = (options && typeof options.quality === "number") ? options.quality : .82;
         const bakeMime = bakeFormat === "png" ? "image/png" : "image/jpeg";
@@ -11842,12 +11865,14 @@ void main(){
         // Kicks off an async GPU->PBO copy of whatever is currently bound as
         // the active read framebuffer. Returns a "slot" ticket; call
         // resolveAsyncReadback(slot, ...) later to wait for + retrieve bytes.
-        const beginAsyncReadback = () => {
+        // w/h default to the full BAKE_SIZE square but are normally passed
+        // as the current face's actual (smaller, aspect-correct) bake size.
+        const beginAsyncReadback = (w = BAKE_SIZE, h = BAKE_SIZE) => {
             const slot = pboPool.find(p => !p.inUse);
             if (!slot) return null; // pool exhausted; caller falls back to sync read
             slot.inUse = true;
             gl.bindBuffer(gl.PIXEL_PACK_BUFFER, slot.buffer);
-            gl.readPixels(0, 0, BAKE_SIZE, BAKE_SIZE, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+            gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, 0);
             gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
             slot.fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
             gl.flush();
@@ -11855,7 +11880,11 @@ void main(){
         };
         // Waits (via short async polling, never a blocking gl.clientWaitSync
         // spin) for the ticket's fence, then maps the PBO into pixelBuffer.
-        const resolveAsyncReadback = async (slot, outBuffer) => {
+        // Only the first w*h*4 bytes (matching what beginAsyncReadback was
+        // told to copy) are pulled out of the PBO — the rest of the buffer
+        // is stale data from a previous, possibly larger, face and must not
+        // be read.
+        const resolveAsyncReadback = async (slot, outBuffer, w = BAKE_SIZE, h = BAKE_SIZE) => {
             if (!slot) return false;
             let status = gl.clientWaitSync(slot.fence, 0, 0);
             let waited = 0;
@@ -11870,7 +11899,9 @@ void main(){
             gl.deleteSync(slot.fence);
             slot.fence = null;
             gl.bindBuffer(gl.PIXEL_PACK_BUFFER, slot.buffer);
-            gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, outBuffer);
+            const byteLen = w * h * 4;
+            const view = outBuffer.byteLength === byteLen ? outBuffer : new Uint8Array(outBuffer.buffer, outBuffer.byteOffset, byteLen);
+            gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, view);
             gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
             slot.inUse = false;
             return true;
@@ -12264,18 +12295,16 @@ void main(){
         const pixelBuffer = new Uint8Array(BAKE_SIZE * BAKE_SIZE * 4);
         const pixelBuffer32 = new Uint32Array(pixelBuffer.buffer);
         const pngCanvas = document.createElement("canvas");
-        pngCanvas.width = BAKE_SIZE;
-        pngCanvas.height = BAKE_SIZE;
         const pngCtx = pngCanvas.getContext("2d", { willReadFrequently: false });
-        const imageData = pngCtx.createImageData(BAKE_SIZE, BAKE_SIZE);
-        const imageData32 = new Uint32Array(imageData.data.buffer);
-        // Scratch canvas reused across every face when exporting as JPEG, instead
-        // of creating a brand-new canvas + context per face (see below).
+        // imageData/canvas dimensions now track each face's own bake size
+        // (see computeFaceBakeSize) instead of always being BAKE_SIZE x
+        // BAKE_SIZE; they're (re)allocated per-face in the loop below only
+        // when the size actually changes, to avoid churn on maps where most
+        // faces share the same aspect ratio.
+        let imageData = null, imageData32 = null, imgDataW = 0, imgDataH = 0;
         const jpegCanvas = document.createElement("canvas");
-        jpegCanvas.width = BAKE_SIZE;
-        jpegCanvas.height = BAKE_SIZE;
         const jpgCtx = jpegCanvas.getContext("2d", { willReadFrequently: false });
-        const litCubes = this.blocks.filter(b => b.userData?.type === "cube" && b.userData.visible !== false && !isWaterLike(b.userData.texture, b.userData.materialType));
+        const litCubes = this.blocks.filter(b => b.userData?.type === "cube" && b.userData.visible !== false && !isWaterLike(b.userData.texture, b.userData.materialType) && b.userData.texture !== "Plasma" && b.userData.texture !== "Glass");
         const CONTACT_EPS = .01;
         const allCubesForContact = this.blocks.filter(b => b.userData?.type === "cube" && b.userData.visible !== false);
         const HASH_CELL = 2;
@@ -12388,7 +12417,63 @@ void main(){
             }
             return false;
         };
-        const MIN_FACE_SIZE = .01;
+        // Catches the case the coplanar/contact check above can't: a cube (or
+        // one of its faces) sitting entirely *inside* another cube's volume —
+        // e.g. a small decorative cube sunk into a larger wall — rather than
+        // flush against its surface. Such a face will never be visible to a
+        // player no matter the camera angle, so it shouldn't be baked or
+        // exported at all. We test the face's 4 corners (nudged slightly
+        // outward along the face normal, past the surface it sits on) against
+        // every nearby cube's local-space OBB; if all 4 land inside the same
+        // neighbor, the whole face is buried.
+        const INSIDE_EPS = .015;
+        const _finScratch = {
+            invQuat: new THREE.Quaternion,
+            corner: new THREE.Vector3,
+            local: new THREE.Vector3
+        };
+        const isPointInsideCube = (point, info) => {
+            const { invQuat, local } = _finScratch;
+            local.copy(point).sub(info.pos);
+            invQuat.copy(info.quat).invert();
+            local.applyQuaternion(invQuat);
+            const hx = Math.abs(info.scale.x) * .5 + INSIDE_EPS;
+            const hy = Math.abs(info.scale.y) * .5 + INSIDE_EPS;
+            const hz = Math.abs(info.scale.z) * .5 + INSIDE_EPS;
+            return Math.abs(local.x) <= hx && Math.abs(local.y) <= hy && Math.abs(local.z) <= hz;
+        };
+        const isFaceInsideNeighbor = (ownerCube, faceCenter, worldNormal, worldTangent, worldBitangent, faceW, faceH) => {
+            const key = hashKey(faceCenter.x, faceCenter.y, faceCenter.z);
+            const candidates = contactHash.get(key);
+            if (!candidates) return false;
+            const { corner } = _finScratch;
+            const halfW = faceW / 2, halfH = faceH / 2;
+            // Push the test points a hair past the face surface (into the
+            // neighbor, away from ownerCube) so a face merely touching a
+            // neighbor's surface (already handled above) isn't mis-flagged
+            // as "inside" by floating-point noise.
+            const pushIn = Math.max(CONTACT_EPS * 2, .005);
+            const seen = new Set;
+            for (const other of candidates) {
+                if (other === ownerCube || seen.has(other)) continue;
+                seen.add(other);
+                const info = cubeAabbCache.get(other);
+                if (!info) continue;
+                let allIn = true;
+                for (let sx = -1; sx <= 1 && allIn; sx += 2) {
+                    for (let sy = -1; sy <= 1 && allIn; sy += 2) {
+                        corner.copy(faceCenter)
+                            .addScaledVector(worldTangent, sx * halfW)
+                            .addScaledVector(worldBitangent, sy * halfH)
+                            .addScaledVector(worldNormal, pushIn);
+                        if (!isPointInsideCube(corner, info)) allIn = false;
+                    }
+                }
+                if (allIn) return true;
+            }
+            return false;
+        };
+        const MIN_FACE_SIZE = .1;
         let totalFaces = 0;
         const _tPos = new THREE.Vector3, _tQuat = new THREE.Quaternion, _tScale = new THREE.Vector3;
         const _tNormal = new THREE.Vector3, _tTangent = new THREE.Vector3, _tBitangent = new THREE.Vector3, _tCenter = new THREE.Vector3;
@@ -12409,13 +12494,14 @@ void main(){
                     fW = sx;
                     fH = sy;
                 }
-                if (fW < MIN_FACE_SIZE || fH < MIN_FACE_SIZE) continue;
+                if (fW <= MIN_FACE_SIZE || fH <= MIN_FACE_SIZE) continue;
                 _tNormal.copy(face.normal).applyQuaternion(_tQuat).normalize();
                 _tTangent.copy(face.tangent).applyQuaternion(_tQuat).normalize();
                 _tBitangent.copy(face.bitangent).applyQuaternion(_tQuat).normalize();
                 const hAxis = face.id === "px" || face.id === "nx" ? sx * .5 : face.id === "py" || face.id === "ny" ? sy * .5 : sz * .5;
                 _tCenter.copy(_tPos).addScaledVector(_tNormal, hAxis);
                 if (isFaceHiddenByNeighbor(cube, _tCenter, _tNormal, _tTangent, _tBitangent, fW, fH)) continue;
+                if (isFaceInsideNeighbor(cube, _tCenter, _tNormal, _tTangent, _tBitangent, fW, fH)) continue;
                 totalFaces++;
             }
         }
@@ -12482,13 +12568,15 @@ void main(){
                     }
                     faceW = Math.max(faceW, .001);
                     faceH = Math.max(faceH, .001);
-                    if (faceW < MIN_FACE_SIZE || faceH < MIN_FACE_SIZE) continue;
+                    if (faceW <= MIN_FACE_SIZE || faceH <= MIN_FACE_SIZE) continue;
                     worldNormal.copy(face.normal).applyQuaternion(tmpQuat).normalize();
                     worldTangent.copy(face.tangent).applyQuaternion(tmpQuat).normalize();
                     worldBitangent.copy(face.bitangent).applyQuaternion(tmpQuat).normalize();
                     const halfAxis = face.id === "px" || face.id === "nx" ? sx * .5 : face.id === "py" || face.id === "ny" ? sy * .5 : sz * .5;
                     faceCenter.copy(tmpPos).addScaledVector(worldNormal, halfAxis);
                     if (isFaceHiddenByNeighbor(cube, faceCenter, worldNormal, worldTangent, worldBitangent, faceW, faceH)) continue;
+                    if (isFaceInsideNeighbor(cube, faceCenter, worldNormal, worldTangent, worldBitangent, faceW, faceH)) continue;
+                    const { w: faceTexW, h: faceTexH } = computeFaceBakeSize(faceW, faceH);
                     orthoCam.left = -faceW / 2;
                     orthoCam.right = faceW / 2;
                     orthoCam.top = faceH / 2;
@@ -12505,6 +12593,9 @@ void main(){
                     orthoCam.updateProjectionMatrix();
                     orthoCam.updateMatrixWorld(true);
                     renderer.setRenderTarget(bakeTarget);
+                    renderer.setViewport(0, 0, faceTexW, faceTexH);
+                    renderer.setScissorTest(true);
+                    renderer.setScissor(0, 0, faceTexW, faceTexH);
                     renderer.clear(true, true, false);
                     renderer.render(this.scene, orthoCam);
                     let usedAsyncPbo = false;
@@ -12521,6 +12612,7 @@ void main(){
                         bakeAoGenMesh.material.uniforms.uFar.value = orthoCam.far;
                         bakeAoGenMesh.material.uniforms.uHalfW.value = faceW / 2;
                         bakeAoGenMesh.material.uniforms.uHalfH.value = faceH / 2;
+                        bakeAoGenMesh.material.uniforms.resolution.value.set(faceTexW, faceTexH);
                         renderer.setRenderTarget(bakeAoRawTarget);
                         renderer.clear(true, true, false);
                         renderer.render(bakeAoGenScene, bakeAoQuadCam);
@@ -12528,7 +12620,7 @@ void main(){
                         bakeAoBlurMesh.material.uniforms.tAO.value = bakeAoRawTarget.texture;
                         bakeAoBlurMesh.material.uniforms.tDepth.value = bakeDepthTarget.texture;
                         bakeAoBlurMesh.material.uniforms.uDir.value.set(1, 0);
-                        bakeAoBlurMesh.material.uniforms.uTexel.value.set(1 / BAKE_SIZE, 1 / BAKE_SIZE);
+                        bakeAoBlurMesh.material.uniforms.uTexel.value.set(1 / faceTexW, 1 / faceTexH);
                         bakeAoBlurMesh.material.uniforms.uFar.value = orthoCam.far;
                         renderer.setRenderTarget(bakeAoBlurTarget);
                         renderer.clear(true, true, false);
@@ -12550,31 +12642,40 @@ void main(){
                         // framebuffer via gl.bindFramebuffer, so a raw gl.readPixels
                         // right here reads from the correct source.
                         if (isWebGL2) {
-                            const slot = beginAsyncReadback();
+                            const slot = beginAsyncReadback(faceTexW, faceTexH);
                             if (slot) {
-                                usedAsyncPbo = await resolveAsyncReadback(slot, pixelBuffer);
+                                usedAsyncPbo = await resolveAsyncReadback(slot, pixelBuffer, faceTexW, faceTexH);
                             }
                         }
                         if (!usedAsyncPbo) {
-                            renderer.readRenderTargetPixels(bakeAoTarget, 0, 0, BAKE_SIZE, BAKE_SIZE, pixelBuffer);
+                            renderer.readRenderTargetPixels(bakeAoTarget, 0, 0, faceTexW, faceTexH, pixelBuffer);
                         }
                     } else {
                         if (isWebGL2) {
-                            const slot = beginAsyncReadback();
+                            const slot = beginAsyncReadback(faceTexW, faceTexH);
                             if (slot) {
-                                usedAsyncPbo = await resolveAsyncReadback(slot, pixelBuffer);
+                                usedAsyncPbo = await resolveAsyncReadback(slot, pixelBuffer, faceTexW, faceTexH);
                             }
                         }
                         if (!usedAsyncPbo) {
-                            renderer.readRenderTargetPixels(bakeTarget, 0, 0, BAKE_SIZE, BAKE_SIZE, pixelBuffer);
+                            renderer.readRenderTargetPixels(bakeTarget, 0, 0, faceTexW, faceTexH, pixelBuffer);
                         }
                     }
+                    renderer.setScissorTest(false);
                     // Flip rows via a 32-bit view instead of 4 byte-wise copies per
                     // pixel — subarray+set already vectorizes reasonably, but
                     // working in Uint32 halves the number of element copies.
-                    const rowWords = BAKE_SIZE;
-                    for (let row = 0; row < BAKE_SIZE; row++) {
-                        const srcStart = (BAKE_SIZE - 1 - row) * rowWords;
+                    if (imgDataW !== faceTexW || imgDataH !== faceTexH) {
+                        imageData = pngCtx.createImageData(faceTexW, faceTexH);
+                        imageData32 = new Uint32Array(imageData.data.buffer);
+                        imgDataW = faceTexW;
+                        imgDataH = faceTexH;
+                        pngCanvas.width = faceTexW;
+                        pngCanvas.height = faceTexH;
+                    }
+                    const rowWords = faceTexW;
+                    for (let row = 0; row < faceTexH; row++) {
+                        const srcStart = (faceTexH - 1 - row) * rowWords;
                         const dstStart = row * rowWords;
                         imageData32.set(pixelBuffer32.subarray(srcStart, srcStart + rowWords), dstStart);
                     }
@@ -12584,8 +12685,10 @@ void main(){
                     // context creation is not free and this ran once per face.
                     let bakeCanvasForExport = pngCanvas;
                     if (bakeMime === "image/jpeg") {
+                        jpegCanvas.width = faceTexW;
+                        jpegCanvas.height = faceTexH;
                         jpgCtx.fillStyle = "#000000";
-                        jpgCtx.fillRect(0, 0, BAKE_SIZE, BAKE_SIZE);
+                        jpgCtx.fillRect(0, 0, faceTexW, faceTexH);
                         jpgCtx.drawImage(pngCanvas, 0, 0);
                         bakeCanvasForExport = jpegCanvas;
                     }
@@ -12784,7 +12887,13 @@ void main(){
         this.blocks.forEach(b => {
             if (bakedCubeIds.has(b.uuid)) return;
             const gbTag = b.userData.sourceTag || getFallbackGoreBoxTag(b.userData.materialType || "Concrete");
-            const gbMatName = b.userData.materialName || resolveGoreBoxMaterialName(b.userData.texture, b.userData.materialType);
+            // Glass/GBWater must always export as their real GoreBox texture
+            // name, even if a stale userData.materialName (e.g. saved by an
+            // older project, or by an import/AI-builder path) cached the
+            // wrong value — those two are re-resolved fresh every time
+            // rather than trusting the cache.
+            const canonTex = canonicalTextureKey(b.userData.texture);
+            const gbMatName = (canonTex === "Glass" || canonTex === "GBWater") ? canonTex : (b.userData.materialName || resolveGoreBoxMaterialName(b.userData.texture, b.userData.materialType));
             let pos = new THREE.Vector3, rot = new THREE.Quaternion, scl = new THREE.Vector3;
             b.getWorldPosition(pos);
             b.getWorldQuaternion(rot);
@@ -12855,7 +12964,8 @@ void main(){
         };
         this.blocks.forEach(b => {
             const gbTag = b.userData.sourceTag || getFallbackGoreBoxTag(b.userData.materialType || "Concrete");
-            const gbMatName = b.userData.materialName || resolveGoreBoxMaterialName(b.userData.texture, b.userData.materialType);
+            const canonTex = canonicalTextureKey(b.userData.texture);
+            const gbMatName = (canonTex === "Glass" || canonTex === "GBWater") ? canonTex : (b.userData.materialName || resolveGoreBoxMaterialName(b.userData.texture, b.userData.materialType));
             let pos = new THREE.Vector3, rot = new THREE.Quaternion, scl = new THREE.Vector3;
             b.getWorldPosition(pos);
             b.getWorldQuaternion(rot);
