@@ -1,0 +1,14 @@
+{
+  "version": 4,
+  "cubes": [
+    {"name":"MapCube","tag":"Concrete","tileMode":0,"visible":true,"collisions":true,"physics":false,"materialName":"Bare Concrete","position":{"x":-1.5,"y":0.0,"z":0.0},"rotation":{"x":0.0,"y":0.0,"z":0.0},"scale":{"x":0.20000000298023225,"y":1.0,"z":1.0}},
+    {"name":"MapCube","tag":"Concrete","tileMode":0,"visible":true,"collisions":true,"physics":false,"materialName":"Bare Concrete","position":{"x":1.5,"y":0.0,"z":0.0},"rotation":{"x":0.0,"y":0.0,"z":0.0},"scale":{"x":0.20000000298023225,"y":1.0,"z":1.0}},
+    {"name":"MapCube","tag":"Wood","tileMode":1,"visible":true,"collisions":true,"physics":false,"materialName":"Mud","position":{"x":0.0,"y":0.3790000081062317,"z":0.0},"rotation":{"x":0.0,"y":180.0,"z":0.0},"scale":{"x":3.0,"y":0.08900000154972077,"z":0.25999999046325686}},
+    {"name":"MapCube","tag":"Wood","tileMode":1,"visible":true,"collisions":true,"physics":false,"materialName":"Mud","position":{"x":0.0,"y":0.3790000081062317,"z":0.30000001192092898},"rotation":{"x":0.0,"y":180.0,"z":180.0},"scale":{"x":3.0,"y":0.08900000154972077,"z":0.25999999046325686}},
+    {"name":"MapCube","tag":"Wood","tileMode":1,"visible":true,"collisions":true,"physics":false,"materialName":"Mud","position":{"x":0.0,"y":0.3790000081062317,"z":-0.30000001192092898},"rotation":{"x":0.0,"y":0.0,"z":0.0},"scale":{"x":3.0,"y":0.08900000154972077,"z":0.25999999046325686}},
+    {"name":"MapCube","tag":"Metal","tileMode":1,"visible":true,"collisions":true,"physics":false,"materialName":"CobbledStone","position":{"x":-1.5,"y":-0.47200000286102297,"z":0.0},"rotation":{"x":0.0,"y":0.0,"z":0.0},"scale":{"x":0.30000001192092898,"y":0.15600000321865083,"z":1.100000023841858}},
+    {"name":"MapCube","tag":"Metal","tileMode":1,"visible":true,"collisions":true,"physics":false,"materialName":"CobbledStone","position":{"x":1.5,"y":-0.47200000286102297,"z":0.0},"rotation":{"x":0.0,"y":0.0,"z":0.0},"scale":{"x":0.30000001192092898,"y":0.15600000321865083,"z":1.100000023841858}},
+    {"name":"MapCube","tag":"Wood","tileMode":0,"visible":true,"collisions":true,"physics":false,"materialName":"Dead Grass","position":{"x":-1.3730000257492066,"y":0.3779999911785126,"z":0.0},"rotation":{"x":0.0,"y":0.0,"z":0.0},"scale":{"x":0.08100000023841858,"y":0.15199999511241914,"z":0.8999999761581421}},
+    {"name":"MapCube","tag":"Wood","tileMode":0,"visible":true,"collisions":true,"physics":false,"materialName":"Dead Grass","position":{"x":1.3730000257492066,"y":0.3779999911785126,"z":0.0},"rotation":{"x":0.0,"y":0.0,"z":0.0},"scale":{"x":0.08100000023841858,"y":0.15199999511241914,"z":0.8999999761581421}}
+  ]
+}
