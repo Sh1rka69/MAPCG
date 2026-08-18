@@ -4997,6 +4997,25 @@ let subjectsCacheApplied = false;
 
 let subjectsNetworkLoading = false;
 
+function parseSubjectsJsonText(text) {
+    const trimmed = (text || "").trim();
+    if (!trimmed) throw new Error("Empty JSON");
+    let parsed;
+    try {
+        // Handles: full object {"version":...,"cubes":[...]}, or a clean array [...]
+        parsed = JSON.parse(trimmed);
+    } catch (e) {
+        // Handles a manually-trimmed "bare" list of cube objects, possibly with a
+        // trailing comma left over from copy-pasting out of the original file.
+        const stripped = trimmed.replace(/,\s*$/, "");
+        parsed = JSON.parse(stripped.startsWith("[") ? stripped : "[" + stripped + "]");
+    }
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && Array.isArray(parsed.cubes)) return parsed.cubes;
+    if (parsed && typeof parsed === "object") return [ parsed ];
+    return [];
+}
+
 function parseSubjectCubes(rawArr) {
     return (Array.isArray(rawArr) ? rawArr : []).map(c => ({
         name: c.name || "MapCube",
@@ -5070,8 +5089,7 @@ async function loadSubjectsFromFolderEntries(entries) {
         if (!g.image || !g.cubesRaw) continue;
         let rawArr;
         try {
-            const trimmed = g.cubesRaw.trim().replace(/,\s*$/, "");
-            rawArr = JSON.parse(trimmed.startsWith("[") ? trimmed : "[" + trimmed + "]");
+            rawArr = parseSubjectsJsonText(g.cubesRaw);
         } catch (e) {
             console.warn('[MapCG] Failed to parse JSON model "' + name + '":', e);
             continue;
@@ -5115,8 +5133,7 @@ async function loadSubjectsFromZipBuffer(buffer) {
         if (!g.image || !g.cubesRaw) continue;
         let rawArr;
         try {
-            const trimmed = g.cubesRaw.trim().replace(/,\s*$/, "");
-            rawArr = JSON.parse(trimmed.startsWith("[") ? trimmed : "[" + trimmed + "]");
+            rawArr = parseSubjectsJsonText(g.cubesRaw);
         } catch (e) {
             console.warn('[MapCG] Failed to parse JSON model "' + name + '":', e);
             continue;
